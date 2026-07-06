@@ -1,6 +1,6 @@
 {
   "stack": "backend-node",
-  "description": "DIRECTION template, not detected directly - only reached via `extends` (nest). Node/TypeScript backend language intelligence, shared regardless of framework.",
+  "description": "DIRECTION template, not detected directly - only reached via directory nesting (nest.json, its own child) or explicit `extends` from bots/node.json (telegram-node). Node/TypeScript backend language intelligence, shared regardless of framework.",
   "merge": {
     "enabledPlugins": {
       "typescript-lsp@claude-plugins-official": true

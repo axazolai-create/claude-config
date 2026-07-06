@@ -1,7 +1,6 @@
 {
   "stack": "nest",
   "description": "NestJS backend projects.",
-  "extends": ["backend-node"],
   "merge": {},
   "plugins": []
 }
