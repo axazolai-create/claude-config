@@ -1,7 +1,7 @@
 {
   "stack": "telegram-python",
-  "description": "Telegram bots on Python (aiogram, python-telegram-bot, or pyTelegramBotAPI detected in requirements/pyproject). No dedicated plugin exists - see bots.json's _notes for why, and rules/telegram.python.md for library choice / webhook-vs-polling / rate-limit guidance.",
-  "extends": ["bots", "backend-python"],
+  "description": "Telegram bots on Python (aiogram, python-telegram-bot, or pyTelegramBotAPI detected in requirements/pyproject). Nested under bots/ (bot-specific docs - implicit vertical inheritance); No dedicated plugin exists for bot development itself - see bots/_base.json's _notes for why, and rules/telegram.python.md for library choice / webhook-vs-polling / rate-limit guidance.",
+  "extends": ["backend/python/_base.json"],
   "merge": {},
   "plugins": []
 }
