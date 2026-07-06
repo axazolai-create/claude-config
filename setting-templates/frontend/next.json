@@ -1,7 +1,6 @@
 {
   "stack": "next",
-  "description": "Next.js (App Router) projects. Same plugins as React - both are frontend/TS - inherited via `extends`; no Next.js-only plugin exists in the official catalog beyond that shared set.",
-  "extends": ["frontend"],
+  "description": "Next.js (App Router) projects. Same plugins as React - both are frontend/TS - inherited via directory nesting under frontend/; no Next.js-only plugin exists in the official catalog beyond that shared set.",
   "merge": {},
   "plugins": []
 }

@@ -1,7 +1,7 @@
 {
   "stack": "react-native",
-  "description": "React Native / Expo projects. Extends BOTH frontend (TypeScript language intelligence, same as react/next) AND mobile (auth0 opt-in, platform notes) - it genuinely straddles both directions.",
-  "extends": ["frontend", "mobile"],
+  "description": "React Native / Expo projects. Nested under frontend/ (TypeScript language intelligence, same as react/next - implicit vertical inheritance) and also extends mobile/_base.json explicitly (auth0 opt-in, platform notes) - it genuinely straddles both directions.",
+  "extends": ["mobile/_base.json"],
   "merge": {
     "enabledPlugins": {
       "expo@claude-plugins-official": true

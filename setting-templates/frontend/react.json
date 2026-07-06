@@ -1,7 +1,6 @@
 {
   "stack": "react",
-  "description": "React frontend projects (Vite or CRA-style, non-Next). Same plugins as Next.js - both are frontend/TS - inherited via `extends`; no React-only plugin exists in the official catalog beyond that shared set.",
-  "extends": ["frontend"],
+  "description": "React frontend projects (Vite or CRA-style, non-Next). Same plugins as Next.js - both are frontend/TS - inherited via directory nesting under frontend/; no React-only plugin exists in the official catalog beyond that shared set.",
   "merge": {},
   "plugins": []
 }
