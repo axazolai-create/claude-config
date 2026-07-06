@@ -1,4 +1,3 @@
-<!-- CURATED:NOEDIT -->
 # USER RULES (~/.claude/CLAUDE.md)
 
 ## PRECEDENCE & ENFORCEMENT MODEL (read first)
