@@ -276,28 +276,75 @@ def deep_merge(dst: dict, src: dict) -> dict:
     return dst
 
 
-# ---------- extends resolution (direction templates shared by multiple stacks) ----------
-def _resolve_chain(stack: str, visited: set[str] | None = None) -> list[tuple[str, dict]]:
-    """Return [(template_name, tpl_dict), ...] in application order: every template named in
-    `extends` (recursively, e.g. react.json -> extends: ["frontend"]) resolved FIRST, then the
-    requested stack's own template LAST, so its own plugins/merge are what a diff would show as
-    "added on top". Cycle-safe: a template name is only ever loaded once per call, even if two
-    branches reference it (e.g. react-native.json extending both "frontend" and "mobile" is fine;
-    a template accidentally extending itself, directly or via a cycle, is silently ignored rather
-    than recursing forever)."""
+# ---------- detector-id -> template path (paths no longer mirror the id 1:1 - see
+# setting-templates/README.md) ----------
+STACK_PATHS: dict[str, str] = {
+    "react": "frontend/react.json",
+    "next": "frontend/next.json",
+    "react-native": "frontend/react-native.json",
+    "nest": "backend/node/nest.json",
+    "django": "backend/python/django.json",
+    "fastapi": "backend/python/fastapi.json",
+    "flask": "backend/python/flask.json",
+    "android": "mobile/android.json",
+    "swift": "mobile/swift.json",
+    "dart": "mobile/dart.json",
+    "kotlin": "kotlin.json",
+    "sql": "sql.json",
+    "turbo": "monorepo/turbo.json",
+    "nx": "monorepo/nx.json",
+    "telegram-node": "bots/node.json",
+    "telegram-python": "bots/python.json",
+}
+
+
+# ---------- extends resolution (vertical directory inheritance + explicit cross-branch extends) ----------
+def _vertical_ancestors(rel_path: str) -> list[str]:
+    """Ancestor `_base.json` relative paths for a template at rel_path, root-most first, excluding
+    rel_path itself (e.g. "backend/node/nest.json" -> ["_base.json", "backend/_base.json",
+    "backend/node/_base.json"]; "backend/node/_base.json" itself -> ["_base.json",
+    "backend/_base.json"])."""
+    dirs = rel_path.replace("\\", "/").split("/")[:-1]
+    out: list[str] = []
+    for i in range(len(dirs) + 1):
+        candidate = "/".join(dirs[:i] + ["_base.json"]) if i > 0 else "_base.json"
+        if candidate != rel_path:
+            out.append(candidate)
+    return out
+
+
+def _resolve_chain(rel_path: str, visited: set[str] | None = None) -> list[tuple[str, dict]]:
+    """Return [(rel_path, tpl_dict), ...] in application order: vertical ancestors first
+    (root-most first, via _vertical_ancestors), then each explicit `extends` target fully
+    resolved (filtered down to `pick`'s listed top-level keys when declared for that path), then
+    rel_path's own template LAST - so its own plugins/merge are what a diff would show as "added
+    on top". Cycle-safe: `visited` is keyed by relative path, so a path already applied earlier in
+    this resolution (e.g. the root _base.json, reachable both as a vertical ancestor and via some
+    other branch's own vertical chain) is only ever applied once, and a template that (directly or
+    via a cycle) extends itself is silently ignored rather than recursing forever."""
     if visited is None:
         visited = set()
-    if stack in visited:
+    if rel_path in visited:
         return []
-    visited.add(stack)
-    tpl_path = TEMPLATES_DIR / f"{stack}.json"
+    visited.add(rel_path)
+    tpl_path = TEMPLATES_DIR / rel_path
     if not tpl_path.exists():
         return []
     tpl = load_json(tpl_path)
+
     chain: list[tuple[str, dict]] = []
+    for ancestor in _vertical_ancestors(rel_path):
+        chain.extend(_resolve_chain(ancestor, visited))
+
+    pick = tpl.get("pick", {}) or {}
     for parent in tpl.get("extends", []) or []:
-        chain.extend(_resolve_chain(parent, visited))
-    chain.append((stack, tpl))
+        sub_chain = _resolve_chain(parent, visited)
+        keys = pick.get(parent)
+        if keys:
+            sub_chain = [(label, {k: v for k, v in t.items() if k in keys}) for label, t in sub_chain]
+        chain.extend(sub_chain)
+
+    chain.append((rel_path, tpl))
     return chain
 
 
@@ -310,12 +357,12 @@ def gather(stacks: list[str]):
     nonplugin: dict = {}
     seen: set[str] = set()
     for stack in stacks:
-        tpl_path = TEMPLATES_DIR / f"{stack}.json"
-        if not tpl_path.exists():
+        rel_path = STACK_PATHS.get(stack)
+        if not rel_path or not (TEMPLATES_DIR / rel_path).exists():
             entries.append({"stack": stack, "via": stack, "id": None, "state": "no_template",
                             "commands": None})
             continue
-        for via, tpl in _resolve_chain(stack):
+        for via, tpl in _resolve_chain(rel_path):
             deep_merge(nonplugin, clean_nonplugin(tpl.get("merge", {}) or {}))
             for p in tpl.get("plugins", []) or []:
                 pid = p.get("id", "")
@@ -346,7 +393,8 @@ def print_report(stacks: list[str], entries: list[dict]) -> None:
     for e in entries:
         pid = e["id"] or f"(stack: {e['stack']})"
         via = e.get("via", e["stack"])
-        tag = f"[{e['stack']}]" if via == e["stack"] else f"[{e['stack']} via {via}]"
+        leaf_path = STACK_PATHS.get(e["stack"])
+        tag = f"[{e['stack']}]" if via == leaf_path else f"[{e['stack']} via {via}]"
         print(f"  {tag} {pid}  {SYMBOL.get(e['state'], e['state'])}")
         c = e.get("commands")
         if not c:
