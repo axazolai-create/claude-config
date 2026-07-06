@@ -1,6 +1,6 @@
 {
   "stack": "backend-python",
-  "description": "DIRECTION template, not detected directly - only reached via `extends` (django, fastapi, flask). Python backend language intelligence, shared regardless of framework.",
+  "description": "DIRECTION template, not detected directly - only reached via directory nesting (django, fastapi, flask, its own children) or explicit `extends` from bots/python.json (telegram-python). Python backend language intelligence, shared regardless of framework.",
   "merge": {
     "enabledPlugins": {
       "pyright-lsp@claude-plugins-official": true

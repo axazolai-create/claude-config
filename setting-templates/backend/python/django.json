@@ -1,7 +1,6 @@
 {
   "stack": "django",
   "description": "Django web / API projects.",
-  "extends": ["backend-python"],
   "merge": {},
   "plugins": []
 }

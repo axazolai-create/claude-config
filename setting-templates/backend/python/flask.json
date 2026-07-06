@@ -1,7 +1,6 @@
 {
   "stack": "flask",
   "description": "Flask web projects.",
-  "extends": ["backend-python"],
   "merge": {},
   "plugins": []
 }
