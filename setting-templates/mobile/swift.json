@@ -1,7 +1,6 @@
 {
   "stack": "swift",
   "description": "Native iOS/macOS (Swift) projects.",
-  "extends": ["mobile"],
   "merge": {
     "enabledPlugins": {
       "swift-lsp@claude-plugins-official": true
@@ -29,6 +28,6 @@
     }
   ],
   "_notes": [
-    "Not a Claude Code plugin, but relevant: xclaude-plugin, github.com/conorluddy/xclaude-plugin - 8 modular MCP servers for Xcode/Simulator/IDB. Community project, free. See mobile.json's _notes for UI/design handoff - Claude Design is now the default recommendation there (Figma kept only as a fallback)."
+    "Not a Claude Code plugin, but relevant: xclaude-plugin, github.com/conorluddy/xclaude-plugin - 8 modular MCP servers for Xcode/Simulator/IDB. Community project, free. See mobile/_base.json's _notes for UI/design handoff - Claude Design is now the default recommendation there (Figma kept only as a fallback)."
   ]
 }

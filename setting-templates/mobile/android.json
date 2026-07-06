@@ -1,7 +1,6 @@
 {
   "stack": "android",
-  "description": "Android app projects (detected via AndroidManifest.xml - distinct from generic Kotlin/JVM in kotlin.json, since a Kotlin backend service is not mobile). Reuses kotlin-lsp - same language, mobile-specific context comes from `extends`.",
-  "extends": ["mobile"],
+  "description": "Android app projects (detected via AndroidManifest.xml - distinct from generic Kotlin/JVM in kotlin.json, since a Kotlin backend service is not mobile). Reuses kotlin-lsp - same language, mobile-specific context comes from being nested under mobile/.",
   "merge": {
     "enabledPlugins": {
       "kotlin-lsp@claude-plugins-official": true
@@ -29,6 +28,6 @@
     }
   ],
   "_notes": [
-    "See mobile.json's _notes for Android-relevant non-plugin tools: Chris Banes' Jetpack Compose skill pack, the JetBrains IDE-level Claude Code plugin for Android Studio."
+    "See mobile/_base.json's _notes for Android-relevant non-plugin tools: Chris Banes' Jetpack Compose skill pack, the JetBrains IDE-level Claude Code plugin for Android Studio."
   ]
 }
