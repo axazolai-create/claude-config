@@ -1,7 +1,6 @@
 {
   "stack": "nx",
   "description": "Nx monorepos (detected via nx.json at repo root - note this is a coincidental name collision: Nx's own project config file is genuinely called `nx.json`, same as this template file, but they live in different directories and don't otherwise relate).",
-  "extends": ["monorepo"],
   "merge": {
     "enabledPlugins": {
       "nx@nrwl-nx-claude-plugins": true

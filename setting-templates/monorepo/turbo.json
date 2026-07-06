@@ -1,7 +1,6 @@
 {
   "stack": "turbo",
   "description": "Turborepo monorepos (detected via turbo.json at repo root).",
-  "extends": ["monorepo"],
   "merge": {
     "enabledPlugins": {
       "turborepo@pleaseai": true
