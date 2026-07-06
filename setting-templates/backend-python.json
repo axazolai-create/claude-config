@@ -1,0 +1,33 @@
+{
+  "stack": "backend-python",
+  "description": "DIRECTION template, not detected directly - only reached via `extends` (django, fastapi, flask). Python backend language intelligence, shared regardless of framework.",
+  "merge": {
+    "enabledPlugins": {
+      "pyright-lsp@claude-plugins-official": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "description": "Python language server (Pyright) for type checking and code intelligence.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"pyright-lsp@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install pyright-lsp@claude-plugins-official --scope project",
+        "bash": "claude plugin install pyright-lsp@claude-plugins-official --scope project",
+        "slash": "/plugin install pyright-lsp@claude-plugins-official"
+      }
+    }
+  ],
+  "_notes": [
+    "Same database/queue caveat as backend-node.json: no generic DB/queue plugin exists in the official catalog - see sql.json's _notes for MCP-server alternatives."
+  ]
+}

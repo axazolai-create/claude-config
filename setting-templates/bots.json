@@ -1,0 +1,11 @@
+{
+  "stack": "bots",
+  "description": "DIRECTION template, not detected directly - only reached via `extends` (telegram-node, telegram-python). No Claude Code plugin exists for Telegram BOT DEVELOPMENT at all (verified against the official catalog) - this direction is a documentation/extension point, not a plugin source.",
+  "merge": {},
+  "plugins": [],
+  "_notes": [
+    "IMPORTANT: the official marketplace DOES have a plugin literally named 'telegram' (telegram@claude-plugins-official) - but it is a Claude-Code REMOTE-CONTROL channel (lets you DM your own running Claude Code session via a bot you register with BotFather; tools are reply/react/edit_message for Claude to talk back to you). It is NOT bot-development tooling and must not be suggested for a bots-direction project - confirmed by reading its actual README, not just its name.",
+    "Because no real plugin exists for bot development, the practical guidance for this direction lives in rules/telegram.node.md and rules/telegram.python.md instead of a plugin reference.",
+    "Free MCP servers exist for TESTING/interacting with a bot you're building (separate from the plugin ecosystem): telegram-bot-api-mcp (github.com/shekelstrong/telegram-bot-api-mcp, 18 Bot API tools) and telegram-mcp (github.com/guangxiangdebizi/telegram-mcp). A third option, telegram-mcp by chigwell (github.com/chigwell/telegram-mcp), uses Telethon/MTProto (a user account, not the plain Bot API) so it can read chat history a bot token cannot - useful for testing/inspection, not for the bot's own runtime code. All free, self-hosted."
+  ]
+}

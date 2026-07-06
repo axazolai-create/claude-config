@@ -1,0 +1,33 @@
+{
+  "stack": "mobile",
+  "description": "DIRECTION template, not detected directly - only reached via `extends` (kotlin=Android, swift=iOS, dart=Flutter, react-native). No plugin is common to ALL mobile stacks (Android/iOS tooling is inherently platform-specific), so this file currently declares no auto-enabled plugin of its own - it exists as an extension point and to hold mobile-wide documentation notes below. auth0@claude-plugins-official is declared (not auto-enabled) as an opt-in option relevant across every mobile stack.",
+  "merge": {},
+  "plugins": [
+    {
+      "id": "auth0@claude-plugins-official",
+      "description": "Auth0's official plugin (moved from a bare skill install to the official marketplace since an earlier pass) - 25 skills covering Android, iOS/macOS, Expo, and React Native auth setup. OPT-IN: not every mobile app uses Auth0, so this is declared here (visible in /init-stack's report, installable on request) but NOT included in `merge.enabledPlugins` - it won't be auto-enabled just because a mobile stack was detected. Auth0's free tier (25,000 MAU, unlimited social logins per auth0's pricing page) covers everything the skill sets up; only MFA/RBAC/premium support need a paid plan.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"auth0@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install auth0@claude-plugins-official --scope project",
+        "bash": "claude plugin install auth0@claude-plugins-official --scope project",
+        "slash": "/plugin install auth0@claude-plugins-official"
+      }
+    }
+  ],
+  "_notes": [
+    "Not a Claude Code plugin, but relevant (Android): Chris Banes' Jetpack Compose skill pack, `npx skills add chrisbanes/skills` (skills.sh ecosystem) - written by a Google Android engineer, free.",
+    "Not a Claude Code plugin, but relevant (Android/IDE-level, different mechanism from `claude plugin install`): the official JetBrains 'Claude Code' IDE plugin (plugins.jetbrains.com/plugin/27310) wires Claude Code + Kotlin LSP into Android Studio directly - relevant since this config assumes Android Studio as the IDE. Free (a Claude subscription is still required for the agent itself, same as any other use of Claude Code).",
+    "Not a Claude Code plugin, but relevant (iOS): xclaude-plugin, github.com/conorluddy/xclaude-plugin - 8 modular MCP servers for Xcode/Simulator/IDB, token-conscious. Community project, free.",
+    "UI/design handoff: replaced Figma as the default recommendation with Claude Design (claude.ai/design, launched by Anthropic April 17 2026) - it has its OWN MCP server (connect via an HTTP-transport endpoint, same mechanism as any remote MCP - see support.claude.com/en/articles/14604416 for current setup steps rather than a hardcoded command here, since the exact endpoint URL wasn't independently confirmed during research). Primary workflow, though, isn't the MCP read path but export: build the prototype on Claude Design's canvas, one-click Export produces a 'handoff bundle' (design intent + component structure + styling context) that Claude Code implements directly - no lossy screenshot reverse-engineering, since both sides are the same lab's tooling. Requires Claude Pro (assumed already available here); design-system import and two-way `/design-sync` are in beta on Pro and above. Real gaps vs Figma: no real-time multi-editor collaboration, no persistent component/token design system outside the beta sync, no precise vector illustration, no plugin ecosystem - for solo/small-team mobile UI prototyping this likely covers it, for an established team design system Figma may still be worth keeping.",
+    "Figma skills (figma-code-connect, figma-swiftui - madebysan/claude-figma-skills) still exist and work if you're already invested in a Figma-based design system - kept here as a fallback, not the default. No Claude-side plan gate for Figma's own MCP (remote-MCP connectors work on Free/Pro/Max/Team/Enterprise alike); the paid gate there is Figma's own Dev Mode requirement, not Claude's."
+  ]
+}

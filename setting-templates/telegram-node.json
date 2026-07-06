@@ -1,0 +1,7 @@
+{
+  "stack": "telegram-node",
+  "description": "Telegram bots on Node.js (telegraf, grammy, or node-telegram-bot-api detected in package.json). No dedicated plugin exists - see bots.json's _notes for why, and rules/telegram.node.md for library choice / webhook-vs-polling / rate-limit guidance.",
+  "extends": ["bots", "backend-node"],
+  "merge": {},
+  "plugins": []
+}

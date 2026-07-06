@@ -1,0 +1,7 @@
+{
+  "stack": "fastapi",
+  "description": "FastAPI service projects.",
+  "extends": ["backend-python"],
+  "merge": {},
+  "plugins": []
+}

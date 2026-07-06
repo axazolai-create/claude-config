@@ -1,0 +1,33 @@
+{
+  "stack": "backend-node",
+  "description": "DIRECTION template, not detected directly - only reached via `extends` (nest). Node/TypeScript backend language intelligence, shared regardless of framework.",
+  "merge": {
+    "enabledPlugins": {
+      "typescript-lsp@claude-plugins-official": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "description": "TypeScript/JavaScript language server for enhanced code intelligence (same plugin as the frontend direction - NestJS is TS too).",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"typescript-lsp@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install typescript-lsp@claude-plugins-official --scope project",
+        "bash": "claude plugin install typescript-lsp@claude-plugins-official --scope project",
+        "slash": "/plugin install typescript-lsp@claude-plugins-official"
+      }
+    }
+  ],
+  "_notes": [
+    "Databases/queues deliberately NOT declared here as marketplace plugins: no generic Postgres/MySQL/MongoDB/RabbitMQ/Kafka plugin exists in anthropics/claude-plugins-official (verified directly against the repo's plugin+external_plugins directory listing). These are better served by MCP SERVERS - a different config surface from enabledPlugins - see sql.json's _notes for the specific free/self-hosted-friendly options (Postgres, Redis, RabbitMQ, Kafka)."
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "stack": "nx",
+  "description": "Nx monorepos (detected via nx.json at repo root - note this is a coincidental name collision: Nx's own project config file is genuinely called `nx.json`, same as this template file, but they live in different directories and don't otherwise relate).",
+  "extends": ["monorepo"],
+  "merge": {
+    "enabledPlugins": {
+      "nx@nrwl-nx-claude-plugins": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "nx@nrwl-nx-claude-plugins",
+      "description": "Official Nx/Nrwl plugin (github.com/nrwl/nx-ai-agents-config, also surfaced as nx-ai-agents-config) - workspace exploration, code generation via generators, task running (affected/run-many), workspace-package linking (npm/yarn/pnpm/bun), autonomous CI monitoring/self-healing via Nx Cloud MCP. Shipped by the Nx team itself (nx.dev/blog/nx-ai-agent-skills), 'Excellent' maintenance rating, actively updated. Free for the skill/generator/MCP-server usage; Nx Cloud self-healing CI has a paid tier at scale but core plugin usage is free. Setup can also be done via `npx nx configure-ai-agents`.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"nx@nrwl-nx-claude-plugins\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add nrwl/nx-ai-agents-config",
+          "slash": "/plugin marketplace add nrwl/nx-ai-agents-config"
+        },
+        "cmd": "claude plugin install nx@nrwl-nx-claude-plugins --scope project",
+        "bash": "claude plugin install nx@nrwl-nx-claude-plugins --scope project",
+        "slash": "/plugin install nx@nrwl-nx-claude-plugins"
+      }
+    }
+  ],
+  "_notes": [
+    "marketplace_add source repo (nrwl/nx-ai-agents-config) is a best-effort guess from research - VERIFY the exact marketplace add path with `npx nx configure-ai-agents` or Nx's own docs (nx.dev/blog/nx-ai-agent-skills) before relying on it; unlike the other ids in this bundle it was not independently confirmed against a live `claude plugin marketplace add` run."
+  ]
+}

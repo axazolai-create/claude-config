@@ -1,0 +1,96 @@
+{
+  "stack": "frontend",
+  "description": "DIRECTION template, not detected directly - only reached via another stack's `extends` (react, next, react-native). Holds plugins that are the same regardless of which frontend framework is in play: TypeScript language intelligence, UI-design guidance, browser E2E testing, and accessibility auditing.",
+  "merge": {
+    "_comment": "Deep-merged into the project's .claude/settings.json.",
+    "enabledPlugins": {
+      "typescript-lsp@claude-plugins-official": true,
+      "frontend-design@claude-plugins-official": true,
+      "playwright@claude-plugins-official": true,
+      "accesslint@accesslint": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "description": "TypeScript/JavaScript language server for enhanced code intelligence.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"typescript-lsp@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install typescript-lsp@claude-plugins-official --scope project",
+        "bash": "claude plugin install typescript-lsp@claude-plugins-official --scope project",
+        "slash": "/plugin install typescript-lsp@claude-plugins-official"
+      }
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "description": "Guidance for distinctive, intentional UI visual design (typography, aesthetic direction, non-templated choices). Anthropic-authored, free.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"frontend-design@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install frontend-design@claude-plugins-official --scope project",
+        "bash": "claude plugin install frontend-design@claude-plugins-official --scope project",
+        "slash": "/plugin install frontend-design@claude-plugins-official"
+      }
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "description": "Browser automation / E2E testing (Microsoft Playwright, MIT, free).",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"playwright@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install playwright@claude-plugins-official --scope project",
+        "bash": "claude plugin install playwright@claude-plugins-official --scope project",
+        "slash": "/plugin install playwright@claude-plugins-official"
+      }
+    },
+    {
+      "id": "accesslint@accesslint",
+      "description": "WCAG 2.1 AA accessibility auditor/refactor agent + contrast-checker skill. Third-party (github.com/accesslint/claude-marketplace, MIT, ~24 stars as of this writing - modest adoption but a real, actively-maintained, genuinely free single-purpose plugin; bundled MCP server is a local npm package, no paid API calls).",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"accesslint@accesslint\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add accesslint/claude-marketplace",
+          "slash": "/plugin marketplace add accesslint/claude-marketplace"
+        },
+        "cmd": "claude plugin install accesslint@accesslint --scope project",
+        "bash": "claude plugin install accesslint@accesslint --scope project",
+        "slash": "/plugin install accesslint@accesslint"
+      }
+    }
+  ],
+  "_notes": [
+    "UI/design handoff: Claude Design (claude.ai/design, launched by Anthropic April 17 2026) is directly relevant here too, not just mobile - it generates landing pages, dashboards, and React/Next-shaped component prototypes as live HTML/CSS/JS on a canvas, then one-click Export produces a 'handoff bundle' (design intent + component structure + styling context) that Claude Code implements directly - a tighter loop than reverse-engineering a Figma screenshot, since frontend-design@claude-plugins-official (above) and Claude Design come from the same lab. It has its own MCP server too (HTTP-transport endpoint - see support.claude.com/en/articles/14604416 for current setup rather than a hardcoded command here). Requires Claude Pro (assumed available); design-system import and two-way `/design-sync` are in beta on Pro and above. Gaps vs a real design tool: no real-time multi-editor collaboration, no persistent component/token design system outside the beta sync, no precise vector illustration, no plugin ecosystem - fine for prototyping/small teams, an established team design system may still want Figma (kept as a fallback option, not the default, in mobile.json's notes).",
+    "Not a Claude Code plugin, but worth knowing about: shadcn/ui Skills (https://ui.shadcn.com/docs/skills), installed via `pnpm dlx skills add shadcn/ui` (the separate skills.sh ecosystem, not `/plugin install`). 118k-star project, genuinely free, gives Claude project-aware knowledge of shadcn/ui components/theming/CLI. Doesn't fit this JSON schema (not a marketplace plugin) - mention to the user as an option rather than auto-installing.",
+    "Third-party marketplaces surfaced by research with weak popularity signals (single-digit GitHub stars, one maintainer) were deliberately NOT added here: JanSzewczyk/claude-plugins (react/design/testing skills - Tailwind v4, React 19, Storybook), Community-Access/accessibility-agents. Revisit if their adoption grows."
+  ]
+}

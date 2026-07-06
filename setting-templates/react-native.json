@@ -1,0 +1,34 @@
+{
+  "stack": "react-native",
+  "description": "React Native / Expo projects. Extends BOTH frontend (TypeScript language intelligence, same as react/next) AND mobile (auth0 opt-in, platform notes) - it genuinely straddles both directions.",
+  "extends": ["frontend", "mobile"],
+  "merge": {
+    "enabledPlugins": {
+      "expo@claude-plugins-official": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "expo@claude-plugins-official",
+      "description": "Official Expo plugin - Expo Skills + MCP server (EAS logs, docs, deploy). Maintained by Expo itself (docs.expo.dev/agents/claude). Free - no paid Expo/EAS plan required for the skills/MCP itself; auto-enabled since Expo is the documented 2026 default workflow for new React Native projects.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"expo@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install expo@claude-plugins-official --scope project",
+        "bash": "claude plugin install expo@claude-plugins-official --scope project",
+        "slash": "/plugin install expo@claude-plugins-official"
+      }
+    }
+  ],
+  "_notes": [
+    "If this is a bare (non-Expo) React Native project, expo@claude-plugins-official is still harmless to have enabled but won't do much - consider disabling it via /init-stack's interactive selector if you're not using Expo/EAS at all."
+  ]
+}

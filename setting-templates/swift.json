@@ -1,0 +1,34 @@
+{
+  "stack": "swift",
+  "description": "Native iOS/macOS (Swift) projects.",
+  "extends": ["mobile"],
+  "merge": {
+    "enabledPlugins": {
+      "swift-lsp@claude-plugins-official": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "swift-lsp@claude-plugins-official",
+      "description": "Swift language server for code intelligence.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"swift-lsp@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install swift-lsp@claude-plugins-official --scope project",
+        "bash": "claude plugin install swift-lsp@claude-plugins-official --scope project",
+        "slash": "/plugin install swift-lsp@claude-plugins-official"
+      }
+    }
+  ],
+  "_notes": [
+    "Not a Claude Code plugin, but relevant: xclaude-plugin, github.com/conorluddy/xclaude-plugin - 8 modular MCP servers for Xcode/Simulator/IDB. Community project, free. See mobile.json's _notes for UI/design handoff - Claude Design is now the default recommendation there (Figma kept only as a fallback)."
+  ]
+}

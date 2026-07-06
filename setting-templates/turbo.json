@@ -1,0 +1,34 @@
+{
+  "stack": "turbo",
+  "description": "Turborepo monorepos (detected via turbo.json at repo root).",
+  "extends": ["monorepo"],
+  "merge": {
+    "enabledPlugins": {
+      "turborepo@pleaseai": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "turborepo@pleaseai",
+      "description": "Third-party plugin (github.com/pleaseai/claude-code-plugins, plugin path plugins/turborepo, MIT) - single skill triggering on turbo.json, task pipelines, dependsOn, caching, --filter/--affected, CI optimization. POPULARITY CAVEAT: modest adoption (~8 GitHub stars as of this writing) - it's the only dedicated Turborepo Claude Code plugin found, not an established community standard. Free; its skill content covers both local and remote caching - treat any remote-cache guidance it gives as optional/paid-tier (Vercel Remote Cache) and prefer local/self-hosted caching for a genuinely free setup.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"turborepo@pleaseai\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add pleaseai/claude-code-plugins",
+          "slash": "/plugin marketplace add pleaseai/claude-code-plugins"
+        },
+        "cmd": "claude plugin install turborepo@pleaseai --scope project",
+        "bash": "claude plugin install turborepo@pleaseai --scope project",
+        "slash": "/plugin install turborepo@pleaseai"
+      }
+    }
+  ],
+  "_notes": [
+    "Not a Claude Code plugin, but the most authoritative Turborepo-specific source: Vercel's own official Turborepo Agent Skill (github.com/vercel-labs/agent-skills, skill path skills/turborepo) - installed via `npx skills add vercel/turborepo --skill turborepo --agent claude-code` (the skills.sh ecosystem, not `/plugin install`). Free/open-source, written by Vercel itself. Confirms Vercel has not shipped a full Claude Code marketplace plugin, only this skill - worth using alongside or instead of turborepo@pleaseai."
+  ]
+}

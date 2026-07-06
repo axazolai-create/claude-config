@@ -1,0 +1,10 @@
+{
+  "stack": "monorepo",
+  "description": "DIRECTION template, not detected directly - only reached via `extends` (turbo, nx). Monorepo tooling is inherently tool-specific (Turborepo vs Nx plugins don't overlap), so this file declares no plugin of its own - it's an extension point plus a home for cross-tool notes.",
+  "merge": {},
+  "plugins": [],
+  "_notes": [
+    "See skills/update-changelog/SKILL.md's 'Monorepo mode' for this bundle's own workspace-aware changelog handling - unrelated to Claude Code plugins, but relevant to the same 'monorepo' projects this direction targets.",
+    "No plain pnpm/yarn/npm-workspaces-only or Lerna-specific plugin was found during research beyond what's bundled inside the Nx plugin's workspace-package-linking skill - if you're on plain workspaces without Turborepo or Nx, there's currently nothing to install here."
+  ]
+}
