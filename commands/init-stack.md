@@ -19,7 +19,9 @@ that is not installed yet, help me install it FIRST, by state (always wait for m
 - **marketplace_missing** -> run `marketplace_add.cmd` then `install.cmd`; if `marketplace_add`
   still contains `<...>`, STOP and ask me for the real source.
 - **unavailable** -> show `refresh`, then retry or fix the id in the template.
-- **placeholder / no_template** -> tell me to fill `~/.claude/setting-templates/<stack>.json`; skip.
+- **placeholder / no_template** -> tell me to fill in the matching template under
+  `~/.claude/setting-templates/` (see `STACK_PATHS` in `bin/init-stack.py`, or that folder's
+  README, for the exact path); skip.
 Re-check after each: `python3 ~/.claude/bin/init-stack.py --status <plugin-id>` until `installed`.
 
 ## 3. Interactive selection (I run this myself, in my terminal)

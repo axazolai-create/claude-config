@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 init-stack: detect this project's stack, classify each stack plugin's state, and
-(optionally) merge the matching settings from ~/.claude/setting-templates/<stack>.json
+(optionally) merge the matching settings from the resolved chain under
+~/.claude/setting-templates/ (see STACK_PATHS below for the id -> path mapping)
 into the project's ./.claude/settings.json.
 
 Plugin states:
