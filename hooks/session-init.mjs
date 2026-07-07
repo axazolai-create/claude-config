@@ -16,6 +16,10 @@
 //   - graphify installed                                -> register + keep this project synced
 //     in the cross-project global graph (one-time + native post-commit hook; opt out both:
 //     CLAUDE_GRAPHIFY_AUTOSYNC=0)
+// Hint (additionalContext, best-effort, re-checked EACH session until the MCP is wired):
+//   - a GitHub/GitLab remote or database usage, with no matching MCP wired -> suggest /init-mcp
+//     (git/DB can appear later, so this is not one-time; opt out: CLAUDE_MCP_SUGGEST=0).
+//     Never runs anything - just surfaces the command.
 // Master switch: CLAUDE_CURATED_AUTOINIT=0 disables everything. Never blocks the session.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
@@ -297,6 +301,32 @@ if (process.env.CLAUDE_TOOL_AUTOUPGRADE !== "0") {
   }
 
   if (toolStateChanged) writeFile(toolStateFile, JSON.stringify(toolState, null, 2) + "\n");
+}
+
+// ---- proactive MCP suggestion (git host / database) -> /init-mcp ----
+// A HINT only - never auto-runs anything. Surfaces /init-mcp when the repo shows a signal it helps
+// with (a GitHub/GitLab remote, or database usage), unless that MCP is already wired. Re-checked
+// EVERY session on purpose: git init / a DB dependency can appear later, and a one-time flag would
+// miss it - instead it stops on its own once the matching MCP is configured. Web search is
+// on-demand (no passive signal) - mentioned as an option. Opt out: CLAUDE_MCP_SUGGEST=0.
+if (process.env.CLAUDE_MCP_SUGGEST !== "0") {
+  const rd = (p) => safe(() => readFileSync(join(root, p), "utf8")) || "";
+  const cfg = (rd(".claude/settings.json") + "\n" + rd(".mcp.json")).toLowerCase();  // already-wired MCPs
+  const has = (k) => cfg.includes(`"${k}"`);
+  const suggestions = [];
+
+  const gitCfg = rd(".git/config").toLowerCase();
+  const isGithub = /github\.com/.test(gitCfg), isGitlab = /gitlab/.test(gitCfg);
+  if ((isGithub || isGitlab) && !has("github") && !has("gitlab"))
+    suggestions.push(`the git remote is ${isGithub ? "GitHub" : "GitLab"} and no git-host MCP is configured`);
+
+  const dbHay = (rd("package.json") + rd("pyproject.toml") + rd("requirements.txt") + rd(".env")
+    + rd(".env.local") + rd("docker-compose.yml") + rd("docker-compose.yaml")).toLowerCase();
+  if (/postgres|postgresql:\/\/|database_url|psycopg|asyncpg|sqlalchemy|"pg"|prisma|typeorm/.test(dbHay) && !has("postgres"))
+    suggestions.push("the project touches a database (a local read-only Postgres MCP is available)");
+
+  if (suggestions.length)
+    notes.push(`MCP suggestion: ${suggestions.join("; ")}. Run /init-mcp to wire it (also offers a self-hosted SearXNG web-search MCP); it asks before changing anything and is re-runnable to switch/remove.`);
 }
 
 // record/update state (the risk step is allowed to run again on later sessions)
