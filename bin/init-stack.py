@@ -395,7 +395,7 @@ def print_report(stacks: list[str], entries: list[dict]) -> None:
         pid = e["id"] or f"(stack: {e['stack']})"
         via = e.get("via", e["stack"])
         leaf_path = STACK_PATHS.get(e["stack"])
-        tag = f"[{e['stack']}]" if via == leaf_path else f"[{e['stack']} via {via}]"
+        tag = f"[{e['stack']}]" if via == leaf_path or e["state"] == "no_template" else f"[{e['stack']} via {via}]"
         print(f"  {tag} {pid}  {SYMBOL.get(e['state'], e['state'])}")
         c = e.get("commands")
         if not c:

@@ -1,6 +1,6 @@
 {
   "stack": "kotlin",
-  "description": "Generic Kotlin/JVM projects (backend/Ktor/CLI/etc) - NOT specifically mobile. An actual Android app also matches this (any *.kt file does) but additionally gets its own 'android' stack (see android.json, extends the mobile direction) when AndroidManifest.xml is present - both fire together for a real Android project, which is fine, the plugin id is deduplicated.",
+  "description": "Generic Kotlin/JVM projects (backend/Ktor/CLI/etc) - NOT specifically mobile. An actual Android app also matches this (any *.kt file does) but additionally gets its own 'android' stack (see mobile/android.json, nested under the mobile/ direction) when AndroidManifest.xml is present - both fire together for a real Android project, which is fine, the plugin id is deduplicated.",
   "merge": {
     "_comment": "Deep-merged into the project's .claude/settings.json.",
     "enabledPlugins": {

@@ -20,7 +20,12 @@ class RealTemplatesTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls._orig_templates_dir = init_stack.TEMPLATES_DIR
         init_stack.TEMPLATES_DIR = REPO_ROOT / "setting-templates"
+
+    @classmethod
+    def tearDownClass(cls):
+        init_stack.TEMPLATES_DIR = cls._orig_templates_dir
 
     def test_react_inherits_frontend_plugins(self):
         entries, _ = init_stack.gather(["react"])
@@ -102,6 +107,22 @@ class SyntheticFixtureTests(unittest.TestCase):
         self.assertNotIn("merge", picked)
         self.assertNotIn("_notes", picked)
         self.assertEqual(picked["plugins"], [{"id": "b-plugin"}])
+
+    def test_pick_restricts_every_tuple_in_a_multi_level_sub_chain(self):
+        self._write("b/_base.json", {"stack": "b-dir", "merge": {"enabledPlugins": {"b-dir-p": True}},
+                                      "plugins": [{"id": "b-dir-plugin"}]})
+        self._write("b/leaf.json", {"stack": "b", "merge": {"enabledPlugins": {"b-merge": True}},
+                                     "plugins": [{"id": "b-plugin"}], "_notes": ["should be dropped"]})
+        self._write("a/leaf.json", {"stack": "leaf", "extends": ["b/leaf.json"],
+                                     "pick": {"b/leaf.json": ["plugins"]}, "merge": {}, "plugins": []})
+        chain = init_stack._resolve_chain("a/leaf.json")
+        by_label = dict(chain)
+        # b/leaf.json's own vertical ancestor (b/_base.json) is part of its resolved sub-chain too -
+        # pick must filter EVERY tuple in that sub-chain, not just b/leaf.json's own tuple.
+        self.assertNotIn("merge", by_label["b/_base.json"])
+        self.assertEqual(by_label["b/_base.json"]["plugins"], [{"id": "b-dir-plugin"}])
+        self.assertNotIn("merge", by_label["b/leaf.json"])
+        self.assertEqual(by_label["b/leaf.json"]["plugins"], [{"id": "b-plugin"}])
 
     def test_cycle_is_safe(self):
         self._write("a.json", {"stack": "a", "extends": ["b.json"], "merge": {}, "plugins": []})
