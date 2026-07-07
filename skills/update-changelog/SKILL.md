@@ -1,6 +1,6 @@
 ---
 name: update-changelog
-description: Backfills this project's changelog.json from git history — turns a range of commits into human-readable, Russian, end-user-facing changelog entries with one patch version bump per entry. Use this whenever the user runs /update-changelog, asks to "update the changelog", "generate changelog entries from commits", "bump the version and changelog", or wants git history turned into release notes for this MES SPA. Only applies to Node-based projects that already use (or want) the `{version, changes[]}` changelog.json format — single project or monorepo. In a monorepo (web/backend/mobile, etc.) it also maintains a single date-sorted aggregate cross-part feed (`{version, name, date, changes[]}` entries in one configured file, each tagged with the part's name) — see "Monorepo mode". Configuration lives in a committed `.changelog.config.json` (aggregate file location + part-name map). Runs on demand, or via an enqueue-then-drain auto-trigger: a post-commit hook queues commit hashes and `/update-changelog --drain` turns the queue into entries. Do not use for generic CHANGELOG.md / Keep-a-Changelog style projects — this is specific to this project's JSON schema and its React renderer.
+description: Backfills a project's changelog.json from git history — turns a range of commits into human-readable, Russian, end-user-facing changelog entries with one patch version bump per entry. Use this whenever the user runs /update-changelog, asks to "update the changelog", "generate changelog entries from commits", "bump the version and changelog", or wants git history turned into release notes. Applies to any Node-based project with a user-facing frontend surface (a website, a mobile app, or a bot's webapp) that already uses (or wants) the `{version, changes[]}` changelog.json format — single project or monorepo. In a monorepo (web/backend/mobile, etc.) it also maintains a single date-sorted aggregate cross-part feed (`{version, name, date, changes[]}` entries in one configured file, each tagged with the part's name) — see "Monorepo mode". Configuration lives in a committed `.changelog.config.json` (aggregate file location + part-name map). Runs on demand, or via an enqueue-then-drain auto-trigger: a post-commit hook queues commit hashes and `/update-changelog --drain` turns the queue into entries. Do not use for generic CHANGELOG.md / Keep-a-Changelog style projects — this format targets a JSON changelog consumed by a frontend renderer.
 ---
 
 # Update Changelog
@@ -92,8 +92,8 @@ Before composing the Russian sentence, mentally discard from the source commit:
 - GSD scope/decision identifiers: phase numbers (`16-01`), quick-task ids (`quick-260630-p0f`),
   decision codes (`D-05`, `DKP-02`), references to `PLAN.md` / `STATE.md` / `ROADMAP.md` /
   "checkpoint" / "human-verify".
-- File names, variable/component/token names (`ThemeColorsDark.textPrimary`, `ZoneRow`,
-  `IReleaseZone`), and exact literal values (hex colors, px numbers, decision-specific measurements).
+- File names, variable/component/token names (`AppColorsDark.textPrimary`, `ListRow`,
+  `IEntity`), and exact literal values (hex colors, px numbers, decision-specific measurements).
 - The commit **scope** entirely — always drop it, keep only the type. `feat(16-01): ...` and
   `feat(storage): ...` both become plain `feat: ...`.
 
@@ -128,14 +128,14 @@ conventional-commit type accordingly:
   project's existing convention (single-line entries are the norm, extra bullets are the
   exception).
 
-**Worked example** (from this project's own history, `fb29200`):
+**Worked example** (illustrative):
 
 ```
 Input commit:
 feat(16-01): DKP-02 soften dark text.primary token to #C9D1D9
 
-- ThemeColorsDark.textPrimary: '#E6EDF3' → '#C9D1D9' (GitHub-style muted white)
-- Light scheme ThemeColors.textPrimary (#0F172A) unchanged per D-03
+- AppColorsDark.textPrimary: '#E6EDF3' → '#C9D1D9' (GitHub-style muted white)
+- Light scheme AppColors.textPrimary (#0F172A) unchanged per D-03
 - Cascades globally to all pages using text.primary in dark scheme
 
 Output entry.changes:
@@ -168,7 +168,7 @@ range, without cluttering the visible log. See step 4 for how this interacts wit
 Only commits that survive step 3 consume a version number — skipped commits don't bump
 anything. Starting from `baselineVersion` (e.g. `0.3.0`), increment the **patch** component by
 exactly 1 per surviving entry, in commit order: `0.3.1`, `0.3.2`, `0.3.3`, ... Never touch
-major/minor regardless of commit type — that matches this project's actual version history
+major/minor regardless of commit type — that matches your project's actual version history
 (every commit from v0.2.23 onward is a flat patch increment, feat and fix alike).
 
 The silent trailing bump from step 3.5 (unparseable tail, no entry written) also consumes one
@@ -204,7 +204,7 @@ node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file 
 This prepends the entries to `changelog.json` (creating it at the repo root if it doesn't
 exist anywhere yet — spec step 1), updates `package.json`'s `version` field in place (regex
 replace, doesn't reformat the rest of the file), and rewrites `version.json` if the project
-has one — all without the `v` prefix in those two files, matching this project's existing
+has one — all without the `v` prefix in those two files, matching your project's existing
 convention (`changelog.json` uses `"v0.3.0"`, `package.json`/`version.json` use `"0.3.0"`).
 
 ## 6. Commit
@@ -220,7 +220,7 @@ git commit -m "v<finalVersion>"
 ```
 
 `finalVersion` is the same value from the scratch file (step 5) — with the `v` prefix and
-nothing else in the message, matching this project's existing version-bump commits (e.g.
+nothing else in the message, matching your project's existing version-bump commits (e.g.
 `v0.3.14`). Don't add a body, don't mention the changelog contents, don't add trailers.
 
 ## 7. Report back

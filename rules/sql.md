@@ -10,7 +10,14 @@ paths:
 - Explicit column lists, never `SELECT *` in app queries.
 - Set-based over row-by-row; avoid correlated subqueries where a join/window works.
 - DDL goes through reviewed, ordered migration scripts; no ad-hoc prod DDL.
-- Index intentionally; check the plan (`EXPLAIN` / `EXPLAIN ANALYZE`) for hot queries.
+- Index intentionally; read the plan for hot queries, per dialect:
+  - PostgreSQL: `EXPLAIN (ANALYZE, BUFFERS)`; pick the index type deliberately
+    (B-tree default; GIN for `jsonb`/full-text/array containment; GiST for ranges/geo; BRIN
+    for huge append-only tables). Audit unused/duplicate indexes; watch dead tuples / `VACUUM`.
+  - Oracle: `EXPLAIN PLAN FOR ...` + `DBMS_XPLAN.DISPLAY`, or `DBMS_XPLAN.DISPLAY_CURSOR` for
+    the *actually executed* plan (with row-source stats). Fix stale optimizer stats
+    (`DBMS_STATS`) and missing indexes before reaching for optimizer hints (`/*+ ... */`) —
+    hint only with a measured plan reason, never as the default fix.
 - Avoid: implicit type/charset conversions, N+1 from app code, business logic in triggers.
 
 ## Live database access (connected DB sources / MCP)
