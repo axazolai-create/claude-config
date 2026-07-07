@@ -26,8 +26,9 @@
  * bundle version written as <name>.new, alongside, for curated text) - nothing is ever silently
  * destroyed without a backup or a sidecar to review.
  */
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync, chmodSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
 import { homedir, platform } from "node:os";
+import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -39,6 +40,12 @@ const CDIR = join(HOME, ".claude");
 const HOOKS = join(CDIR, "hooks");
 const SKILL = join(CDIR, "skills", "using-git-worktrees");
 const SETTINGS = join(CDIR, "settings.json");
+const MANIFEST = join(CDIR, "state", "bundle-manifest.json");
+// Files that OLDER bundles shipped and this one no longer does - seeded so a user upgrading from a
+// pre-manifest bundle still gets them pruned. ONLY list files this package exclusively owns (never
+// a path another tool manages, e.g. graphify's own skills/graphify/).
+const SEED_REMOVED = ["graphify-sync-all.ps1"];
+const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 
 const argv = new Set(process.argv.slice(2));
 const BULK = argv.has("--replace-all") ? "replace"
@@ -187,6 +194,7 @@ const copiedScripts = [];
 function* walkBundle(dir, rel = "") {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.name.startsWith(".")) continue;             // skip .git, .DS_Store, etc. at any level
+    if (e.name === "__pycache__" || e.name.endsWith(".pyc")) continue;  // never ship Python build artifacts
     if (rel === "" && META.has(e.name)) continue;     // skip installer-meta at the archive root
     const childRel = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) yield* walkBundle(join(dir, e.name), childRel);
@@ -195,12 +203,14 @@ function* walkBundle(dir, rel = "") {
 }
 
 const summary = [];
+const manifestNow = [];   // {rel, hash} for every file THIS bundle ships - persisted for next run's prune
 async function placeFile(rel) {
   const parts = rel.split("/");
   const src = join(SRC, ...parts);
   const dst = join(CDIR, ...parts);
   const srcContent = read(src);
   if (srcContent === undefined) { summary.push(`MISSING in bundle: ${rel}`); return; }
+  manifestNow.push({ rel, hash: sha(srcContent) });
   if (!existsSync(dst)) {
     if (write(dst, srcContent)) { summary.push(`created  ${dst}`); if (dst.endsWith(".mjs")) copiedScripts.push(dst); }
     return;
@@ -259,6 +269,55 @@ async function placeFile(rel) {
   }
   const np = `${dst}.new`;
   if (write(np, srcContent)) summary.push(`merge -> wrote ${np} (curated; markdown can't auto-merge, yours kept)`);
+}
+
+/* ---------- prune: remove files an OLDER bundle installed that this one no longer ships ----------
+ * Safe-gated per the "delete only if guaranteed unused" rule: a candidate is removed only if it is
+ * (a) not curated, (b) not referenced by any name in the CURRENT bundle, and (c) unchanged since we
+ * installed it (its hash still matches the previous manifest). Anything failing a gate is kept and
+ * reported. Default: list + confirm (non-TTY lists only; --skip-all skips; --replace/--merge-all
+ * imply cleanup). */
+function bundleAllText() {
+  let t = "";
+  for (const rel of walkBundle(SRC)) t += "\n" + (read(join(SRC, ...rel.split("/"))) || "");
+  return t;
+}
+async function pruneStale() {
+  const oldManifest = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8"))) || { files: [] };
+  const currentRels = new Set(manifestNow.map((f) => f.rel));
+  const oldByRel = new Map((oldManifest.files || []).map((f) => [f.rel, f.hash]));
+  const candidates = new Set();
+  for (const rel of oldByRel.keys()) if (!currentRels.has(rel)) candidates.add(rel);
+  for (const rel of SEED_REMOVED) if (!currentRels.has(rel)) candidates.add(rel);
+  if (!candidates.size) return;
+
+  const allText = bundleAllText();
+  const del = [], kept = [];
+  for (const rel of candidates) {
+    const dst = join(CDIR, ...rel.split("/"));
+    if (!existsSync(dst)) continue;                                  // already gone
+    const cur = read(dst);
+    if (typeof cur === "string" && isCurated(cur)) { kept.push([rel, "curated"]); continue; }
+    if (allText.includes(rel.split("/").pop())) { kept.push([rel, "still referenced in bundle"]); continue; }
+    const oldHash = oldByRel.get(rel);
+    if (oldHash && cur !== undefined && sha(cur) !== oldHash) { kept.push([rel, "modified since install"]); continue; }
+    del.push({ rel, dst });
+  }
+  if (kept.length) { log("\n--- stale but KEPT (not safe to auto-remove) ---"); for (const [rel, why] of kept) log(`  ${rel} (${why})`); }
+  if (!del.length) return;
+
+  log("\n--- stale files no longer in the bundle ---");
+  for (const d of del) log("  " + d.dst);
+  let go = false;
+  if (DRY) log("  (dry-run: not removed)");
+  else if (BULK === "skip") log("  (--skip-all: not removed)");
+  else if (BULK) go = true;                                          // --merge-all / --replace-all imply cleanup
+  else if (INTERACTIVE) { const a = await ask("    remove these stale files? (y/N) > "); go = a[0] === "y"; }
+  else log("  (non-interactive: not removed - re-run in a terminal, or pass --replace-all, to prune)");
+  if (go) for (const d of del) {
+    try { rmSync(d.dst, { recursive: true, force: true }); summary.push(`pruned   ${d.dst}`); }
+    catch { summary.push(`prune-failed ${d.dst}`); }
+  }
 }
 
 async function main() {
@@ -352,6 +411,10 @@ async function main() {
       }
     }
   }
+
+  /* ---------- prune stale files + persist manifest ---------- */
+  await pruneStale();
+  if (!DRY) write(MANIFEST, JSON.stringify({ files: manifestNow }, null, 2) + "\n");
 
   /* ---------- summary ---------- */
   log("\n--- summary ---");
