@@ -26,6 +26,7 @@ try {
   Write-Host "bootstrap: downloading $Repo@$Ref ..."
   Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
   tar -xzf $archive -C $tmp --strip-components=1
+  if ($LASTEXITCODE -ne 0) { throw "bootstrap: tar extraction failed (exit $LASTEXITCODE) - corrupt download or bad ref '$Ref'?" }
   Remove-Item $archive -Force
 
   $setup = Join-Path $tmp 'setup.mjs'
