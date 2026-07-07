@@ -4,10 +4,11 @@
 #   curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
 #   curl -fsSL .../bootstrap.sh | bash -s -- --ref v1.0.0        # pin to a release tag
 #   curl -fsSL .../bootstrap.sh | bash -s -- --replace-all       # forward flags to setup.mjs
+#   env vars (parity with Windows): CLAUDE_CONFIG_REF=<ref>  CLAUDE_SETUP_ARGS="<flags>"
 set -euo pipefail
 
 REPO="axazolai-create/claude-config"
-REF="${REF:-master}"
+REF="${CLAUDE_CONFIG_REF:-${REF:-master}}"
 SETUP_ARGS=()
 
 while [ $# -gt 0 ]; do
@@ -17,6 +18,11 @@ while [ $# -gt 0 ]; do
     *)       SETUP_ARGS+=("$1"); shift ;;
   esac
 done
+
+# If no flags were passed positionally, fall back to CLAUDE_SETUP_ARGS (parity with bootstrap.ps1).
+if [ "${#SETUP_ARGS[@]}" -eq 0 ] && [ -n "${CLAUDE_SETUP_ARGS:-}" ]; then
+  read -ra SETUP_ARGS <<< "$CLAUDE_SETUP_ARGS"
+fi
 
 need() {
   command -v "$1" >/dev/null 2>&1 && return 0
