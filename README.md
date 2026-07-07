@@ -12,6 +12,48 @@ node setup.mjs
 
 ---
 
+## Установка на новом ПК (bootstrap, без ручного скачивания)
+
+Одна команда — сама качает пакет tarball'ом (git не нужен) и запускает `setup.mjs`.
+Требуется только **Node** (и `tar`/`curl`, они есть в Win10 1803+/macOS/Linux из коробки).
+
+```
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+```
+
+По умолчанию тянется `master` HEAD. Закрепиться на релиз-тег:
+
+```
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash -s -- --ref v1.0.0
+
+# Windows PowerShell
+$env:CLAUDE_CONFIG_REF='v1.0.0'; irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+```
+
+Проброс флагов в `setup.mjs` (напр. неинтерактивная замена): POSIX — `… | bash -s -- --replace-all`;
+Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
+
+**Безопасная альтернатива** `curl|bash` / `irm|iex` (сначала прочитать, потом запустить):
+
+```
+# Linux / macOS
+curl -fsSLO https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh
+less bootstrap.sh && bash bootstrap.sh
+
+# Windows PowerShell
+irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
+notepad bootstrap.ps1; .\bootstrap.ps1
+```
+
+После установки — **перезапусти Claude Code**.
+
+---
+
 ## Зачем это всё (проблема → решение)
 
 Базовая проблема: в Claude Code **проектный `CLAUDE.md` перебивает пользовательский**, а сам
