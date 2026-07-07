@@ -47,6 +47,7 @@ if [ ! -f "$tmp/setup.mjs" ]; then
 fi
 
 echo "bootstrap: running setup.mjs ..."
+# shellcheck disable=SC2086  # intentional: unquoted so an empty SETUP_ARGS contributes zero argv words (correct empty-array handling under set -u on bash 3.2)
 node "$tmp/setup.mjs" ${SETUP_ARGS+"${SETUP_ARGS[@]}"}
 
 echo "bootstrap: done. Restart Claude Code to load hooks & settings."
