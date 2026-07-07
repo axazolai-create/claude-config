@@ -28,6 +28,6 @@
     }
   ],
   "_notes": [
-    "Databases/queues deliberately NOT declared here as marketplace plugins: no generic Postgres/MySQL/MongoDB/RabbitMQ/Kafka plugin exists in anthropics/claude-plugins-official (verified directly against the repo's plugin+external_plugins directory listing). These are better served by MCP SERVERS - a different config surface from enabledPlugins - see sql.json's _notes for the specific free/self-hosted-friendly options (Postgres, Redis, RabbitMQ, Kafka)."
+    "Databases/queues deliberately NOT declared here as marketplace plugins: no generic Postgres/MySQL/MongoDB/RabbitMQ/Kafka plugin exists in anthropics/claude-plugins-official (verified directly against the repo's plugin+external_plugins directory listing). These are better served by MCP SERVERS - a different config surface from enabledPlugins - see DB/_base.json's _notes for the specific free/self-hosted-friendly options (Postgres, Redis, RabbitMQ, Kafka)."
   ]
 }

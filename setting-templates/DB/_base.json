@@ -1,6 +1,6 @@
 {
   "stack": "sql",
-  "description": "Generic SQL-touching projects (detected loosely, via any *.sql file present).",
+  "description": "Generic SQL-touching projects (detected loosely, via any *.sql file present). Also serves as the DB/ direction's vertical base - if a database-specific template (e.g. postgres-specific, oracle-specific) is ever added as a sibling under DB/, it will inherit this file automatically via directory nesting, no `extends` needed.",
   "merge": {},
   "plugins": [],
   "_notes": [

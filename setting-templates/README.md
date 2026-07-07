@@ -10,8 +10,12 @@ parent it needs beyond its own directory nesting (e.g. `frontend/react-native.js
 ```
 setting-templates/
   _base.json                 # root - universal extension point (currently empty)
-  kotlin.json                 # standalone (generic JVM, not mobile)
-  sql.json                     # standalone (generic SQL)
+  DB/
+    _base.json                 # the "sql" stack's own settings, and DB/'s vertical base for
+                                # any future sibling (e.g. a postgres- or oracle-specific template)
+  CLI/
+    kotlin.json                 # the "kotlin" stack; no CLI/_base.json yet - add one if a
+                                 # second CLI-oriented stack shows up later
   frontend/
     _base.json                 # typescript-lsp, frontend-design, playwright, accesslint
     react.json

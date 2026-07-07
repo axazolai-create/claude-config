@@ -28,6 +28,6 @@
     }
   ],
   "_notes": [
-    "Same database/queue caveat as backend/node/_base.json: no generic DB/queue plugin exists in the official catalog - see sql.json's _notes for MCP-server alternatives."
+    "Same database/queue caveat as backend/node/_base.json: no generic DB/queue plugin exists in the official catalog - see DB/_base.json's _notes for MCP-server alternatives."
   ]
 }
