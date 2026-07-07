@@ -1,6 +1,6 @@
 {
   "stack": "backend",
-  "description": "backend/ DIRECTION template - not detected directly. Extension point for anything shared between backend-node and backend-python regardless of language; currently empty since their only common concern (a language server) is language-specific and lives one level down, in backend/node/_base.json and backend/python/_base.json.",
+  "description": "Extension point shared by backend/node and backend/python. Currently empty - their only common concern (a language server) is language-specific.",
   "merge": {},
   "plugins": []
 }

@@ -1,15 +1,9 @@
 {
   "stack": "sql",
-  "description": "Generic SQL-touching projects (detected loosely, via any *.sql file present). Also serves as the DB/ direction's vertical base - if a database-specific template (e.g. postgres-specific, oracle-specific) is ever added as a sibling under DB/, it will inherit this file automatically via directory nesting, no `extends` needed.",
+  "description": "Generic SQL-touching projects (detected via any *.sql file). Also serves as DB/'s vertical base for any future sibling template.",
   "merge": {},
   "plugins": [],
   "_notes": [
-    "CORRECTION: an earlier version of this file declared 'oracledb@claude-plugins-official' as a plugin. Re-verified directly against the anthropics/claude-plugins-official repo's plugin+external_plugins directory listing (GitHub API, not a search-engine summary): this id DOES NOT EXIST. No oracledb, postgres, mysql, redis, mongodb, cloud-sql, alloydb, or neon plugin exists anywhere in that catalog - the claim was wrong, not just an Oracle-vs-Postgres scoping choice. Removed.",
-    "No generic database plugin exists in the official Claude Code marketplace at all, for any RDBMS. Use MCP SERVERS instead (a different config surface from enabledPlugins/`claude plugin install` - added via `claude mcp add` or your client's connector settings), all free/self-hosted-friendly and independently verified as of this writing:",
-    "Postgres: github.com/modelcontextprotocol/servers (postgres server, read-only by default, official reference implementation).",
-    "Redis: github.com/redis/mcp-redis (official, Redis Inc.-maintained).",
-    "RabbitMQ: github.com/kenliao94/mcp-server-rabbitmq (community project - check recent commit activity before adopting).",
-    "Kafka: no single dominant/official option - github.com/tuannvm/kafka-mcp-server or github.com/Joel-hanson/kafka-mcp-server, pick by activity at adoption time.",
-    "Avoid cloud-managed-only variants (Neon, AlloyDB, Cloud SQL) if the goal is a genuinely free setup - prefer self-hosted Postgres/Redis via the MCP servers above; a free client-side tool talking to an inherently paid managed service isn't 'free' in practice."
+    "No generic database plugin exists in the official catalog for any RDBMS - see README.md's 'Related tools' section for MCP-server alternatives."
   ]
 }

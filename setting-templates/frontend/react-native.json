@@ -1,6 +1,6 @@
 {
   "stack": "react-native",
-  "description": "React Native / Expo projects. Nested under frontend/ (TypeScript language intelligence, same as react/next - implicit vertical inheritance) and also extends mobile/_base.json explicitly (auth0 opt-in, platform notes) - it genuinely straddles both directions.",
+  "description": "React Native / Expo projects. Extends mobile/_base.json for auth0 (opt-in) - straddles both frontend and mobile.",
   "extends": ["mobile/_base.json"],
   "merge": {
     "enabledPlugins": {
@@ -10,7 +10,7 @@
   "plugins": [
     {
       "id": "expo@claude-plugins-official",
-      "description": "Official Expo plugin - Expo Skills + MCP server (EAS logs, docs, deploy). Maintained by Expo itself (docs.expo.dev/agents/claude). Free - no paid Expo/EAS plan required for the skills/MCP itself; auto-enabled since Expo is the documented 2026 default workflow for new React Native projects.",
+      "description": "Official Expo plugin - Expo Skills + MCP server (EAS logs, docs, deploy). Free; auto-enabled since Expo is the documented default workflow for new React Native projects.",
       "check": {
         "installed_file": "~/.claude/plugins/installed_plugins.json",
         "cmd": "claude plugin list",
@@ -29,6 +29,6 @@
     }
   ],
   "_notes": [
-    "If this is a bare (non-Expo) React Native project, expo@claude-plugins-official is still harmless to have enabled but won't do much - consider disabling it via /init-stack's interactive selector if you're not using Expo/EAS at all."
+    "Bare (non-Expo) project: expo@claude-plugins-official is harmless but won't do much - disable via /init-stack's selector if not using Expo/EAS."
   ]
 }

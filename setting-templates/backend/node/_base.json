@@ -1,6 +1,6 @@
 {
   "stack": "backend-node",
-  "description": "DIRECTION template, not detected directly - only reached via directory nesting (nest.json, its own child) or explicit `extends` from bots/node.json (telegram-node). Node/TypeScript backend language intelligence, shared regardless of framework.",
+  "description": "Node/TypeScript backend language intelligence, shared regardless of framework.",
   "merge": {
     "enabledPlugins": {
       "typescript-lsp@claude-plugins-official": true
@@ -28,6 +28,6 @@
     }
   ],
   "_notes": [
-    "Databases/queues deliberately NOT declared here as marketplace plugins: no generic Postgres/MySQL/MongoDB/RabbitMQ/Kafka plugin exists in anthropics/claude-plugins-official (verified directly against the repo's plugin+external_plugins directory listing). These are better served by MCP SERVERS - a different config surface from enabledPlugins - see DB/_base.json's _notes for the specific free/self-hosted-friendly options (Postgres, Redis, RabbitMQ, Kafka)."
+    "No generic database/queue plugin exists in the official catalog - see README.md's 'Related tools' section for MCP-server alternatives."
   ]
 }

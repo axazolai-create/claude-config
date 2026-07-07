@@ -1,11 +1,10 @@
 {
   "stack": "dart",
-  "description": "Flutter/Dart projects (detected via pubspec.yaml). No Dart/Flutter plugin exists in the official Claude Code marketplace - the real tooling here is an MCP server and a couple of skill-based recommendations, documented below rather than declared as installable plugins.",
+  "description": "Flutter/Dart projects (detected via pubspec.yaml). No Dart/Flutter plugin exists in the official catalog.",
   "merge": {},
   "plugins": [],
   "_notes": [
-    "Not a Claude Code plugin, but relevant: Dart & Flutter MCP Server (docs.flutter.dev/ai/mcp-server) - official Google/Dart-team tool: analyze/fix errors, hot-reload, pub.dev search, run tests. Requires Dart SDK 3.9+ / Flutter 3.35+. Free, open source.",
-    "Not a Claude Code plugin, but relevant: Very Good Ventures' AI Flutter plugin (github.com/VeryGoodOpenSource/vgv-ai-flutter-plugin) - best-practice skills (architecture, testing, anti-patterns), company-backed, actively maintained, free.",
-    "ios/Runner (native iOS wrapper) and android/app (native Android wrapper) subfolders are covered by mobile/swift.json / mobile/android.json rules respectively when Claude is working inside them - see rules/dart.flutter.md."
+    "See README.md's 'Related tools' section for the Dart/Flutter MCP server and VGV plugin.",
+    "ios/Runner and android/app subfolders are covered by mobile/swift.json / mobile/android.json rules respectively - see rules/dart.flutter.md."
   ]
 }

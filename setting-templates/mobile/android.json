@@ -1,6 +1,6 @@
 {
   "stack": "android",
-  "description": "Android app projects (detected via AndroidManifest.xml - distinct from generic Kotlin/JVM in CLI/kotlin.json, since a Kotlin backend service is not mobile). Reuses kotlin-lsp - same language, mobile-specific context comes from being nested under mobile/.",
+  "description": "Android app projects (detected via AndroidManifest.xml - distinct from generic Kotlin/JVM in CLI/kotlin.json). Reuses kotlin-lsp.",
   "merge": {
     "enabledPlugins": {
       "kotlin-lsp@claude-plugins-official": true
@@ -28,6 +28,6 @@
     }
   ],
   "_notes": [
-    "See mobile/_base.json's _notes for Android-relevant non-plugin tools: Chris Banes' Jetpack Compose skill pack, the JetBrains IDE-level Claude Code plugin for Android Studio."
+    "See README.md's 'Related tools' section for Android-relevant non-plugin tools."
   ]
 }

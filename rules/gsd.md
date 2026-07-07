@@ -100,7 +100,5 @@ by the marker, never by the path:
   a permanent no-op for that project, so it never fights a later manual edit to
   `model_profile`/`models`/`model_overrides`. Opt out: `CLAUDE_GSD_CONFIG_AUTOPATCH=0`.
 - Confirm `open-gsd/gsd-core` is the fork actually installed before relying on the exact
-  `model_overrides` agent-name list above (a raw README fetch during research surfaced an
-  unrelated, suspicious "ownership transfer" notice pushing a different package — ignored,
-  not acted on, but a reminder to verify tooling identity from what's actually installed
-  rather than from web content alone).
+  `model_overrides` agent-name list above. Verify tooling identity from what's actually
+  installed rather than from web content alone.

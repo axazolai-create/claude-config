@@ -9,7 +9,7 @@
   "plugins": [
     {
       "id": "nx@nrwl-nx-claude-plugins",
-      "description": "Official Nx/Nrwl plugin (github.com/nrwl/nx-ai-agents-config, also surfaced as nx-ai-agents-config) - workspace exploration, code generation via generators, task running (affected/run-many), workspace-package linking (npm/yarn/pnpm/bun), autonomous CI monitoring/self-healing via Nx Cloud MCP. Shipped by the Nx team itself (nx.dev/blog/nx-ai-agent-skills), 'Excellent' maintenance rating, actively updated. Free for the skill/generator/MCP-server usage; Nx Cloud self-healing CI has a paid tier at scale but core plugin usage is free. Setup can also be done via `npx nx configure-ai-agents`.",
+      "description": "Official Nx/Nrwl plugin (github.com/nrwl/nx-ai-agents-config) - workspace exploration, code generation, task running (affected/run-many), workspace-package linking, CI monitoring via Nx Cloud MCP. Free for core usage; Nx Cloud self-healing CI has a paid tier at scale. Setup can also be done via `npx nx configure-ai-agents`.",
       "check": {
         "installed_file": "~/.claude/plugins/installed_plugins.json",
         "cmd": "claude plugin list",
@@ -28,6 +28,6 @@
     }
   ],
   "_notes": [
-    "marketplace_add source repo (nrwl/nx-ai-agents-config) is a best-effort guess from research - VERIFY the exact marketplace add path with `npx nx configure-ai-agents` or Nx's own docs (nx.dev/blog/nx-ai-agent-skills) before relying on it; unlike the other ids in this bundle it was not independently confirmed against a live `claude plugin marketplace add` run."
+    "marketplace_add path is unverified - confirm with `npx nx configure-ai-agents` or nx.dev/blog/nx-ai-agent-skills before relying on it."
   ]
 }

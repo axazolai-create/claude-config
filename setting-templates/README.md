@@ -126,6 +126,48 @@ into the project's `.claude/settings.json`.
   its presence at every level in this repo is a deliberate consistency choice, not a resolver
   requirement.
 
+## Related tools (non-plugin)
+
+Things worth knowing about that don't fit the `plugins` schema above (no `claude plugin
+install` path — installed via `claude mcp add`, `npx skills add`/`pnpm dlx skills add`, or an
+IDE marketplace instead) or aren't currently auto-enabled anywhere. Kept here instead of as
+prose in individual template files.
+
+- **Frontend/mobile UI handoff:** Claude Design (claude.ai/design) — build a prototype on its
+  canvas, one-click Export produces a handoff bundle Claude Code implements directly; requires
+  Claude Pro, design-system sync is in beta. Figma + `madebysan/claude-figma-skills`
+  (figma-code-connect, figma-swiftui) remains a fallback for teams already on a Figma design
+  system.
+- **shadcn/ui Skills:** `pnpm dlx skills add shadcn/ui` (skills.sh, not a marketplace plugin) —
+  project-aware shadcn/ui component/theming/CLI knowledge, free, 118k-star project.
+- **Android:** Chris Banes' Jetpack Compose skill pack, `npx skills add chrisbanes/skills`
+  (free, written by a Google Android engineer). JetBrains' official "Claude Code" IDE plugin
+  (plugins.jetbrains.com/plugin/27310) wires Claude Code + Kotlin LSP into Android Studio.
+- **iOS:** xclaude-plugin (github.com/conorluddy/xclaude-plugin) — 8 modular MCP servers for
+  Xcode/Simulator/IDB, community project, free.
+- **Flutter/Dart:** Dart & Flutter MCP Server (docs.flutter.dev/ai/mcp-server, official
+  Google/Dart team — analyze/fix, hot-reload, pub.dev search, run tests; needs Dart SDK 3.9+ /
+  Flutter 3.35+). Very Good Ventures' AI Flutter plugin
+  (github.com/VeryGoodOpenSource/vgv-ai-flutter-plugin) for architecture/testing best-practice
+  skills.
+- **Databases/queues:** no generic Postgres/MySQL/MongoDB/RabbitMQ/Kafka plugin exists in the
+  official catalog — use MCP servers instead: Postgres via
+  github.com/modelcontextprotocol/servers (official reference impl), Redis via
+  github.com/redis/mcp-redis (official), RabbitMQ via
+  github.com/kenliao94/mcp-server-rabbitmq (community), Kafka via
+  github.com/tuannvm/kafka-mcp-server or github.com/Joel-hanson/kafka-mcp-server (no dominant
+  option — pick by activity). Prefer self-hosted Postgres/Redis over cloud-managed-only
+  variants (Neon/AlloyDB/Cloud SQL) for a genuinely free setup.
+- **Monorepo:** Vercel's official Turborepo Agent Skill, `npx skills add vercel/turborepo
+  --skill turborepo --agent claude-code` — free, authoritative Turborepo-specific guidance
+  alongside the `turborepo@pleaseai` plugin.
+- **Telegram bots:** `telegram@claude-plugins-official` is a Claude-Code remote-control channel
+  (DM your running session via a BotFather bot), **not** bot-development tooling — don't
+  confuse the two. For testing a bot you're building: telegram-bot-api-mcp
+  (github.com/shekelstrong/telegram-bot-api-mcp), telegram-mcp
+  (github.com/guangxiangdebizi/telegram-mcp), or chigwell/telegram-mcp (Telethon/MTProto —
+  reads chat history a bot token can't, for inspection only).
+
 ## Plugin states (used by /init-stack)
 
 For every declared plugin the detector reports one state:

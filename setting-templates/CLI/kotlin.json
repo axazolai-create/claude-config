@@ -1,8 +1,7 @@
 {
   "stack": "kotlin",
-  "description": "Generic Kotlin/JVM projects (backend/Ktor/CLI/etc) - NOT specifically mobile; nested under CLI/ as its first stack (room for a future CLI/_base.json if another CLI-oriented stack is added later - none exists yet, so no vertical base file here today). An actual Android app also matches this (any *.kt file does) but additionally gets its own 'android' stack (see mobile/android.json, nested under the mobile/ direction) when AndroidManifest.xml is present - both fire together for a real Android project, which is fine, the plugin id is deduplicated.",
+  "description": "Generic Kotlin/JVM projects (backend/Ktor/CLI/etc), not specifically mobile - a real Android app also matches this and additionally gets 'android' (mobile/android.json); both firing together is fine, the plugin id is deduplicated.",
   "merge": {
-    "_comment": "Deep-merged into the project's .claude/settings.json.",
     "enabledPlugins": {
       "kotlin-lsp@claude-plugins-official": true
     }
@@ -12,14 +11,12 @@
       "id": "kotlin-lsp@claude-plugins-official",
       "description": "Kotlin language server for code intelligence.",
       "check": {
-        "_comment": "How to verify the plugin is installed/available.",
         "installed_file": "~/.claude/plugins/installed_plugins.json",
         "cmd": "claude plugin list",
         "bash": "jq -e '.plugins[\"kotlin-lsp@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
         "slash": "/plugin list"
       },
       "install": {
-        "_comment": "Run ONE form to install. Do marketplace_add first if the marketplace is not added yet.",
         "marketplace_add": {
           "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
           "slash": "/plugin marketplace add anthropics/claude-plugins-official"

@@ -1,6 +1,6 @@
 {
   "stack": "root",
-  "description": "ROOT direction template - not detected directly, never reached via `extends`. Universal extension point inherited by every stack in setting-templates/ via vertical (directory) inheritance. Currently empty: no plugin or merge key is common to every stack today.",
+  "description": "Root extension point, inherited by every stack. Currently empty.",
   "merge": {},
   "plugins": []
 }

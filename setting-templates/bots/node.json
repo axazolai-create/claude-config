@@ -1,6 +1,6 @@
 {
   "stack": "telegram-node",
-  "description": "Telegram bots on Node.js (telegraf, grammy, or node-telegram-bot-api detected in package.json). Nested under bots/ (bot-specific docs - implicit vertical inheritance); No dedicated plugin exists for bot development itself - see bots/_base.json's _notes for why, and rules/telegram.node.md for library choice / webhook-vs-polling / rate-limit guidance.",
+  "description": "Telegram bots on Node.js (telegraf, grammy, or node-telegram-bot-api detected in package.json). See rules/telegram.node.md for library choice / webhook-vs-polling / rate-limit guidance.",
   "extends": ["backend/node/_base.json"],
   "merge": {},
   "plugins": []
