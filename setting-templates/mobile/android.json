@@ -27,6 +27,20 @@
       }
     }
   ],
+  "skills": [
+    {
+      "id": "chrisbanes/skills",
+      "name": "compose-state-authoring",
+      "description": "chrisbanes/skills (Google Android engineer) - 13 modular Jetpack Compose + Kotlin skills teaching the DECISIONS AI usually gets wrong (state authoring/hoisting, side-effects, recomposition performance, coroutines/Flow modeling). Judgment/architecture, not API docs - NOT covered by Context7. Free/local. Verify the current `npx skills add` slug at install (skill slugs drift).",
+      "install": { "cmd": "npx skills add chrisbanes/skills", "slash": "" }
+    },
+    {
+      "id": "skydoves/compose-performance-skills",
+      "name": "diagnosing-compose-stability",
+      "description": "skydoves/compose-performance-skills - deep Compose performance/stability work (stability diagnosis, R8 config, LazyList perf, recomposition tracing). Complements chrisbanes (architecture vs. perf/jank). Free/local. Verify slug at install.",
+      "install": { "cmd": "npx skills add skydoves/compose-performance-skills", "slash": "" }
+    }
+  ],
   "_notes": [
     "See README.md's 'Related tools' section for Android-relevant non-plugin tools."
   ]

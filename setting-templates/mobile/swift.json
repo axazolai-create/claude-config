@@ -27,6 +27,14 @@
       }
     }
   ],
+  "skills": [
+    {
+      "id": "twostraws/swift-agent-skills",
+      "name": "swiftui",
+      "description": "SwiftUI Agent Skill (Hacking with Swift), curated in Paul Hudson's twostraws/swift-agent-skills directory - current-idiom SwiftUI patterns (state, layout, data flow) beyond raw API. Free/local. NOTE: this is a curated DIRECTORY, not a single-repo skill - verify the exact skill/slug in the directory at install; version-pinned skills (Swift/iOS N) should match your toolchain.",
+      "install": { "cmd": "npx skills add twostraws/swift-agent-skills", "slash": "" }
+    }
+  ],
   "_notes": [
     "See README.md's 'Related tools' section for iOS non-plugin tools (xclaude-plugin) and UI/design handoff."
   ]

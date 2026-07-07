@@ -9,7 +9,7 @@
   "plugins": [
     {
       "id": "turborepo@pleaseai",
-      "description": "Third-party plugin (github.com/pleaseai/claude-code-plugins, MIT) - triggers on turbo.json, task pipelines, dependsOn, caching, --filter/--affected, CI optimization. Modest adoption, only dedicated Turborepo plugin found. Free; prefer local/self-hosted caching over its optional remote-cache (Vercel paid tier) guidance.",
+      "description": "Third-party plugin (github.com/pleaseai/claude-code-plugins, MIT) - triggers on turbo.json, task pipelines, dependsOn, caching, --filter/--affected, CI optimization. Modest adoption, only dedicated Turborepo plugin found. Free; prefer local/self-hosted caching over its optional paid remote-cache guidance.",
       "check": {
         "installed_file": "~/.claude/plugins/installed_plugins.json",
         "cmd": "claude plugin list",
@@ -28,6 +28,6 @@
     }
   ],
   "_notes": [
-    "See README.md's 'Related tools' section for Vercel's own official Turborepo Agent Skill."
+    "The turborepo@pleaseai plugin above is the only dedicated Turborepo plugin; there is also a first-party Turborepo Agent Skill (npx skills add) if you want it."
   ]
 }

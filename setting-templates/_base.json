@@ -1,6 +1,88 @@
 {
   "stack": "root",
-  "description": "Root extension point, inherited by every stack. Currently empty.",
-  "merge": {},
-  "plugins": []
+  "description": "Root extension point, inherited by every stack. Universal, low-footprint plugins: up-to-date library docs (Context7) and active security review (Security Guidance). Semgrep + Serena are declared but OPT-IN (not auto-enabled) to avoid always-on bloat.",
+  "merge": {
+    "enabledPlugins": {
+      "context7@claude-plugins-official": true,
+      "security-guidance@claude-plugins-official": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "context7@claude-plugins-official",
+      "description": "Context7 (Upstash) - injects up-to-date, version-specific library docs and real code examples into the prompt, killing hallucinated/stale APIs. Stack-agnostic (useful in every direction), small footprint. FREE, works with no account; an optional CONTEXT7_API_KEY only raises rate limits. NOTE: the docs index is a hosted Upstash service, so it is not a true offline/local tool. Complements the language servers (LSP = your repo's symbols; Context7 = external canonical docs).",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"context7@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install context7@claude-plugins-official --scope project",
+        "bash": "claude plugin install context7@claude-plugins-official --scope project",
+        "slash": "/plugin install context7@claude-plugins-official"
+      }
+    },
+    {
+      "id": "security-guidance@claude-plugins-official",
+      "description": "Security Guidance (Anthropic, official) - ACTIVE runtime hooks, not prose: PostToolUse regex warnings on every Edit/Write (~25 dangerous patterns), a Stop-hook LLM diff review, and an agentic cross-file review on git commit (injection/XSS/SSRF/IDOR/auth-bypass/unsafe-deserialization/secrets). Fully local (uses your Claude session, no external calls). COMPLEMENTARY to rules/security.md (that guidance shapes what gets written BEFORE; this catches unsafe code AFTER + at commit). NOTE: the Stop-hook review is an extra LLM call per turn (cost/latency); its commit review overlaps in place - not in purpose - with this config's secrets-gate.mjs.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"security-guidance@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install security-guidance@claude-plugins-official --scope project",
+        "bash": "claude plugin install security-guidance@claude-plugins-official --scope project",
+        "slash": "/plugin install security-guidance@claude-plugins-official"
+      }
+    },
+    {
+      "id": "semgrep@claude-plugins-official",
+      "description": "Semgrep static analysis / vuln scanning (OSS engine, runs locally). OPT-IN (not auto-enabled). NO-CLOUD discipline: leave SEMGREP_APP_TOKEN UNSET, always pass an explicit local --config (a cloned github.com/semgrep/semgrep-rules dir, or a registry pack like p/ci) - NEVER --config auto (it phones semgrep.dev and sends project metadata) - add --metrics=off, and never call the semgrep_findings tool (that one requires a Semgrep login). With those, it is fully local, no account.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"semgrep@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install semgrep@claude-plugins-official --scope project",
+        "bash": "claude plugin install semgrep@claude-plugins-official --scope project",
+        "slash": "/plugin install semgrep@claude-plugins-official"
+      }
+    },
+    {
+      "id": "serena@claude-plugins-official",
+      "description": "Serena - semantic, LSP-based code analysis and refactoring across the repo (symbol-level edits, find references). Fully local, no account. OPT-IN (not auto-enabled): partially overlaps the per-language LSP plugins already enabled per stack, so enable it only when you want the heavier semantic-editing layer.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"serena@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install serena@claude-plugins-official --scope project",
+        "bash": "claude plugin install serena@claude-plugins-official --scope project",
+        "slash": "/plugin install serena@claude-plugins-official"
+      }
+    }
+  ]
 }

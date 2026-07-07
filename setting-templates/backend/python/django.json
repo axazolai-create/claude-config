@@ -2,5 +2,13 @@
   "stack": "django",
   "description": "Django web / API projects.",
   "merge": {},
-  "plugins": []
+  "plugins": [],
+  "skills": [
+    {
+      "id": "jeffallan/claude-skills",
+      "name": "django-expert",
+      "description": "jeffallan/claude-skills -> django-expert (MIT, free/local, cherry-picked via --skill) - the genuinely-hard judgment: N+1 detection, select_related/prefetch_related, queryset optimization, indexing, migration safety (references/models-orm.md). Bundled with some DRF/JWT boilerplate that IS redundant with docs. OPTIONAL - install only if Django N+1 is a live pain; python.django.md + Context7 otherwise suffice. Verify the slug at install.",
+      "install": { "cmd": "npx skills add jeffallan/claude-skills --skill django-expert", "slash": "" }
+    }
+  ]
 }

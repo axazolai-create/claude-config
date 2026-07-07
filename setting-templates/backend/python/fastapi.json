@@ -2,5 +2,13 @@
   "stack": "fastapi",
   "description": "FastAPI service projects.",
   "merge": {},
-  "plugins": []
+  "plugins": [],
+  "skills": [
+    {
+      "id": "ofershap/fastapi-best-practices",
+      "name": "fastapi-best-practices",
+      "description": "ofershap/fastapi-best-practices (single-author, standalone, free/local) - FastAPI anti-pattern GUARDS docs/LSP don't enforce: async correctness (don't block the event loop), Depends() over globals, Pydantic v2 (not v1), middleware/background-task structure, route splitting. OPTIONAL / borderline - check python.fastapi.md first and skip if it already covers these. Verify the slug at install.",
+      "install": { "cmd": "npx skills add ofershap/fastapi-best-practices", "slash": "" }
+    }
+  ]
 }

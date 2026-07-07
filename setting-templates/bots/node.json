@@ -3,5 +3,13 @@
   "description": "Telegram bots on Node.js (telegraf, grammy, or node-telegram-bot-api detected in package.json). See rules/telegram.node.md for library choice / webhook-vs-polling / rate-limit guidance.",
   "extends": ["backend/node/_base.json"],
   "merge": {},
-  "plugins": []
+  "plugins": [],
+  "skills": [
+    {
+      "id": "davila7/claude-code-templates",
+      "name": "telegram-bot-builder",
+      "description": "telegram-bot-builder skill (in davila7/claude-code-templates) - webhook-vs-long-poll, FSM/state, and rate-limit PATTERNS (decisions, not just API) for telegraf/grammY. Free/local. Cherry-picked via --skill so only this one skill installs (not the whole repo). Verify the slug at install.",
+      "install": { "cmd": "npx skills add davila7/claude-code-templates --skill telegram-bot-builder", "slash": "" }
+    }
+  ]
 }

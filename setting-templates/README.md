@@ -50,7 +50,10 @@ setting-templates/
 `fastapi`, `flask`, `android`, `swift`, `dart`, `kotlin`, `sql`, `turbo`, `nx`, `telegram-node`,
 `telegram-python`), looks up each one's file via the `STACK_PATHS` table in `bin/init-stack.py`,
 resolves its full inheritance chain, checks each declared plugin, and merges the `merge` block
-into the project's `.claude/settings.json`.
+into the project's `.claude/settings.json`. It also surfaces any `skills[]` a template declares
+(npx-installed Agent Skills) and, in `-i`, offers to `npx skills add` the missing ones - skills are
+opt-in (never auto-installed) and have no enable/disable, so their present-check is by directory
+name and approximate (the install command is the source of truth; slugs drift - verify at install).
 
 ## Inheritance: vertical + explicit `extends` + `pick`
 
@@ -112,6 +115,14 @@ into the project's `.claude/settings.json`.
         "slash": "/plugin install nest-toolkit@my-mp"
       }
     }
+  ],
+  "skills": [                                // OPTIONAL - npx-installed Agent Skills (NOT plugins)
+    {
+      "id": "owner/repo",                    // passed to `npx skills add <id>`
+      "name": "installed-skill-dir",         // best-effort present-detection (dir name in skills/)
+      "description": "...",                  // prefer skills that add JUDGMENT, not API docs (Context7 covers docs)
+      "install": { "cmd": "npx skills add owner/repo", "slash": "" }
+    }
   ]
 }
 ```
@@ -158,9 +169,6 @@ prose in individual template files.
   github.com/tuannvm/kafka-mcp-server or github.com/Joel-hanson/kafka-mcp-server (no dominant
   option — pick by activity). Prefer self-hosted Postgres/Redis over cloud-managed-only
   variants (Neon/AlloyDB/Cloud SQL) for a genuinely free setup.
-- **Monorepo:** Vercel's official Turborepo Agent Skill, `npx skills add vercel/turborepo
-  --skill turborepo --agent claude-code` — free, authoritative Turborepo-specific guidance
-  alongside the `turborepo@pleaseai` plugin.
 - **Telegram bots:** `telegram@claude-plugins-official` is a Claude-Code remote-control channel
   (DM your running session via a BotFather bot), **not** bot-development tooling — don't
   confuse the two. For testing a bot you're building: telegram-bot-api-mcp
@@ -180,6 +188,8 @@ For every declared plugin the detector reports one state:
   id) → refresh + install shown.
 - `placeholder` / `no_template` — fill the template / create one.
 
-`/init-stack` walks non-installed plugins one at a time, asks before installing or adding a
-marketplace, re-checks with `--status <id>`, and finally enables the resolved ones with
-`--apply <id...>`. Restart Claude Code afterwards.
+`/init-stack -i` shows the detected stack's plugins (installed vs needs-install) plus every other
+known plugin (opt-in, with description) as one checklist; on confirm it installs the checked
+plugins that are missing (`claude plugin install`, adding the marketplace when needed) and enables
+them in the project's `.claude/settings.json`. The non-interactive `--enable`/`--apply-all` path
+activates only (no install). Restart Claude Code afterwards (`enabledPlugins` resolves at startup).

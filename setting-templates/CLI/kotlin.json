@@ -26,5 +26,13 @@
         "slash": "/plugin install kotlin-lsp@claude-plugins-official"
       }
     }
+  ],
+  "skills": [
+    {
+      "id": "chrisbanes/skills",
+      "name": "kotlin-coroutines-structured-concurrency",
+      "description": "chrisbanes/skills - its KOTLIN skills (coroutines/structured concurrency, Flow state/event modeling, control flow, value classes) are pure-Kotlin and serve Kotlin/JVM/CLI work, not just Android. Judgment beyond API docs. Free/local. Verify the `npx skills add` slug at install.",
+      "install": { "cmd": "npx skills add chrisbanes/skills", "slash": "" }
+    }
   ]
 }
