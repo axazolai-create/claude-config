@@ -1,6 +1,6 @@
 ---
 name: update-changelog
-description: Backfills this project's changelog.json from git history — turns a range of commits into human-readable, Russian, end-user-facing changelog entries with one patch version bump per entry. Use this whenever the user runs /update-changelog, asks to "update the changelog", "generate changelog entries from commits", "bump the version and changelog", or wants git history turned into release notes for this MES SPA. Only applies to Node-based projects that already use (or want) the `{version, changes[]}` changelog.json format — single project or monorepo. In a monorepo (web/backend/mobile, etc.) it also cross-notifies every other part's changelog with an abstracted, non-technical entry — see "Monorepo mode". Do not use for generic CHANGELOG.md / Keep-a-Changelog style projects — this is specific to this project's JSON schema and its React renderer.
+description: Backfills this project's changelog.json from git history — turns a range of commits into human-readable, Russian, end-user-facing changelog entries with one patch version bump per entry. Use this whenever the user runs /update-changelog, asks to "update the changelog", "generate changelog entries from commits", "bump the version and changelog", or wants git history turned into release notes for this MES SPA. Only applies to Node-based projects that already use (or want) the `{version, changes[]}` changelog.json format — single project or monorepo. In a monorepo (web/backend/mobile, etc.) it also maintains a single date-sorted aggregate cross-part feed (`{version, name, date, changes[]}` entries in one configured file, each tagged with the part's name) — see "Monorepo mode". Configuration lives in a committed `.changelog.config.json` (aggregate file location + part-name map). Runs on demand, or via an enqueue-then-drain auto-trigger: a post-commit hook queues commit hashes and `/update-changelog --drain` turns the queue into entries. Do not use for generic CHANGELOG.md / Keep-a-Changelog style projects — this is specific to this project's JSON schema and its React renderer.
 ---
 
 # Update Changelog
@@ -266,47 +266,24 @@ For each commit, match its changed file paths against each workspace's `relDir` 
 - Changed paths span two or more workspaces → treat each touched workspace as a home (the
   commit gets its own detailed entry, independently authored per part, in each one).
 - No changed path falls under any workspace's `relDir` (root-level tooling, shared
-  `packages/*` outside the app dirs, CI config, root `README`) → there is no home part. If
-  the commit passes the meaningfulness test at all (§3.1) treat it as touching **every**
-  destination part with the generic entry from M5 below (no detailed version anywhere) —
-  most root-level commits fail §3.1 and are simply skipped, same as today.
+  `packages/*` outside the app dirs, CI config, root `README`) → there is no home part. A
+  no-home commit gets **no entry in any part** — it is skipped even if it would pass the
+  meaningfulness test (§3.1); there is no cross-part fan-out (see §8 of DESIGN.md). Most
+  root-level commits fail §3.1 and are skipped anyway, same as today.
 
 ### M4. Home entry — unchanged
 
 Run §3 (the editorial pass) exactly as written against the commit's home workspace(s). This
 is the detailed, precise Russian entry — same rules, same prefix mapping, same stripping.
 
-### M5. Cross-part entry — abstract, don't leak implementation
-
-For every **other** destination part (every destination that isn't a home for this commit),
-write a **second, separate** entry — same `changes[0]` prefix mapping (§3.3) if a type is
-clear, but the sentence itself must never mention: model/entity/field/variable names,
-endpoint paths, file names, or any implementation noun from the source part. Pick from (or
-closely paraphrase) a short fixed vocabulary instead — this is the whole point: a web user
-does not need to know a backend model gained a field, only that "something changed under the
-hood."
-
-| what actually happened in the home part | generic cross-part phrasing |
-|---|---|
-| new dependency, build tooling, infra/CI change | "обновление кодовой базы" |
-| new backend field/filter/query param, extended API surface | "расширение параметризации фильтрации" (only if unmistakably about filtering/search) or "расширение функциональности" otherwise |
-| performance work, internal refactor | "оптимизация производительности" / "внутренние доработки" |
-| bug fix that isn't visible from another part's UI | "исправления в смежных модулях" |
-| security/auth-related change | "обновления безопасности" |
-| anything else, or unclear | "системные доработки" |
-
-One sentence, no prefix pill required (plain untagged text is fine — see §3.3). Do **not**
-add the extra 1–2 sentences §3.4 allows for the home entry; a cross-part entry is always
-exactly one line.
-
 ### M6. Version bumping — independent per part
 
 Each destination part keeps its **own** patch counter, starting from its own
-`baselineVersion` (from `detect-project.mjs --root <dir>`), exactly like step 4 — but a
-part's counter advances once for **every** entry it receives in this run, home or cross-part
-alike. A part with 3 of its own commits and 5 cross-part mentions from other parts' work
-bumps by 8 total, not 3. Parts will end up on different version numbers from each other —
-that's expected, not a bug; there's no shared/lockstep version across the monorepo.
+`baselineVersion` (from `detect-project.mjs --root <dir>`), exactly like step 4: the counter
+advances once per **home** entry the part receives in this run (there are no cross-part
+entries anymore — the aggregate feed in M7a is separate and does not bump any part's
+version). Parts will end up on different version numbers from each other — that's expected,
+not a bug; there's no shared/lockstep version across the monorepo.
 
 ### M7. Write the files
 
@@ -322,13 +299,32 @@ node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file 
 (Only for parts that are destinations — a source-only part like a changelog-less backend
 never gets a `write-changelog.mjs` call for itself.)
 
+### M7a. Write the aggregate
+
+For each entry written to a part's own `changelog.json`, also emit an aggregate entry
+`{ version, name, date, changes }` where `name = partName(config, relDir)` (from
+`config.mjs`) and `date` = the commit's author date in ISO 8601 UTC (e.g.
+`2026-02-01T04:05:06Z`). Collect all such entries for the run into a scratch JSON array and
+apply once:
+
+```
+node .claude/skills/update-changelog/scripts/write-aggregate.mjs \
+  --file <aggregatePath> --entries-file <scratch-aggregate.json>
+```
+
+`aggregatePath` comes from `.changelog.config.json` (`aggregatePath(config)`); the file is
+upserted (key `name|version`, last write wins) and re-sorted by `date` descending on every
+run. If there is no config or it defines no aggregate, skip this step with a warning
+(`R-CL-05`) — per-part changelogs still work without it.
+
 ### M8. Commit — one combined commit is fine
 
 Unlike the single-project flow (step 6, one commit per run), a monorepo update naturally
 touches every destination part's `changelog.json` + `package.json` (+ `version.json`) at
 once — it's fine to stage and commit all of them together rather than one commit per part.
-Stage exactly the files each `write-changelog.mjs` call reported touching, nothing else
-(never `git add -A`), and compose the message as one line per destination part:
+Stage exactly the files each `write-changelog.mjs` call reported touching **plus** the
+aggregate file (`aggregatePath`, when M7a ran), nothing else (never `git add -A`), and
+compose the message as one line per destination part:
 
 ```
 git commit -m "web: v0.4.7, backend: v1.9.2, mobile: v2.3.1"
@@ -340,22 +336,63 @@ obvious from how they work.
 
 ### M9. Report back
 
-Same spirit as step 7, per part: how many commits were attributed as home vs. cross-part
-mentions for each destination, each part's final version, and the commit(s) created. Call
-out any part that had zero home commits but still bumped purely from cross-part mentions —
-that's the mechanism working as intended, not a mistake.
+Same spirit as step 7, per part: how many commits were attributed as home entries for each
+destination, each part's final version, and the commit(s) created. Also report the aggregate
+feed — how many entries were upserted into it and where it lives (`aggregatePath`) — or note
+that it was skipped because no `.changelog.config.json` aggregate is configured.
 
-## Single-commit mode (for a future automated trigger)
+## Automated mode (queue + drain)
 
-Not currently wired to anything — no hook exists yet — but keep the algorithm capable of
-this so it's a drop-in later. To process exactly one commit (typically `HEAD`) instead of a
-range:
+An enqueue-then-drain trigger turns everyday commits into changelog entries without anyone
+running the range flow by hand. A native `post-commit` hook **enqueues** each commit's hash;
+the AI skill later **drains** the queue, processing the accumulated hashes in one batch.
 
-- Skip step 1 entirely (no questions — the commit is already chosen).
-- Run step 3 (the editorial pass) on that single commit only.
-- If it passes the meaningfulness test → write one entry, bump the patch version by 1, apply
-  via `write-changelog.mjs` and commit exactly as in steps 5–6.
-- If it fails → do **nothing**. No entry, no silent bump, no file writes, no commit. The
-  silent trailing bump is a range-end guarantee (step 3.5) — it must never fire on every
-  skipped commit in single-commit mode, or `version.json` would bump on every no-op commit.
-- Never ask the user anything in this mode.
+### Install
+
+```
+node .claude/skills/update-changelog/scripts/install-trigger.mjs --root <repoRoot>
+```
+
+Idempotent; installs three things:
+- a `post-commit` hook (appended, preserving any existing hook) that enqueues `HEAD` into
+  `.claude/changelog-queue` — but **skips** while a drain lock is held and skips commits whose
+  message starts `релиз:`/`патч:` (the drain's own bump commits), so the drain can never
+  re-trigger itself (`R-CL-01`);
+- `.changelog.config.json` (committed) with the aggregate location + part-name map, if absent;
+- `.gitignore` entries for `.claude/changelog-queue` and `.claude/changelog.lock`.
+
+### Drain (`/update-changelog --drain`)
+
+1. `node scripts/queue.mjs lock --root <root>` — take the lock (TTL 15 min; a stale lock from
+   a crashed drain is auto-cleared, `R-CL-04`).
+2. `readQueue` the pending hashes.
+3. For each hash **oldest → newest**, run the §3 editorial pass in single-commit semantics:
+   a commit that passes the meaningfulness test → one entry + one patch bump for its home
+   part(s), writing per-part files (step 5 / M7) and the aggregate (M7a); an insignificant or
+   unparseable commit → **nothing** (no entry, no bump, no write). The §3.5 silent trailing
+   bump is a *range-end* guarantee only — it must **never** fire per-commit here, or the
+   version would bump on every no-op commit.
+4. `clearHashes` **only** the hashes actually processed (append-only queue; unprocessed hashes
+   survive a partial run — `R-CL-04`).
+5. Compose **one** bump commit per part, labelled by `classify-bump.mjs` (§6.2): patch-only →
+   `патч:`, a major/minor increase → `релиз:`. One line per part, e.g.
+   `патч: сайт v0.4.7, сервер v1.9.2`. Stage exactly the touched files (per-part changelog +
+   `package.json`/`version.json` + aggregate), never `git add -A`.
+6. `node scripts/queue.mjs unlock --root <root>`.
+
+Never ask the user anything in drain mode — every input is already decided.
+
+### In-session nudge
+
+A `SessionStart` hook only *surfaces* a reminder — "N commits queued — run
+`/update-changelog --drain`". It never runs the model itself; draining is always an explicit
+action, so no model is spawned behind the user's back.
+
+### Headless runbook
+
+```
+claude -p "/update-changelog --drain"
+```
+
+drains the **whole queue in one batch** (one model invocation, not one per commit — keeps
+cost/rate pressure bounded, `R-CL-02`). Keep this entrypoint opt-in.
