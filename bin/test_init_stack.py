@@ -50,11 +50,23 @@ class RealTemplatesTests(unittest.TestCase):
     def test_kotlin_is_standalone(self):
         entries, _ = init_stack.gather(["kotlin"])
         ids = {e["id"] for e in entries if e["id"]}
-        self.assertEqual(ids, {"kotlin-lsp@claude-plugins-official"})
+        self.assertIn("kotlin-lsp@claude-plugins-official", ids)      # its own plugin
+        self.assertIn("context7@claude-plugins-official", ids)        # root _base universal, inherited by all
+        # standalone == no cross-branch (frontend/backend/mobile) plugin leaks in
+        self.assertNotIn("typescript-lsp@claude-plugins-official", ids)
+        self.assertNotIn("expo@claude-plugins-official", ids)
 
     def test_no_template_for_unknown_stack(self):
         entries, _ = init_stack.gather(["not-a-real-stack"])
         self.assertEqual(entries[0]["state"], "no_template")
+
+    def test_gather_skills_per_stack(self):
+        self.assertEqual({s["id"] for s in init_stack.gather_skills(["android"])},
+                         {"chrisbanes/skills", "skydoves/compose-performance-skills"})
+        self.assertEqual({s["id"] for s in init_stack.gather_skills(["react"])}, {"shadcn"})
+        self.assertEqual({s["id"] for s in init_stack.gather_skills(["sql"])}, {"planetscale/database-skills"})
+        self.assertEqual({s["name"] for s in init_stack.gather_skills(["django"])}, {"django-expert"})
+        self.assertEqual(init_stack.gather_skills(["nx"]), [])  # a stack declaring no skills
 
     def test_every_stack_path_resolves_to_a_real_file(self):
         for stack, rel_path in init_stack.STACK_PATHS.items():

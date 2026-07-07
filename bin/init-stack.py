@@ -15,10 +15,14 @@ Plugin states:
 Modes:
   (no args)            detect + classify + report (human + STATUS_JSON). Writes nothing.
   --status <id>        print {"id","state"} JSON for one plugin (used to re-check). No writes.
+  -i / --interactive   TUI: lists the detected stack's plugins (installed vs needs-install) plus
+                       every other known plugin (opt-in, with description); on confirm it INSTALLS
+                       the chosen missing ones (`claude plugin install`) and activates them in the
+                       project. Needs a real terminal. Writes.
   --enable <id...>     enable exactly the given ids in project settings (+ non-plugin keys). Writes.
   --remove <id...>     delete the given ids from project enabledPlugins. Writes.
                        (--enable and --remove may be combined in one call.)
-  --apply-all          enable every non-placeholder declared plugin (no removals). Writes.
+  --apply-all          enable every non-placeholder declared plugin (no removals; no install). Writes.
 
 enabledPlugins is resolved at Claude Code STARTUP; restart after --apply.
 """
@@ -26,6 +30,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -373,9 +378,114 @@ def gather(stacks: list[str]):
                 state = classify(pid, installed, known)
                 entries.append({
                     "stack": stack, "via": via, "id": pid, "state": state,
+                    "description": p.get("description", ""),
                     "commands": commands_for(state, pid, p.get("install", {}) or {}),
                 })
     return entries, nonplugin
+
+
+# ---------- auto-enable set + full "known" plugin catalog (for interactive selection) ----------
+def resolved_autoenable(stacks: list[str]) -> set[str]:
+    """Ids the detected stacks' templates auto-enable (merge.enabledPlugins == True) across the
+    full resolved inheritance chain, minus placeholders. Used to pre-check the right boxes in the
+    interactive picker so the default selection matches what a plain --apply-all would enable."""
+    ids: set[str] = set()
+    for stack in stacks:
+        rel_path = STACK_PATHS.get(stack)
+        if not rel_path or not (TEMPLATES_DIR / rel_path).exists():
+            continue
+        for _via, tpl in _resolve_chain(rel_path):
+            ep = (tpl.get("merge", {}) or {}).get("enabledPlugins", {}) or {}
+            for pid, on in ep.items():
+                if on and not is_placeholder(pid):
+                    ids.add(pid)
+    return ids
+
+
+def known_plugins(exclude_ids: set[str]) -> list[dict]:
+    """Every plugin declared ANYWHERE under setting-templates/ that isn't already in exclude_ids
+    (the detected-stack set) - the "other known plugins" opt-in list. Deduped by id, classified,
+    carrying description + install commands. Read straight off the template files (not the
+    STACK_PATHS chain) so opt-in plugins that no stack auto-enables (e.g. auth0) still surface."""
+    installed = installed_ids()
+    known = known_marketplaces()
+    out: list[dict] = []
+    seen: set[str] = set()
+    for tpl_path in sorted(TEMPLATES_DIR.rglob("*.json")):
+        tpl = load_json(tpl_path)
+        rel = tpl_path.relative_to(TEMPLATES_DIR).as_posix()
+        for p in tpl.get("plugins", []) or []:
+            pid = p.get("id", "")
+            if not pid or pid in exclude_ids or pid in seen:
+                continue
+            seen.add(pid)
+            state = classify(pid, installed, known)
+            out.append({
+                "stack": "known", "via": rel, "id": pid, "state": state, "group": "known",
+                "description": p.get("description", ""),
+                "commands": commands_for(state, pid, p.get("install", {}) or {}),
+            })
+    return out
+
+
+# ---------- skills (npx skills add ...; SKILL.md dirs, NOT marketplace plugins) ----------
+SKILLS_DIRS = [HOME / ".claude" / "skills", ROOT / ".claude" / "skills"]
+
+
+def installed_skill_names() -> set[str]:
+    names: set[str] = set()
+    for d in SKILLS_DIRS:
+        if d.exists():
+            names |= {p.name for p in d.iterdir() if p.is_dir()}
+    return names
+
+
+def gather_skills(stacks: list[str]) -> list[dict]:
+    """Skills declared by the detected stacks' templates (a template's optional skills[] array),
+    deduped, each with a BEST-EFFORT present/missing state (present == a dir of its `name` exists in
+    ~/.claude/skills or ./.claude/skills). Skills are npx-installed SKILL.md dirs, not plugins - there
+    is no enable step and no installed_plugins.json equivalent, so detection is by directory name and
+    is approximate (skill slugs/dir-names drift - the install command is the source of truth)."""
+    present = installed_skill_names()
+    out: list[dict] = []
+    seen: set[str] = set()
+    for stack in stacks:
+        rel_path = STACK_PATHS.get(stack)
+        if not rel_path or not (TEMPLATES_DIR / rel_path).exists():
+            continue
+        for _via, tpl in _resolve_chain(rel_path):
+            for s in tpl.get("skills", []) or []:
+                sid = s.get("id", "")
+                if not sid or sid in seen:
+                    continue
+                seen.add(sid)
+                nm = s.get("name", sid.split("/")[-1])
+                out.append({
+                    "id": sid, "name": nm, "stack": stack,
+                    "state": "installed" if nm in present else "available",
+                    "description": s.get("description", ""),
+                    "install": s.get("install", {}) or {},
+                })
+    return out
+
+
+def install_skills(entries: list[dict]) -> tuple[list[str], list[str]]:
+    """Run `npx skills add <id>` for each chosen skill. Returns (succeeded, failed)."""
+    ok: list[str] = []
+    failed: list[str] = []
+    for e in entries:
+        cmd = (e.get("install", {}) or {}).get("cmd")
+        if not cmd:
+            print(f"  - {e['id']}: no install command (skipped)")
+            failed.append(e["id"])
+            continue
+        print(f"  Installing skill {e['id']} ...")
+        if _run_cmd(cmd):
+            ok.append(e["id"])
+        else:
+            print(f"  ! {e['id']}: install failed", file=sys.stderr)
+            failed.append(e["id"])
+    return ok, failed
 
 
 # ---------- report ----------
@@ -414,10 +524,33 @@ def print_present(declared: set[str]) -> None:
     present = present_enabled()
     if not present:
         return
-    print("\nAlready enabled in project settings (removable):")
+    all_declared = set(declared) | {e["id"] for e in known_plugins(set())}
+    print("\nAlready enabled in project settings (removable via -i):")
+    orphaned = []
     for pid in present:
-        tag = "declared by template" if pid in declared else "foreign (not in templates)"
+        if pid in declared:
+            tag = "declared by this stack"
+        elif pid in all_declared:
+            tag = "declared by another stack's template"
+        else:
+            tag = "ORPHANED - no template declares this (stale?)"
+            orphaned.append(pid)
         print(f"  - {pid}  [{tag}]")
+    if orphaned:
+        print("  Note: ORPHANED plugins are enabled but no current template declares them - likely")
+        print("  stale. Uncheck them in the interactive flow (-i) to remove; not auto-removed, since")
+        print("  you may have enabled them deliberately.")
+
+
+def print_skills(skills: list[dict]) -> None:
+    if not skills:
+        return
+    print("\nStack skills (npx skills add - opt-in, not auto-installed; run -i to install):")
+    for e in skills:
+        mark = "[installed]" if e["state"] == "installed" else "[available]"
+        print(f"  - {e['id']}  {mark}")
+        if e.get("description"):
+            print(f"      {_short(e['description'])}")
 
 
 # ---------- apply ----------
@@ -554,65 +687,170 @@ def interactive_select(labels, preselected=None, multi=True, hint=None, title=No
         sys.stdout.flush()
 
 
-def run_interactive(stacks: list[str]) -> int:
-    entries, _ = gather(stacks)
-    present = present_enabled()
-    declared = {e["id"] for e in entries if e["id"]}
+STATE_MARK = {
+    "installed": "[installed]",
+    "available": "[needs install]",
+    "marketplace_missing": "[needs install + marketplace]",
+    "unavailable": "[needs install (stale catalog?)]",
+    "placeholder": "[placeholder - can't install]",
+}
 
-    # 1) plain list with an [enabled] mark
-    print("Detected stack:", ", ".join(stacks))
-    print("\nPlugins:")
+
+def _short(desc: str, width: int = 100) -> str:
+    """One-line, ASCII-safe description preview (collapses whitespace, truncates with ...)."""
+    desc = " ".join((desc or "").split())
+    return desc if len(desc) <= width else desc[:width - 3] + "..."
+
+
+def _run_cmd(cmd: str) -> bool:
+    """Run one install/marketplace command. shell=True is safe here: every command string comes
+    from our own setting-templates/*.json (trusted, static), never from user input, and shell=True
+    is what lets a bare `claude` resolve to claude.cmd on Windows / the PATH entry on POSIX."""
+    print(f"    $ {cmd}")
+    try:
+        return subprocess.run(cmd, shell=True).returncode == 0
+    except Exception as exc:  # launch failure (claude not on PATH, etc.)
+        print(f"    ! failed to launch: {exc}", file=sys.stderr)
+        return False
+
+
+def install_missing(entries: list[dict]) -> tuple[list[str], list[str]]:
+    """Install each not-yet-installed plugin: marketplace add first when its marketplace is
+    missing (refresh first when the catalog is stale), then the plugin itself. Returns
+    (succeeded_ids, failed_ids). Placeholders / entries with no install command are skipped."""
+    ok: list[str] = []
+    failed: list[str] = []
     for e in entries:
-        pid = e["id"] or f"(stack: {e['stack']})"
-        mark = "  [enabled]" if e["id"] in present else ""
-        print(f"  - {pid}  {SYMBOL.get(e['state'], e['state'])}{mark}")
-    foreign = [p for p in present if p not in declared]
-    if foreign:
-        print("  (also enabled, not declared by templates: " + ", ".join(foreign) + ")")
-    print()
-
-    # 2) top menu: remove-first or activate directly
-    action = interactive_select(
-        ["Choose what to ENABLE",
-         "REMOVE enabled plugins, then choose what to enable",
-         "Quit (no changes)"],
-        multi=False, title="What do you want to do?")
-    if action is None or action == 2:
-        print("\nNo changes."); return 0
-
-    remove_ids: list[str] = []
-    if action == 1:
-        removable = list(present)
-        if removable:
-            sel = interactive_select(removable, preselected=set(), multi=True,
-                                     title="\nMark plugins to REMOVE:")
-            if sel is None:
-                print("\nCancelled."); return 0
-            remove_ids = [removable[i] for i in sorted(sel)]
+        pid = e["id"]
+        c = e.get("commands") or {}
+        install_cmd = (c.get("install", {}) or {}).get("cmd")
+        if is_placeholder(pid) or not install_cmd:
+            print(f"  - {pid}: no install command available (skipped)")
+            failed.append(pid)
+            continue
+        print(f"  Installing {pid} ...")
+        refresh_cmd = (c.get("refresh", {}) or {}).get("cmd")
+        if refresh_cmd:                       # state 'unavailable': try to refresh the catalog first
+            _run_cmd(refresh_cmd)
+        ma_cmd = (c.get("marketplace_add", {}) or {}).get("cmd")
+        if ma_cmd and not _run_cmd(ma_cmd):   # state 'marketplace_missing': add the marketplace first
+            print(f"  ! {pid}: marketplace add failed - skipping install", file=sys.stderr)
+            failed.append(pid)
+            continue
+        if _run_cmd(install_cmd):
+            ok.append(pid)
         else:
-            print("\nNothing is enabled to remove.")
+            print(f"  ! {pid}: install failed", file=sys.stderr)
+            failed.append(pid)
+    return ok, failed
 
-    # 3) activation: installed plugins can be enabled now (checked = active)
-    enableable = [e["id"] for e in entries
-                  if e["id"] and e["state"] == "installed" and e["id"] not in remove_ids]
-    enable_ids: list[str] = []
-    if enableable:
-        pre = {i for i, c in enumerate(enableable) if c in present}
-        sel = interactive_select(enableable, preselected=pre, multi=True,
-                                 title="\nSelect plugins to be ACTIVE (checked = enabled):")
-        if sel is None:
-            print("\nCancelled."); return 0
-        enable_ids = [enableable[i] for i in sorted(sel)]
-        # currently-enabled but unchecked here -> disable as well
-        for c in enableable:
-            if c in present and c not in enable_ids and c not in remove_ids:
-                remove_ids.append(c)
+
+def _print_plugin_list(title: str, entries: list[dict], present: list[str]) -> None:
+    print(title)
+    for e in entries:
+        mark = "  <-- enabled now" if e["id"] in present else ""
+        print(f"  - {e['id']}  {STATE_MARK.get(e['state'], e['state'])}{mark}")
+        if e.get("description"):
+            print(f"      {_short(e['description'])}")
+
+
+def run_interactive(stacks: list[str]) -> int:
+    stack_entries = [e for e in gather(stacks)[0] if e["id"]]
+    for e in stack_entries:
+        e["group"] = "stack"
+    stack_ids = {e["id"] for e in stack_entries}
+    known = known_plugins(stack_ids)          # every other declared plugin, opt-in
+    present = present_enabled()
+    autoenable = resolved_autoenable(stacks)
+
+    # 1) two informational lists: detected-stack plugins, then other known (optional) plugins.
+    print("Detected stack:", ", ".join(stacks))
+    _print_plugin_list("\nStack plugins (detected for this project):", stack_entries, present)
+    if known:
+        _print_plugin_list("\nOther known plugins (optional - pick only if you want them):",
+                           known, present)
+    known_ids = {e["id"] for e in known}
+    foreign = [p for p in present if p not in stack_ids and p not in known_ids]
+    if foreign:
+        print("\n(also enabled, not declared by any template: " + ", ".join(foreign) + ")")
+
+    # 2) one checklist over everything installable (placeholders can't be installed/enabled).
+    #    Pre-checked = already-enabled + the stack's auto-enable set, so the default selection
+    #    equals what a plain --apply-all would activate; the user edits from there.
+    selectable = [e for e in (stack_entries + known) if e["state"] != "placeholder"]
+    # Currently-enabled plugins that NO template declares (orphaned/stale, or user-added): make them
+    # selectable and PRE-checked so they are preserved by default and only removed if the user
+    # unchecks - never silently dropped just because no template mentions them anymore.
+    covered = {e["id"] for e in selectable}
+    for pid in present:
+        if pid not in covered:
+            selectable.append({"id": pid, "state": "installed", "group": "enabled",
+                               "description": "(enabled; not declared by any template - orphaned/stale?)"})
+    if not selectable:
+        print("\nNothing to configure. No changes.")
+        return 0
+    labels = []
+    for e in selectable:
+        suffix = "" if e["state"] == "installed" else f"  ({e['state']})"
+        labels.append(f"[{e['group']}] {e['id']}{suffix}")
+    preselect = {i for i, e in enumerate(selectable)
+                 if e["id"] in present or (e["group"] == "stack" and e["id"] in autoenable)}
+    sel = interactive_select(
+        labels, preselected=preselect, multi=True,
+        title="\nCheck plugins to be ACTIVE in this project (missing ones get installed on confirm):")
+    if sel is None:
+        print("\nCancelled - no changes."); return 0
+    chosen = [selectable[i] for i in sorted(sel)]
+    chosen_ids = {e["id"] for e in chosen}
+
+    # 3) install the chosen-but-missing, then activate the ones that are (now) installed and
+    #    disable any currently-enabled plugin the user unchecked.
+    to_install = [e for e in chosen if e["state"] != "installed"]
+    installed_now: list[str] = []
+    install_failed: list[str] = []
+    if to_install:
+        print("\nInstalling missing plugins:")
+        installed_now, install_failed = install_missing(to_install)
+
+    enable_ids = [e["id"] for e in chosen
+                  if e["state"] == "installed" or e["id"] in installed_now]
+    remove_ids = [p for p in present if p not in chosen_ids]
+
+    if install_failed:
+        print("\n! Failed to install (NOT enabled): " + ", ".join(install_failed))
+        print("  Fix/install them by hand, then re-run  python3 ~/.claude/bin/init-stack.py -i")
+
+    if enable_ids or remove_ids:
+        apply(enable_ids, remove_ids, stacks)
     else:
-        print("\n(no installed plugins to enable; install pending ones first - see states above)")
+        print("\nNo plugin changes to project settings.")
+    offer_skills(stacks)
+    return 0
 
-    if not enable_ids and not remove_ids:
-        print("\nNo changes selected."); return 0
-    return apply(enable_ids, remove_ids, stacks)
+
+def offer_skills(stacks: list[str]) -> None:
+    """Interactive skill step: show the stack's declared skills and offer to `npx skills add` the
+    MISSING ones. None pre-checked (skills are opt-in). Skills have no enable/disable - install only."""
+    skills = gather_skills(stacks)
+    if not skills:
+        return
+    missing = [e for e in skills if e["state"] != "installed"]
+    print("\nStack skills:")
+    for e in skills:
+        print(f"  - {e['id']}  [{'installed' if e['state'] == 'installed' else 'available'}]")
+    if not missing:
+        return
+    labels = [f"{e['id']}" for e in missing]
+    sel = interactive_select(labels, preselected=set(), multi=True,
+                             title="\nSkills to INSTALL now (npx skills add; none pre-checked):")
+    if not sel:
+        return
+    chosen = [missing[i] for i in sorted(sel)]
+    print("\nInstalling skills:")
+    ok, failed = install_skills(chosen)
+    print("Installed:", ", ".join(ok) if ok else "(none)")
+    if failed:
+        print("Failed:", ", ".join(failed), "- verify the `npx skills add` slug and retry.")
 
 
 # ---------- main ----------
@@ -654,13 +892,16 @@ def main() -> int:
     entries, _ = gather(stacks)
     declared = {e["id"] for e in entries if e["id"]}
     present = present_enabled()
+    skills = gather_skills(stacks)
     print_report(stacks, entries)
     print_present(declared)
+    print_skills(skills)
     print("\n=== STATUS_JSON ===")
     payload = {
         "stacks": stacks,
         "plugins": entries,
         "present": [{"id": pid, "declared": pid in declared} for pid in present],
+        "skills": skills,
     }
     print(json.dumps(payload, ensure_ascii=False))
     return 0
