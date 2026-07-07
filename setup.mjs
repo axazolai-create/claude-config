@@ -189,7 +189,7 @@ async function choose(label, fallback = "skip") {
 
 /* ---------- copy any bundle file into ~/.claude with conflict resolution ---------- */
 // Bundle-meta that must NOT be copied into ~/.claude (only matched at the archive root):
-const META = new Set(["setup.mjs", "README.md", "settings.partial.json", "RISK_REGISTER.snippet.md", "settings.json"]);
+const META = new Set(["setup.mjs", "README.md", "settings.partial.json", "RISK_REGISTER.snippet.md", "settings.json", "bootstrap.sh", "bootstrap.ps1"]);
 const copiedScripts = [];
 function* walkBundle(dir, rel = "") {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
