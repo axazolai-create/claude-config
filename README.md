@@ -38,6 +38,10 @@ $env:CLAUDE_CONFIG_REF='v1.0.0'; irm https://raw.githubusercontent.com/axazolai-
 Проброс флагов в `setup.mjs` (напр. неинтерактивная замена): POSIX — `… | bash -s -- --replace-all`;
 Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
+> Примечание: при `curl|bash` на Linux/macOS `setup.mjs` запускается неинтерактивно (stdin занят
+> пайпом) — на уже настроенном `~/.claude` конфликты решаются аддитивным merge (без потерь, с
+> бэкапами/сайдкарами); для явной замены добавь `-- --replace-all`. На чистом ПК разницы нет.
+
 **Безопасная альтернатива** `curl|bash` / `irm|iex` (сначала прочитать, потом запустить):
 
 ```
