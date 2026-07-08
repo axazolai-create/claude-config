@@ -18,8 +18,8 @@
       },
       "install": {
         "marketplace_add": {
-          "cmd": "claude plugin marketplace add pleaseai/claude-code-plugins",
-          "slash": "/plugin marketplace add pleaseai/claude-code-plugins"
+          "cmd": "claude plugin marketplace add https://github.com/pleaseai/claude-code-plugins",
+          "slash": "/plugin marketplace add https://github.com/pleaseai/claude-code-plugins"
         },
         "cmd": "claude plugin install turborepo@pleaseai --scope project",
         "bash": "claude plugin install turborepo@pleaseai --scope project",

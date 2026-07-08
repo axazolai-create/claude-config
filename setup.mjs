@@ -219,6 +219,20 @@ async function placeFile(rel) {
   const srcContent = read(src);
   if (srcContent === undefined) { summary.push(`MISSING in bundle: ${rel}`); return; }
   manifestNow.push({ rel, hash: sha(srcContent) });
+
+  // setting-templates/**: per its own README, this tree is pure bundle content (stack template
+  // definitions authored by this repo) - never hand-edited by an end user, unlike settings.json
+  // which legitimately holds per-machine values. So it skips the JSON-merge tier entirely and is
+  // always refreshed to the bundled version, same as a script - a template fix (e.g. a marketplace
+  // URL) always takes effect on the next run instead of being kept-as-is by additive merge.
+  if (rel.startsWith("setting-templates/")) {
+    if (!existsSync(dst)) { if (write(dst, srcContent)) summary.push(`created  ${dst}`); return; }
+    const cur = read(dst);
+    if (cur === srcContent) { summary.push(`unchanged ${dst}`); return; }
+    if (write(dst, srcContent)) summary.push(`updated  ${dst}`);
+    return;
+  }
+
   if (!existsSync(dst)) {
     if (write(dst, srcContent)) { summary.push(`created  ${dst}`); if (dst.endsWith(".mjs")) copiedScripts.push(dst); }
     return;
@@ -290,6 +304,39 @@ function bundleAllText() {
   for (const rel of walkBundle(SRC)) t += "\n" + (read(join(SRC, ...rel.split("/"))) || "");
   return t;
 }
+/* ---------- setting-templates/: full folder overwrite (delete anything not in the bundle) ----------
+ * This directory is pure bundle content (see payload/setting-templates/README.md) - no per-machine
+ * values, never hand-edited - so unlike pruneStale() below it needs none of that function's safety
+ * gates (curated? still referenced by name in the bundle? modified since install?). Those gates
+ * actively misfire here anyway: every README.md under setting-templates/ mentions "_base.json" in
+ * prose, so the generic "still referenced in bundle" text-search would forever protect a stale
+ * _base.json from ever being pruned. Mirror semantics instead: destination becomes an exact copy. */
+function walkDir(dir, rel = "") {
+  const out = [];
+  if (!existsSync(dir)) return out;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue;
+    const childRel = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) out.push(...walkDir(join(dir, e.name), childRel));
+    else out.push(childRel);
+  }
+  return out;
+}
+function overwriteTemplatesDir() {
+  const bundleRels = new Set(walkDir(join(SRC, "setting-templates")));
+  const destDir = join(CDIR, "setting-templates");
+  const staleRels = walkDir(destDir).filter((r) => !bundleRels.has(r));
+  if (!staleRels.length) return;
+  log("\n--- setting-templates/: stale files removed (full overwrite; pure bundle content, no gating) ---");
+  for (const r of staleRels) {
+    const dst = join(destDir, ...r.split("/"));
+    log("  " + dst);
+    if (DRY) { summary.push(`would-prune ${dst}`); continue; }
+    try { rmSync(dst, { force: true }); summary.push(`pruned   ${dst}`); }
+    catch { summary.push(`prune-failed ${dst}`); }
+  }
+}
+
 async function pruneStale() {
   const oldManifest = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8"))) || { files: [] };
   const currentRels = new Set(manifestNow.map((f) => f.rel));
@@ -421,6 +468,7 @@ async function main() {
   }
 
   /* ---------- prune stale files + persist manifest ---------- */
+  overwriteTemplatesDir();
   await pruneStale();
   if (!DRY) write(MANIFEST, JSON.stringify({ files: manifestNow }, null, 2) + "\n");
 
