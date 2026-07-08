@@ -480,7 +480,7 @@ def install_skills(entries: list[dict]) -> tuple[list[str], list[str]]:
             failed.append(e["id"])
             continue
         print(f"  Installing skill {e['id']} ...")
-        if _run_cmd(cmd):
+        if _run_cmd(cmd)[0]:
             ok.append(e["id"])
         else:
             print(f"  ! {e['id']}: install failed", file=sys.stderr)
@@ -702,16 +702,65 @@ def _short(desc: str, width: int = 100) -> str:
     return desc if len(desc) <= width else desc[:width - 3] + "..."
 
 
-def _run_cmd(cmd: str) -> bool:
+def _run_cmd(cmd: str, capture: bool = False) -> tuple[bool, str]:
     """Run one install/marketplace command. shell=True is safe here: every command string comes
     from our own setting-templates/*.json (trusted, static), never from user input, and shell=True
-    is what lets a bare `claude` resolve to claude.cmd on Windows / the PATH entry on POSIX."""
+    is what lets a bare `claude` resolve to claude.cmd on Windows / the PATH entry on POSIX.
+    capture=True buffers combined stdout+stderr (printed once the process exits, not streamed
+    live) and returns it so callers can pattern-match the failure text; only used for
+    marketplace_add, where losing live streaming is an acceptable trade for detecting a known
+    retryable failure."""
     print(f"    $ {cmd}")
     try:
-        return subprocess.run(cmd, shell=True).returncode == 0
+        if capture:
+            proc = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                                   errors="replace")
+            out = (proc.stdout or "") + (proc.stderr or "")
+            sys.stdout.write(out)
+            return proc.returncode == 0, out
+        return subprocess.run(cmd, shell=True).returncode == 0, ""
     except Exception as exc:  # launch failure (claude not on PATH, etc.)
         print(f"    ! failed to launch: {exc}", file=sys.stderr)
+        return False, str(exc)
+
+
+# Signature of a known upstream issue: some marketplace repos (e.g. pleaseai/claude-code-plugins)
+# pin their OWN submodules to git@github.com: SSH URLs in .gitmodules regardless of how the
+# marketplace repo itself was cloned, so `marketplace_add` can fail with an SSH host-key/auth
+# error even when its own URL is HTTPS. See setting-templates/README.md for the full writeup.
+_SSH_SUBMODULE_FAILURE_MARKERS = (
+    "host key is not in your known_hosts file",
+    "Host key verification failed",
+    "Permission denied (publickey)",
+)
+
+
+def _run_marketplace_add(cmd: str) -> bool:
+    """Run a marketplace_add command; on a recognized SSH-submodule failure, retry once with a
+    git URL rewrite scoped to just this subprocess call (via GIT_CONFIG_COUNT/KEY/VALUE env vars,
+    git >= 2.31) so git@github.com: submodule fetches go over HTTPS instead. This never touches
+    the user's actual ~/.gitconfig - it's process-local and reverts the moment the call returns."""
+    ok, out = _run_cmd(cmd, capture=True)
+    if ok or not any(m in out for m in _SSH_SUBMODULE_FAILURE_MARKERS):
+        return ok
+    print("    ! marketplace add failed on an SSH host-key/auth error - retrying with a "
+          "process-scoped git@github.com: -> https://github.com/ rewrite "
+          "(no changes to your global git config)...")
+    env = os.environ.copy()
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "url.https://github.com/.insteadOf"
+    env["GIT_CONFIG_VALUE_0"] = "git@github.com:"
+    print(f"    $ {cmd}")
+    try:
+        retry_ok = subprocess.run(cmd, shell=True, env=env).returncode == 0
+    except Exception as exc:
+        print(f"    ! failed to launch: {exc}", file=sys.stderr)
         return False
+    if not retry_ok:
+        print("    ! retry also failed - if this persists, run on this machine:\n"
+              '        git config --global url."https://github.com/".insteadOf "git@github.com:"',
+              file=sys.stderr)
+    return retry_ok
 
 
 def install_missing(entries: list[dict]) -> tuple[list[str], list[str]]:
@@ -733,11 +782,11 @@ def install_missing(entries: list[dict]) -> tuple[list[str], list[str]]:
         if refresh_cmd:                       # state 'unavailable': try to refresh the catalog first
             _run_cmd(refresh_cmd)
         ma_cmd = (c.get("marketplace_add", {}) or {}).get("cmd")
-        if ma_cmd and not _run_cmd(ma_cmd):   # state 'marketplace_missing': add the marketplace first
+        if ma_cmd and not _run_marketplace_add(ma_cmd):  # state 'marketplace_missing': add first
             print(f"  ! {pid}: marketplace add failed - skipping install", file=sys.stderr)
             failed.append(pid)
             continue
-        if _run_cmd(install_cmd):
+        if _run_cmd(install_cmd)[0]:
             ok.append(pid)
         else:
             print(f"  ! {pid}: install failed", file=sys.stderr)
