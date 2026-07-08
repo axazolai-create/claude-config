@@ -147,6 +147,23 @@ name and approximate (the install command is the source of truth; slugs drift - 
   on every session restart via an async `SessionStart` hook. The catalog `source` field is a
   tell: a local `./plugins/<name>` path (bundled in this repo) is usually safe to take at face
   value; an external `git-subdir`/`url` source (a vendor's own repo) needs its manifest checked.
+- A marketplace's own `.gitmodules` can still force SSH even when `marketplace_add` uses an
+  HTTPS URL. Caught 2026-07 on `turborepo@pleaseai`: `marketplace_add` clones
+  `https://github.com/pleaseai/claude-code-plugins` fine over HTTPS, but that repo's submodules
+  (`external-plugins/code-review`, `firebase`, `flutter`, `grafana`, `nanobanana`, `postgres`,
+  `security`, `spec-kit` — none needed by turborepo, just bundled in the same marketplace repo)
+  are declared with `git@github.com:...` URLs in its `.gitmodules`. `git submodule` always
+  honors the literal submodule URL regardless of how the parent was cloned, so on a machine
+  without GitHub's SSH host key trusted (or without an SSH key registered to that GitHub
+  account) the whole marketplace add fails with "SSH host key is not in your known_hosts file" /
+  "Permission denied (publickey)" even though the plugin you actually want has no SSH
+  dependency. Fix on the affected machine (not something this repo can fix — the offending
+  `.gitmodules` lives in the vendor's repo): `git config --global
+  url."https://github.com/".insteadOf "git@github.com:"` — rewrites all `git@github.com:` fetches
+  to HTTPS, no SSH key needed, works for anonymous/public-repo submodule clones. Then retry
+  `marketplace_add`. (Trusting the host key alone, e.g. `ssh-keyscan github.com >>
+  ~/.ssh/known_hosts`, only clears the host-key error; it still fails with Permission denied if
+  the account has no SSH key registered with GitHub.)
 
 ## Related tools (non-plugin)
 

@@ -28,6 +28,7 @@
     }
   ],
   "_notes": [
-    "The turborepo@pleaseai plugin above is the only dedicated Turborepo plugin; there is also a first-party Turborepo Agent Skill (npx skills add) if you want it."
+    "The turborepo@pleaseai plugin above is the only dedicated Turborepo plugin; there is also a first-party Turborepo Agent Skill (npx skills add) if you want it.",
+    "KNOWN ISSUE (2026-07): marketplace_add above uses HTTPS, but pleaseai/claude-code-plugins' own .gitmodules pins its submodules (code-review, firebase, flutter, grafana, nanobanana, postgres, security, spec-kit - none needed by turborepo) to git@github.com: SSH URLs, so the marketplace add can still fail with an SSH host-key/permission error on machines without GitHub SSH set up. Fix on the affected machine: git config --global url.\"https://github.com/\".insteadOf \"git@github.com:\" - see setting-templates/README.md for the full writeup."
   ]
 }
