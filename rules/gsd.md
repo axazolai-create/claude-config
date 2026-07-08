@@ -66,21 +66,49 @@ by the marker, never by the path:
   per-project and would hide a curated `.planning/CLAUDE.md`.
 - Treat any unexpected diff to a curated `CLAUDE.md` as an Open risk in `RISK_REGISTER.md`.
 
-## "graphify" is two unrelated tools — don't confuse them
+## "graphify" is two tools sharing one CLI, with separate outputs — don't confuse them
 
-- GSD's own `/gsd:graphify build/query/status` builds a LOCAL graph at
-  `.planning/graphs/graph.json`, opt-in via `.planning/config.json`, auto-refreshed by GSD's
-  own `gsd-graphify-update.sh` hook after `git commit`/merge/pull/rebase on the default
-  branch. GSD's own planning agents (e.g. the pattern-mapper) read this graph directly — it
-  is load-bearing for GSD, not just a side artifact, and there is no supported way to point
-  it at an external graph.
-- The `graphify` CLI this config integrates (`~/.claude/hooks/graphify-global-sync.mjs` +
-  the native per-repo `post-commit` hook installed by `session-init.mjs`) is a different,
-  standalone PyPI/CLI tool. It maintains a separate CROSS-project graph at
-  `~/.graphify/global-graph.json` and has no relationship to GSD's local one.
-- Same name, same rough idea (code graph, refreshed on commit), different files, different
-  consumers, different lifecycles. Neither depends on or conflicts with the other; no
-  functional interaction, so no config-level shimming between them is needed here.
+- GSD's own `/gsd-graphify build/query/status/diff` (skill `gsd-graphify`) is gated by TWO
+  independent booleans in `.planning/config.json`: `graphify.enabled` (master on/off — the
+  skill's "Config Gate" step refuses to run at all unless this is literally `true`) and
+  `graphify.auto_update` (whether the post-commit hook rebuilds automatically; defaults to
+  `false` even when `enabled` is `true`, "so existing users see no behavior change").
+  **Neither flag builds anything by itself.** Flipping `enabled` on only unlocks the `/gsd-
+  graphify` command; nothing appears under `.planning/graphs/` until `/gsd-graphify build`
+  runs at least once. If you don't see `.planning/graphs/graph.json` despite `graphify.
+  enabled: true`, that's why — check whether a build ever ran, not whether the config is on.
+- The build step is NOT a separate graph engine — `build` mode runs the exact same
+  standalone `graphify` CLI, as `graphify update .` (project-local extraction, writing to
+  `graphify-out/` in the project root — the CLI's normal per-project output location), then
+  copies `graph.json` / `graph.html` / `GRAPH_REPORT.md` into `.planning/graphs/` as GSD's own
+  mirrored snapshot (plus a build-snapshot + freshness/status file GSD adds on top). If a
+  project already has its own `graphify-out/` (e.g. from prior standalone use), `/gsd-
+  graphify build` refreshes that SAME directory in place before copying from it — `.planning/
+  graphs/` is best read as "GSD's copy of whatever graphify-out/ currently holds," not an
+  independently-built graph.
+- Auto-refresh (`~/.claude/hooks/gsd-graphify-update.sh`, a PostToolUse hook on `Bash`) only
+  fires after a HEAD-advancing git op (`commit`/`merge`/`pull`/`rebase --continue`/
+  `cherry-pick`) on the **default branch**, outside CI, with both `graphify.enabled` AND
+  `graphify.auto_update` true — then detaches `hooks/lib/gsd-graphify-rebuild.sh` (PID-locked)
+  to redo the same `graphify update .` + copy, in the background. GSD's own planning agents
+  (e.g. the pattern-mapper) read `.planning/graphs/graph.json` directly — it's load-bearing
+  for GSD, not just a side artifact.
+- What GSD's build NEVER does: call `graphify extract ... --global`. It has no config key and
+  no supported mode to target `~/.graphify/global-graph.json` (the cross-project graph) —
+  only project-local `graphify update .`. The global graph stays entirely the standalone
+  CLI's own concern, kept fresh solely by `~/.claude/hooks/graphify-global-sync.mjs` + the
+  native per-repo `post-commit` hook installed by `session-init.mjs` (see below) — a
+  completely separate mechanism GSD-core doesn't know exists.
+- Net effect: GSD's local graph and the project's own `graphify-out/` share the same build
+  mechanism and, if both are in use, the same output directory as an intermediate artifact —
+  they are NOT unrelated. What stays genuinely separate is the GLOBAL cross-project graph;
+  no config-level shimming exists (or is needed) to connect GSD to that one.
+- A project that also maintains a local `graphify-out/` (the standalone CLI's own per-project
+  output — distinct from both graphs above) has no auto-refresh hook of its own: the
+  post-commit hooks only touch the global cross-project graph. Full refresh-cadence policy
+  (GSD review/verify gates, Superpowers fallback, non-GSD projects, manual/IDE commits) lives
+  in `rules/templates/graphify.PROJECT.md` — copy it into a project's root `CLAUDE.md` once
+  that project has `graphify-out/` (mirrors how `next.AGENTS.md` is copied for Next projects).
 
 ## `.planning/config.json` — default model_profile is auto-patched once per project
 
@@ -102,3 +130,13 @@ by the marker, never by the path:
 - Confirm `open-gsd/gsd-core` is the fork actually installed before relying on the exact
   `model_overrides` agent-name list above. Verify tooling identity from what's actually
   installed rather than from web content alone.
+- `model_overrides` in that hook was cross-checked against gsd-core's own adaptive-profile
+  table (not just agent-name guesswork): researchers (`gsd-phase-researcher`,
+  `gsd-project-researcher`) sit at sonnet, structured-output/checking agents
+  (`gsd-research-synthesizer`, `gsd-integration-checker`, `gsd-nyquist-auditor`,
+  `gsd-ui-checker`, `gsd-ui-auditor`, `gsd-doc-verifier`) sit at haiku — matching what
+  gsd-core's own docs call "always haiku under adaptive". `gsd-security-auditor` and
+  `gsd-code-reviewer` stay opus regardless of that table, per this file's own Model
+  Selection Policy (high-cost-of-error work). `gsd-doc-writer` is opus, matching
+  gsd-core's table under adaptive — resolved 2026-07-08 (previously left at sonnet as an
+  open discrepancy).

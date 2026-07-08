@@ -75,6 +75,13 @@ Copy the matching one to a new project's root when it's missing, e.g.
 `@AGENTS.md`-import it (see `node.next.md`) so it's pulled into context once present;
 the import is a silent no-op on projects that don't have the file yet.
 
+- `next.AGENTS.md` -> project's `AGENTS.md` (Next.js breaking-changes-vs-training-data note).
+- `graphify.PROJECT.md` -> project's root `CLAUDE.md`, once that project has a local
+  `graphify-out/` (query/path/explain usage + the `graphify update .` refresh-cadence
+  policy — GSD review/verify gates, Superpowers fallback, non-GSD projects, manual commits).
+  See `rules/gsd.md` § "graphify is two unrelated tools" for why this is separate from GSD's
+  own `.planning/graphs/graph.json`.
+
 ## Caveat: frameworks share extensions
 
 React / Next / Nest all use `.ts`, so path-scoping is best-effort and relies on signature

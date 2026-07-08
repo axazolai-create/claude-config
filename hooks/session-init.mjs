@@ -33,6 +33,12 @@ const ENABLED  = process.env.CLAUDE_CURATED_AUTOINIT      !== "0"; // default ON
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const writeFile = (p, content) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, content); return true; } catch { return false; } };
+// Strips a leading UTF-8 BOM before parsing - project-init.json (shared with
+// gsd-config-patch.mjs) can pick one up from an external tool (e.g. PowerShell's
+// `Set-Content -Encoding utf8`) or a manual save; a raw JSON.parse throws on it, which the
+// `safe()` wrapper silently swallows into `{}`, making every one-time gate in this file
+// "forget" it ever ran. Cheap and always correct even when there's no BOM.
+const readJSON = (p) => JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, ""));
 function emit(ctx) {
   try {
     process.stdout.write(JSON.stringify({
@@ -63,7 +69,7 @@ const root = findRoot(startDir);
 
 // per-user state registry - keeps project trees clean; "unknown on THIS machine"
 const stateFile = join(homedir(), ".claude", "state", "project-init.json");
-let state = existsSync(stateFile) ? (safe(() => JSON.parse(readFileSync(stateFile, "utf8"))) || {}) : {};
+let state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
 const firstTime = !state[root]; // do not early-exit: the risk-register step must retry every session
 if (!state[root]) state[root] = {}; // ensure the record exists so later independent one-time flags can attach
 

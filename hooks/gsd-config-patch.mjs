@@ -26,19 +26,67 @@
 // to model_profile/models/model_overrides. That's the point: apply personal defaults once to a
 // freshly-created config, then get out of the way.
 //
-// Toggle: CLAUDE_GSD_CONFIG_AUTOPATCH=0
+// TIER 2 (2026-07-08): a second, independent one-time patch (state key
+// `gsdWorkflowConfigPatched`) applies DEFAULT_WORKFLOW_CONFIG - top-level `commit_docs` /
+// `parallelization` / `phase_naming` / `granularity`, plus a handful of keys NESTED under
+// `git` / `workflow` / `hooks` / `graphify`. Classified as safe personal-preference defaults
+// (not stack-dependent, not something gsd-core already asks well, not something this file's
+// own advice says to set "deliberately per project"): QA-cadence/execution-style knobs
+// (research/plan_check/verifier/nyquist_validation/pattern_mapper/post_planning_gaps/
+// context_coverage_gate/human_verify_mode/auto_advance/node_repair(+budget)/
+// research_before_questions/discuss_mode/skip_discuss/max_discuss_passes/subagent_timeout/
+// plan_bounce(+passes)/ai_integration_phase/use_worktrees), `git.create_tag`, both `hooks.*`
+// keys, and `graphify.enabled`/`graphify.auto_update`. Deliberately NOT included (see
+// rules/gsd.md and this file's own commit history for why): `tdd_mode`, `code_review`(+
+// `_depth`/`_command`), `security_enforcement`/`security_asvs_level`/`security_block_on` -
+// this file already says set those deliberately per project, not defaulted. Also excluded:
+// `ui_phase`/`ui_review`/`ui_safety_gate` (depend on whether the project even has a
+// frontend - stack-dependent, not a personal preference) and `git.branching_strategy`(+
+// templates) (depends on team workflow, not stack or preference). `graphify.auto_update` is
+// deliberately `false` even though `enabled` is `true`: gsd-core's own auto-rebuild fires on
+// every commit to the default branch, which is the "refresh on every edit" cadence
+// `rules/templates/graphify.PROJECT.md` explicitly argues against - Claude driving
+// `graphify update .` at the right checkpoints (review/verify pass) is preferred over
+// gsd-core's blunter per-commit trigger. NESTED keys are merged key-by-key (not by replacing
+// the whole `workflow`/`git`/`hooks`/`graphify` object), so sibling keys gsd-core or the user
+// already set on those same objects (e.g. `workflow.tdd_mode`, `workflow.security_block_on`)
+// are left untouched.
+//
+// Toggle tier 1 (models) + tier 2 (workflow) together: CLAUDE_GSD_CONFIG_AUTOPATCH=0
+// Toggle tier 2 (workflow) alone, keep tier 1 (models): CLAUDE_GSD_CONFIG_AUTOPATCH_WORKFLOW=0
 //
 // NOTE ON THE VALUES BELOW: model_profile is "adaptive" per your call - it routes
 // gsd-codebase-mapper/gsd-research-synthesizer/gsd-integration-checker/gsd-nyquist-auditor/
 // gsd-pattern-mapper/gsd-ui-checker/gsd-ui-auditor/gsd-doc-verifier to haiku more aggressively
-// than "balanced" would, closer to what model_overrides below already do. Everything else in
-// this block is your original model_overrides/models, unedited.
+// than "balanced" would, closer to what model_overrides below already do.
+//
+// model_overrides was later evaluated against gsd-core's OWN adaptive-profile documentation
+// (open-gsd/gsd-core, confirmed real, not a guess from agent names) and 8 entries were downgraded
+// where the doc showed no quality reason to keep them higher:
+//   - gsd-phase-researcher, gsd-project-researcher: opus -> sonnet (only planner/roadmapper/
+//     debugger/ui-researcher/doc-writer are in gsd-core's adaptive "bump to opus" list - plain
+//     researchers are not, and the "research" phase-type default is already sonnet).
+//   - gsd-research-synthesizer, gsd-integration-checker, gsd-nyquist-auditor, gsd-ui-checker,
+//     gsd-ui-auditor, gsd-doc-verifier: sonnet -> haiku (gsd-core's own doc puts all six in its
+//     "always haiku under adaptive" group - structured-output/checking work, no open reasoning).
+// Deliberately NOT downgraded despite looking similar: gsd-security-auditor, gsd-code-reviewer
+// stay opus - not covered by gsd-core's documented table at all, but your own Model Selection
+// Policy above (high-cost-of-error / cyber-adjacent -> opus) overrides on its own merits.
+// Resolved 2026-07-08: gsd-doc-writer bumped sonnet -> opus, matching gsd-core's adaptive table
+// (grouped with planner/roadmapper/debugger/ui-researcher) - no longer left as an open
+// discrepancy.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const writeFile = (p, content) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, content); return true; } catch { return false; } };
+// Strips a leading UTF-8 BOM before parsing - some external tool (PowerShell's
+// `Set-Content -Encoding utf8`, or a manual save) can write project-init.json with one, and a
+// raw JSON.parse throws on it, which the `safe()` wrapper then silently swallows into `{}` -
+// i.e. every one-time gate in this file would silently "forget" it ever ran. Cheap and always
+// correct even when there's no BOM (the regex just doesn't match).
+const readJSON = (p) => JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, ""));
 function emit(ctx) {
   try {
     process.stdout.write(JSON.stringify({
@@ -72,10 +120,13 @@ const configPath = join(root, ".planning", "config.json");
 if (!existsSync(configPath)) process.exit(0); // no config yet - nothing to do, cheapest exit
 
 // Shared per-root state file with session-init.mjs - same namespace, same `state[root]` object,
-// just a new independent flag key so the two hooks never collide.
+// just new independent flag keys so the two hooks (and the two tiers below) never collide.
 const stateFile = join(homedir(), ".claude", "state", "project-init.json");
-let state = existsSync(stateFile) ? (safe(() => JSON.parse(readFileSync(stateFile, "utf8"))) || {}) : {};
-if (state[root] && state[root].gsdModelConfigPatched) process.exit(0); // already done, forever
+let state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
+const tier1Done = !!(state[root] && state[root].gsdModelConfigPatched);
+const tier2Done = !!(state[root] && state[root].gsdWorkflowConfigPatched);
+const tier2Enabled = process.env.CLAUDE_GSD_CONFIG_AUTOPATCH_WORKFLOW !== "0";
+if (tier1Done && (tier2Done || !tier2Enabled)) process.exit(0); // nothing left either tier could do
 
 const DEFAULT_MODEL_CONFIG = {
   model_profile: "adaptive",
@@ -91,37 +142,103 @@ const DEFAULT_MODEL_CONFIG = {
     "gsd-planner": "opus",
     "gsd-roadmapper": "opus",
     "gsd-pattern-mapper": "haiku",
-    "gsd-phase-researcher": "opus",
-    "gsd-project-researcher": "opus",
-    "gsd-research-synthesizer": "sonnet",
+    "gsd-phase-researcher": "sonnet",
+    "gsd-project-researcher": "sonnet",
+    "gsd-research-synthesizer": "haiku",
     "gsd-codebase-mapper": "haiku",
     "gsd-ui-researcher": "opus",
     "gsd-verifier": "sonnet",
     "gsd-plan-checker": "sonnet",
-    "gsd-integration-checker": "sonnet",
-    "gsd-nyquist-auditor": "sonnet",
-    "gsd-ui-checker": "sonnet",
-    "gsd-ui-auditor": "sonnet",
-    "gsd-doc-verifier": "sonnet",
+    "gsd-integration-checker": "haiku",
+    "gsd-nyquist-auditor": "haiku",
+    "gsd-ui-checker": "haiku",
+    "gsd-ui-auditor": "haiku",
+    "gsd-doc-verifier": "haiku",
     "gsd-code-reviewer": "opus",
     "gsd-security-auditor": "opus",
     "gsd-debugger": "opus",
     "gsd-executor": "sonnet",
     "gsd-code-fixer": "sonnet",
-    "gsd-doc-writer": "sonnet",
+    "gsd-doc-writer": "opus"
   },
 };
 
-const raw = safe(() => readFileSync(configPath, "utf8"));
-if (raw === undefined) process.exit(0);
-const parsed = safe(() => JSON.parse(raw));
+// Tier 2 - see the header comment above for the classification behind each key. Nested
+// objects (git/workflow/hooks/graphify) are merged key-by-key via mergeNested(), never by
+// replacing the whole object, so sibling keys already set (gsd-core's or the user's) survive.
+const DEFAULT_WORKFLOW_CONFIG = {
+  commit_docs: true,
+  parallelization: true,
+  phase_naming: "sequential",
+  granularity: "fine",
+  git: {
+    create_tag: true,
+  },
+  workflow: {
+    research: true,
+    plan_check: true,
+    verifier: true,
+    nyquist_validation: true,
+    ai_integration_phase: true,
+    human_verify_mode: "end-of-phase",
+    auto_advance: false,
+    node_repair: true,
+    node_repair_budget: 2,
+    research_before_questions: false,
+    discuss_mode: "discuss",
+    skip_discuss: false,
+    max_discuss_passes: 3,
+    subagent_timeout: 300000,
+    context_coverage_gate: true,
+    pattern_mapper: true,
+    plan_bounce: false,
+    plan_bounce_passes: 2,
+    post_planning_gaps: true,
+    use_worktrees: true,
+  },
+  hooks: {
+    context_warnings: true,
+    workflow_guard: false,
+  },
+  graphify: {
+    enabled: true,
+    auto_update: false,
+  },
+};
+
+// Merge each top-level key from `patch` into `target`: nested plain objects are merged
+// key-by-key (Object.assign into the existing nested object, creating it if absent);
+// everything else overwrites the top-level key directly.
+function mergeNested(target, patch) {
+  for (const [k, v] of Object.entries(patch)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      if (!target[k] || typeof target[k] !== "object" || Array.isArray(target[k])) target[k] = {};
+      Object.assign(target[k], v);
+    } else {
+      target[k] = v;
+    }
+  }
+}
+
+const parsed = safe(() => readJSON(configPath));
 if (parsed === undefined || typeof parsed !== "object" || parsed === null) process.exit(0); // don't touch malformed JSON
 
-Object.assign(parsed, DEFAULT_MODEL_CONFIG);
+const applied = [];
+if (!tier1Done) {
+  Object.assign(parsed, DEFAULT_MODEL_CONFIG);
+  applied.push("model_profile/models/model_overrides");
+}
+if (!tier2Done && tier2Enabled) {
+  mergeNested(parsed, DEFAULT_WORKFLOW_CONFIG);
+  applied.push("workflow/git/hooks/graphify defaults");
+}
+if (applied.length === 0) process.exit(0);
+
 if (!writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n")) process.exit(0);
 
 if (!state[root]) state[root] = {};
-state[root].gsdModelConfigPatched = new Date().toISOString();
+if (!tier1Done) state[root].gsdModelConfigPatched = new Date().toISOString();
+if (!tier2Done && tier2Enabled) state[root].gsdWorkflowConfigPatched = new Date().toISOString();
 writeFile(stateFile, JSON.stringify(state, null, 2) + "\n");
 
-emit(`Applied default model_profile/models/model_overrides to ${configPath} (one-time, freshly-created gsd-core config).`);
+emit(`Applied default ${applied.join(" and ")} to ${configPath} (one-time, freshly-created gsd-core config).`);

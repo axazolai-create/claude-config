@@ -11,7 +11,22 @@
 // commits, or anything not run through Claude's own Bash tool - Claude Code hooks
 // only fire on tool calls Claude itself makes. The native git hook is what covers
 // those; this hook is the zero-setup fallback for the Claude-driven case.
-// No-op (exit 0, never blocks) if disabled or the command isn't `git commit`.
+// Trigger surface (2026-07-08): `git commit`, `git push`, or `git tag` - not just commit.
+// `push` covers the "just pushed, nothing new committed this session" case commit-only
+// missed. `tag` covers GSD phase/milestone close specifically: when a GSD project has
+// `git.create_tag: true` (the tier-2 gsd-config-patch.mjs default), gsd-core tags on phase/
+// milestone completion (`gsd/phase-{phase}-{slug}`, `gsd/{milestone}-{slug}`), so a tag is a
+// reliable, git-visible "a phase just closed" signal without parsing gsd-core's own state.
+// Deliberately NOT narrowed to only these three: this hook is a cheap, detached, lock-deduped
+// background extraction (see the worker below) - unlike the LOCAL per-project graphify-out/
+// cadence (rules/templates/graphify.PROJECT.md), where narrowing to review/verify gates matters
+// because gsd-core's rebuild is heavier and synchronous-ish. There's no such cost here, so
+// commit stays as a trigger too rather than being replaced by the narrower set.
+// No Superpowers-close-specific trigger: Superpowers' review skills leave no git-visible
+// signal of their own (no tag, no distinct command) - that case is covered incidentally by
+// the commit/push triggers already present, since finishing a Superpowers branch always
+// ends in one of those.
+// No-op (exit 0, never blocks) if disabled or the command isn't a matching git operation.
 // Toggle: CLAUDE_GRAPHIFY_AUTOSYNC=0.
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -26,7 +41,7 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC === "0") process.exit(0);
 
 const cmd = (((d.tool_input || {}).command) || "").replace(/\s+/g, " ");
 if (!cmd) process.exit(0);
-if (!/(^|[;&|\s])git(\s+-[^\s]+)*\s+commit(\s|$)/.test(cmd)) process.exit(0);
+if (!/(^|[;&|\s])git(\s+-[^\s]+)*\s+(commit|push|tag)(\s|$)/.test(cmd)) process.exit(0);
 
 const cwd = d.cwd || process.cwd();
 const lib = join(dirname(fileURLToPath(import.meta.url)), "lib", "graphify-global-sync-run.mjs");
