@@ -34,7 +34,15 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
-const SRC = dirname(fileURLToPath(import.meta.url));
+// REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
+// settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
+// SRC = REPO_ROOT/payload - everything that actually gets installed into ~/.claude
+// (hooks/, skills/, rules/, commands/, setting-templates/, bin/, add-risk.mjs,
+// graphify-sync-all.mjs, CLAUDE.md). Kept as two separate constants (not one) because
+// settings.partial.json below is read from REPO_ROOT, not SRC - it configures the installer,
+// it isn't itself installed.
+const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
+const SRC = join(REPO_ROOT, "payload");
 const HOME = homedir();
 const CDIR = join(HOME, ".claude");
 const HOOKS = join(CDIR, "hooks");
@@ -343,7 +351,7 @@ async function main() {
     try { cur = JSON.parse(readFileSync(SETTINGS, "utf8")); }
     catch { summary.push("settings.json: INVALID JSON - left untouched"); cur = null; }
   }
-  const partialRaw = read(join(SRC, "settings.partial.json"));
+  const partialRaw = read(join(REPO_ROOT, "settings.partial.json"));
   const partial = partialRaw === undefined ? null
     : safe(() => JSON.parse(partialRaw.split("<HOME>").join(JSON.stringify(HOME).slice(1, -1))));
   if (partialRaw !== undefined && partial === null) summary.push("settings.partial.json: failed to parse - settings.json hooks left untouched");
