@@ -25,16 +25,6 @@ curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/maste
 irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
 ```
 
-По умолчанию тянется `master` HEAD. Закрепиться на релиз-тег:
-
-```
-# Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash -s -- --ref v1.0.0
-
-# Windows PowerShell
-$env:CLAUDE_CONFIG_REF='v1.0.0'; irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
-```
-
 Проброс флагов в `setup.mjs` (напр. неинтерактивная замена): POSIX — `… | bash -s -- --replace-all`;
 Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
