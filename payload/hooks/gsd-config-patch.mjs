@@ -145,7 +145,7 @@ const DEFAULT_MODEL_CONFIG = {
     "gsd-phase-researcher": "sonnet",
     "gsd-project-researcher": "sonnet",
     "gsd-research-synthesizer": "haiku",
-    "gsd-codebase-mapper": "haiku",
+    "gsd-codebase-mapper": "opus",
     "gsd-ui-researcher": "opus",
     "gsd-verifier": "sonnet",
     "gsd-plan-checker": "sonnet",

@@ -94,9 +94,17 @@ notepad bootstrap.ps1; .\bootstrap.ps1
       graphify-global-sync-run.mjs       # общий воркер (зовут и хук выше, и нативный post-commit)
     session-init.mjs                     # SessionStart: разовый бутстрап (+ регистрация в graphify,
                                           #   + установка нативного post-commit хука в проекте)
+    token-usage-log.mjs                  # PostToolUse:Agent + Stop — лог расхода токенов/$ в JSONL
+    lib/
+      token-usage-shared.mjs             # общие хелперы (findRoot, JSONL read/append, cursor)
+      token-usage-prune.mjs              # ретеншен глобального лога (3мес / предпоследние сутки / min 10)
+      token-usage-pricing-refresh.mjs    # фон. скрейпинг таблицы цен раз в сутки
   skills/
     using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Superpowers
+    token-usage/SKILL.md                 # /token-usage — сводка по логу расхода токенов
   state/project-init.json                # создаётся в рантайме; список уже инициализированных проектов
+  state/token-usage.jsonl                # создаётся в рантайме; глобальный лог расхода токенов
+  state/model-pricing.json               # создаётся в рантайме; таблица цен (обновляется раз в сутки)
 ```
 
 ---
@@ -288,6 +296,24 @@ CLAUDE_MCP_SUGGEST=0             # не предлагать /init-mcp при д
   из IDE, `--amend`), независимо от Claude Code. Если `post-commit` уже существует (husky,
   pre-commit, локальный хук graphify) — дописывается, не затирается. Тот же тумблер
   `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
+- **token-usage-log.mjs** (PostToolUse: `Agent` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
+  **hooks/lib/token-usage-prune.mjs**, **hooks/lib/token-usage-pricing-refresh.mjs**. После
+  каждого завершённого вызова суб-агента и после каждого хода основного агента дописывает
+  строку (JSONL) с задачей/агентом/моделью/токенами/датой/оценкой стоимости в
+  **оба** лога — `<проект>/.claude/token-usage.jsonl` (хранится вечно, не чистится) и
+  `~/.claude/state/token-usage.jsonl` (кросс-проектный, с ретеншеном — union из: не старше 3
+  календарных месяцев от последней записи / предпоследние сутки активности / минимум 10
+  записей). Для суб-агента данные берутся напрямую из `tool_response` (без парсинга транскрипта);
+  для основного хода — из `transcript_path` по сохранённому byte-курсору (известная оговорка:
+  транскрипт может чуть отставать по записи, в редком случае последний API-вызов хода
+  досчитывается на следующем `Stop`). Оценка `cost_usd` — best-effort, по таблице цен
+  `~/.claude/state/model-pricing.json`, которая сама обновляется раз в сутки скрейпингом
+  публичной страницы цен (нет официального pricing API — см. `RISK-TOKENLOG-001`). Смотреть
+  агрегаты — скилл `/token-usage` (`--global` для кросс-проектного лога, `--week`/`--month`/`--all`
+  для периода; по умолчанию — текущий проект за последние 24ч). Тумблеры:
+  `CLAUDE_TOKEN_USAGE_LOG=0` (выключить целиком), `CLAUDE_TOKEN_USAGE_COST=0` (без оценки
+  стоимости и без фонового обновления цен), `CLAUDE_TOKEN_USAGE_PRUNE=0` (не чистить глобальный
+  лог).
 
 Все хуки — на Node и зарегистрированы в **exec-форме** (`command: "node"`, `args: [абс.путь]`):
 без шелла, поэтому работают и под Windows без Git Bash, без проблем с `$HOME` и переводами строк.
