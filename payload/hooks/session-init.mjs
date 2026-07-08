@@ -335,6 +335,62 @@ if (process.env.CLAUDE_MCP_SUGGEST !== "0") {
     notes.push(`MCP suggestion: ${suggestions.join("; ")}. Run /init-mcp to wire it (also offers a self-hosted SearXNG web-search MCP); it asks before changing anything and is re-runnable to switch/remove.`);
 }
 
+// ---- GSD /init-stack settings gap check -> suggest /init-stack ----
+// A HINT only - never installs/edits anything itself. `/init-stack` steps 5-6
+// (payload/commands/init-stack.md) propose workflow.test_command/build_command and a
+// `fallow` devDependency install, but those steps only run when the user actually invokes
+// /init-stack - which doesn't reliably happen right after `.planning/` first appears.
+// gsd-config-patch.mjs's tier2 patch already writes `code_quality.fallow.enabled: true` for
+// any Node project independent of whether /init-stack ever ran, and gsd-core HARD-FAILS
+// /gsd-code-review / /gsd-ship (not a graceful skip) when that flag is true but the binary
+// isn't resolvable. Re-checked EVERY session, like the MCP suggestion above - not a one-time
+// flag, because the gap is defined by CURRENT STATE (config says enabled, binary absent),
+// not "did we ever tell the user once". It stops surfacing on its own once fallow is
+// actually installed, or the user declines via step 6 (which writes `fallow.enabled: false`
+// and closes the gap for good - unlike a silent decline, which would leave this nagging
+// forever). gsd-config-patch.mjs runs the SAME check on a throttle for the mid-session case
+// (`.planning/` created after this session already started) - see that file for why both
+// exist, same reasoning as the tier1/tier2 split at the top of that file.
+// Opt out: CLAUDE_GSD_INITSTACK_SUGGEST=0.
+if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
+  const cfgPath = join(root, ".planning", "config.json");
+  const cfg = existsSync(cfgPath) ? (safe(() => readJSON(cfgPath)) || {}) : null;
+  if (cfg && typeof cfg === "object") {
+    const fallowCfg = cfg.code_quality && cfg.code_quality.fallow;
+    if (fallowCfg && fallowCfg.enabled === true) {
+      const fallowNames = process.platform === "win32"
+        ? ["fallow.exe", "fallow.cmd", "fallow.bat"] : ["fallow"];
+      const installed = fallowNames.some((n) => existsSync(join(root, "node_modules", ".bin", n)));
+      if (!installed)
+        notes.push("GSD settings gap: code_quality.fallow.enabled=true but the `fallow` " +
+          "binary isn't installed - the next /gsd-code-review or /gsd-ship will hard-fail, " +
+          "not skip gracefully. Run /init-stack (step 6) to install it, or explicitly set " +
+          "code_quality.fallow.enabled: false for this project.");
+    }
+  }
+}
+
+// ONE-TIME per project (soft nudge, not urgent like the fallow gap above - gsd-core's own
+// test_command/build_command auto-detect already works fine without an explicit value):
+// suggest /init-stack's step 5 (stack-aware test_command/build_command proposal) once, the
+// first session that sees BOTH a `.planning/` project and a recognizable stack signal with
+// no explicit override yet. One-time (not recurring like the fallow check) because there's
+// no hard-failure risk here to keep chasing - re-suggesting every session for something
+// purely optional would just be noise.
+if (firstTime && gsdProject) {
+  const cfgPath = join(root, ".planning", "config.json");
+  const cfg = existsSync(cfgPath) ? (safe(() => readJSON(cfgPath)) || {}) : null;
+  if (cfg && typeof cfg === "object") {
+    const wf = cfg.workflow || {};
+    const hasStackSignal = existsSync(join(root, "package.json"))
+      || existsSync(join(root, "pyproject.toml")) || existsSync(join(root, "build.gradle.kts"));
+    if (hasStackSignal && !wf.test_command && !wf.build_command)
+      notes.push("workflow.test_command/build_command are unset - gsd-core auto-detects a " +
+        "reasonable default, but /init-stack (step 5) can propose a more specific one from " +
+        "the detected stack if you want to set it explicitly.");
+  }
+}
+
 // record/update state (the risk step is allowed to run again on later sessions)
 if (firstTime) { state[root].initialized = new Date().toISOString(); state[root].actions = actions.slice(); state[root].notes = notes.slice(); }
 if (riskAdded > 0) state[root].lastRisk = new Date().toISOString();
