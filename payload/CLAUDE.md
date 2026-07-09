@@ -53,6 +53,23 @@
   (branch names like `develop`, rebase policies, protected-branch rules vary per repo and
   belong in that project's own `CLAUDE.md`, not assumed globally).
 
+## SUDO ELEVATION (default; Windows)
+- Windows 11 ships an inline `sudo` (Settings -> System -> For developers -> "Enable sudo"),
+  OFF by default. Verify with `sudo config` before assuming it's usable — if it errors
+  ("Sudo is disabled on this computer"), tell the user instead of attempting the command; do
+  not fall back to another elevation method.
+- Its prompt behavior (silent vs. UAC confirmation) depends on the configured mode (New
+  Window / Disable input / Inline, with or without "always ask") — never assume a UAC dialog
+  is a substitute for asking first.
+- Ask permission first, in-session (AskUserQuestion or a direct question), with explicit
+  justification: why elevation is needed and which exact command will run under `sudo`. Only
+  after explicit consent, run `sudo <command>`. Never run it silently/preemptively — no
+  answer, no call.
+- Appropriate when the operation genuinely requires admin rights (ACL restricted to
+  SYSTEM/Administrators, registering a Scheduled Task, writing to protected directories)
+  while the session runs under a non-privileged/UAC-filtered token.
+- Example: `sudo powershell -ExecutionPolicy Bypass -File 'C:\path\to\Script.ps1'`
+
 ## PLUGINS & SKILLS (loading policy)
 - Base plugins (superpower, gsd, context-mode) are enabled at USER scope and load every
   session. Do not duplicate them in project settings.

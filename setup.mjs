@@ -5,28 +5,33 @@
  * home ~/.claude is done here, on Linux / macOS / Windows alike.
  *
  * Two tiers of bundle files, handled differently on purpose:
- *   - MANAGED content (.mjs scripts, and any .md/text file that is NOT marked
- *     `CURATED:NOEDIT`) - this is config-as-code: the bundle is the source of truth, so it is
- *     always refreshed to the bundled version on every run, no prompt. This is what makes "drop
- *     in a fresh package, run setup, old files get the new data" actually true for rules/,
- *     skills/, README.md, etc. - not just for scripts.
- *   - CURATED content (any file whose CURRENT on-disk content contains the `CURATED:NOEDIT`
- *     marker - in practice your `~/.claude/CLAUDE.md`) - never silently touched. Shows a unified
- *     diff and asks per file:
- *       (m)erge   - writes the bundle version next to yours as <name>.new (yours stays active).
- *       (r)eplace - backs your file up to <name>.<timestamp>.bak, then writes the bundle version.
- *       (s)kip    - leaves your file untouched.
+ *   - MANAGED content (.mjs scripts, and any .md/text file that does NOT carry a
+ *     `<!-- CURATED:NOEDIT -->` line) - this is config-as-code: the bundle is the source of
+ *     truth, so it is always refreshed to the bundled version on every run, no prompt. This is
+ *     what makes "drop in a fresh package, run setup, old files get the new data" actually true
+ *     for rules/, skills/, README.md, etc. - not just for scripts.
+ *   - CURATED content (any file carrying a `<!-- CURATED:NOEDIT -->` line, anywhere in the
+ *     file, whitespace-tolerant - in practice your `~/.claude/CLAUDE.md`) - never silently
+ *     touched. Shows a unified diff and asks per file:
+ *       (m)erge   - default. Curated text can't be auto-merged - the diff shown IS the merge
+ *                   output. Nothing is written: your file stays exactly as-is.
+ *       (r)eplace - overwrites your file with the bundle version. NO backup is made - the diff
+ *                   shown above is your only record of what was there; recover via git/your own
+ *                   backups if you need the old content back.
+ *       (s)kip    - same as merge here (your file stays as-is); kept as a distinct choice for
+ *                   clarity/scripting (--skip-all).
  *   - JSON files (settings.json, setting-templates/*.json) are a third case: real additive deep
  *     merge (your values kept, missing keys/array items added) - conflict-checked like curated
  *     files since they routinely hold real per-machine values (marketplace ids, your model
- *     choice, etc.) that must never be silently clobbered.
+ *     choice, etc.) that must never be silently clobbered. Same no-backup rule on (r)eplace.
  *
  * Flags (non-interactive / CI): --merge-all | --replace-all | --skip-all | --dry-run
  * In a non-TTY without a bulk flag, curated/JSON conflicts default to MERGE (additive for JSON;
- * bundle version written as <name>.new, alongside, for curated text) - nothing is ever silently
- * destroyed without a backup or a sidecar to review.
+ * a no-op that leaves your file untouched for curated text - see above). This installer never
+ * writes `.new` or `.bak` side files anywhere under ~/.claude - a diff is either shown for you
+ * to act on, or the change is applied directly with no backup.
  */
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -60,6 +65,7 @@ const BULK = argv.has("--replace-all") ? "replace"
           : argv.has("--merge-all")   ? "merge"
           : argv.has("--skip-all")    ? "skip" : null;
 const DRY = argv.has("--dry-run");
+const ENABLE_UPDATE_CHECK_FLAG = argv.has("--enable-update-check");
 const INTERACTIVE = !BULK && process.stdin.isTTY;
 const MD = argv.has("--md");
 const COLOR = !MD && !argv.has("--no-color") && !process.env.NO_COLOR && process.stdout.isTTY;
@@ -91,9 +97,16 @@ if (argv.has("--doctor")) {
   process.exit(bad ? 1 : 0);
 }
 const read = (p) => safe(() => readFileSync(p, "utf8"));
-const isCurated = (content) => typeof content === "string" && content.includes("CURATED:NOEDIT");
+const MARKER = "CURATED:NOEDIT";
+const MARKER_LINE = `<!-- ${MARKER} -->`;
+// Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
+// marker can't self-trigger "curated" handling) - but lenient on whitespace: any line, any
+// amount of spaces/tabs around the line and between the `<!--`/`-->` brackets and the marker
+// text itself. Mirrors deny-curated-claude-md.mjs's own detection exactly - keep both in sync.
+const MARKER_RE = /^<!--\s*CURATED:NOEDIT\s*-->$/;
+const isCurated = (content) =>
+  typeof content === "string" && content.split(/\r?\n/).some((line) => MARKER_RE.test(line.trim()));
 const write = (p, c) => { if (DRY) return true; try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); return true; } catch { return false; } };
-const stamp = () => new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
 /* ---------- deep additive JSON merge (existing values win; arrays unioned) ---------- */
 const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
@@ -260,9 +273,7 @@ async function placeFile(rel) {
       const act = await choose(dst, "merge");
       if (act === "skip") { summary.push(`skipped  ${dst}`); return; }
       if (act === "replace") {
-        const bak = `${dst}.${stamp()}.bak`;
-        if (!DRY) safe(() => copyFileSync(dst, bak));
-        if (write(dst, srcContent)) summary.push(`replaced ${dst} (backup: ${bak})`);
+        if (write(dst, srcContent)) summary.push(`replaced ${dst} (no backup - see diff above if you need the old content)`);
         return;
       }
       if (write(dst, mergedStr + "\n")) summary.push(`merged   ${dst} (deep additive)`);
@@ -282,15 +293,15 @@ async function placeFile(rel) {
   log(`\n~ conflict (curated): ${dst}`);
   log(renderDiff(cur, srcContent));
   const act = await choose(dst, "merge");
-  if (act === "skip") { summary.push(`skipped  ${dst}`); return; }
   if (act === "replace") {
-    const bak = `${dst}.${stamp()}.bak`;
-    if (!DRY) safe(() => copyFileSync(dst, bak));
-    if (write(dst, srcContent)) summary.push(`replaced ${dst} (backup: ${bak})`);
+    if (write(dst, srcContent)) summary.push(`replaced ${dst} (no backup - see diff above if you need the old content)`);
     return;
   }
-  const np = `${dst}.new`;
-  if (write(np, srcContent)) summary.push(`merge -> wrote ${np} (curated; markdown can't auto-merge, yours kept)`);
+  // "skip" AND the default "merge" both land here: curated text can't be auto-merged, and no
+  // side file is ever written for it (no `<name>.new`) - the diff printed above IS the merge
+  // output. `dst` is left byte-for-byte untouched; apply it by hand, or re-run with
+  // --replace-all to accept the bundle version outright (see "replace" above for the backup).
+  summary.push(`${act === "skip" ? "skipped" : "kept (see diff above)"} ${dst}`);
 }
 
 /* ---------- prune: remove files an OLDER bundle installed that this one no longer ships ----------
@@ -375,6 +386,32 @@ async function pruneStale() {
   }
 }
 
+// Best-effort: resolve the commit we just installed, for the update-check hook's baseline.
+// Prefers a local git checkout (REPO_ROOT has .git -> exact, no network); falls back to asking
+// GitHub what master currently points at (covers the bootstrap-tarball install path, where
+// GitHub's archive endpoint strips .git entirely). Any failure (offline, rate-limited, blocked)
+// just leaves installedSha unset - the update-check hook has no baseline yet and stays silent
+// until a later run succeeds. Never throws, never blocks the install on network access.
+async function resolveInstalledSha() {
+  const g = spawnSync("git", ["-C", REPO_ROOT, "rev-parse", "HEAD"], { encoding: "utf8" });
+  if (!g.error && g.status === 0) {
+    const sha = (g.stdout || "").trim();
+    if (/^[0-9a-f]{40}$/.test(sha)) return sha;
+  }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch("https://api.github.com/repos/axazolai-create/claude-config/commits/master",
+      { signal: ctrl.signal, headers: { "User-Agent": "claude-config-setup" } });
+    clearTimeout(t);
+    if (res.ok) {
+      const j = await res.json();
+      if (j && typeof j.sha === "string") return j.sha;
+    }
+  } catch { /* offline / rate-limited / blocked - fine, resolved on a later run instead */ }
+  return undefined;
+}
+
 async function main() {
   log(`Installing into ${CDIR}${DRY ? "  [DRY RUN]" : ""}`);
   mkdirSync(CDIR, { recursive: true });
@@ -387,6 +424,28 @@ async function main() {
   // best-effort exec bits on POSIX for every script we copied (ignored on Windows)
   if (platform() !== "win32" && !DRY)
     for (const p of copiedScripts) safe(() => chmodSync(p, 0o755));
+
+  /* ---------- always ensure ~/.claude/CLAUDE.md carries the curated marker ---------- */
+  // deny-curated-claude-md.mjs has no hardcoded path check for the global file anymore -
+  // authority lives entirely in the marker, one mechanism instead of two. So THIS is what
+  // guarantees ~/.claude/CLAUDE.md is always protected: independent of whatever merge/replace/
+  // skip choice the placeFile() conflict flow above made for its body content, unconditionally
+  // check whether the marker is present as a standalone line ANYWHERE in the file (not just the
+  // first line - a title or other content may legitimately come first) and prepend it if not.
+  // Never a merge/replace/skip question - the marker itself is not negotiable, only the prose
+  // around it is.
+  if (!DRY) {
+    const globalClaudeMd = join(CDIR, "CLAUDE.md");
+    const curGlobal = read(globalClaudeMd);
+    if (curGlobal !== undefined) {
+      const bodyNoBom = curGlobal.replace(/^﻿/, "");
+      const alreadyMarked = bodyNoBom.split(/\r?\n/).some((line) => MARKER_RE.test(line.trim()));
+      if (!alreadyMarked) {
+        if (write(globalClaudeMd, MARKER_LINE + "\n" + curGlobal))
+          summary.push(`updated  ${globalClaudeMd} (prepended ${MARKER} - was missing)`);
+      }
+    }
+  }
 
   /* ---------- settings.json: structured additive merge ---------- */
   // Source of truth for "what hooks/permissions we want" is settings.partial.json itself - NOT a
@@ -460,9 +519,46 @@ async function main() {
       const act = await choose(SETTINGS, "merge"); // non-interactive default: apply the safe merge
       if (act === "skip") { summary.push(`skipped  ${SETTINGS}`); }
       else {
-        if (act === "replace" && !DRY) safe(() => copyFileSync(SETTINGS, `${SETTINGS}.${stamp()}.bak`));
         if (write(SETTINGS, mergedStr + "\n"))
-          summary.push(`${act === "replace" ? "replaced" : "merged"} ${SETTINGS}${act === "replace" ? " (backup kept)" : " (additive; your keys preserved)"}`);
+          summary.push(`${act === "replace" ? "replaced" : "merged"} ${SETTINGS}${act === "replace" ? " (no backup - see diff above)" : " (additive; your keys preserved)"}`);
+      }
+    }
+  }
+
+  /* ---------- opt-in: daily background check for new claude-config releases ---------- */
+  // Deliberately NOT part of settings.partial.json's additive merge above (that would silently
+  // flip a background network check on for everyone) - this is a one-time y/N decision, written
+  // straight into `env`, exactly like the manual PowerShell-tool opt-in documented in README.md.
+  // Once decided either way (yes -> "1", no -> "0") this never asks again on this machine, no
+  // matter how many times setup.mjs re-runs - mirrors the `fallow` decline pattern in
+  // init-stack.md: an explicit "no" is recorded, not re-nagged. /init-stack's own step 0 makes
+  // the same offer per-project, but also only while genuinely undecided.
+  if (!DRY) {
+    let curEnvSettings = {};
+    try { curEnvSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { curEnvSettings = {}; }
+    const updateCheckDecided = curEnvSettings.env && "CLAUDE_CONFIG_UPDATE_CHECK" in curEnvSettings.env;
+    if (!updateCheckDecided) {
+      let enable = ENABLE_UPDATE_CHECK_FLAG;
+      if (!enable && INTERACTIVE) {
+        const a = await ask("\nEnable a daily background check for new claude-config releases? " +
+          "Read-only GitHub API call (no auth, no data sent); if master has moved, you'll get " +
+          "step-by-step update instructions in a future Claude Code session - never applies " +
+          "anything itself. [y/N] > ");
+        enable = a[0] === "y";
+      }
+      if (enable) {
+        curEnvSettings.env = curEnvSettings.env || {};
+        curEnvSettings.env.CLAUDE_CONFIG_UPDATE_CHECK = "1";
+        if (write(SETTINGS, JSON.stringify(curEnvSettings, null, 2) + "\n"))
+          summary.push(`updated  ${SETTINGS} (update-check: enabled)`);
+      } else if (INTERACTIVE) {
+        curEnvSettings.env = curEnvSettings.env || {};
+        curEnvSettings.env.CLAUDE_CONFIG_UPDATE_CHECK = "0";
+        if (write(SETTINGS, JSON.stringify(curEnvSettings, null, 2) + "\n"))
+          summary.push(`updated  ${SETTINGS} (update-check: declined - won't ask again here)`);
+      } else {
+        log("\n(update-check opt-in left undecided - non-interactive run. Enable explicitly with " +
+          "'node setup.mjs --enable-update-check', or accept the offer next time /init-stack runs)");
       }
     }
   }
@@ -470,7 +566,16 @@ async function main() {
   /* ---------- prune stale files + persist manifest ---------- */
   overwriteTemplatesDir();
   await pruneStale();
-  if (!DRY) write(MANIFEST, JSON.stringify({ files: manifestNow }, null, 2) + "\n");
+  if (!DRY) {
+    const installedSha = await resolveInstalledSha();
+    const manifestPayload = { files: manifestNow };
+    if (installedSha) {
+      manifestPayload.installedSha = installedSha;
+      manifestPayload.installedAt = new Date().toISOString();
+      manifestPayload.repoRoot = existsSync(join(REPO_ROOT, ".git")) ? REPO_ROOT : null;
+    }
+    write(MANIFEST, JSON.stringify(manifestPayload, null, 2) + "\n");
+  }
 
   /* ---------- summary ---------- */
   log("\n--- summary ---");
@@ -512,15 +617,48 @@ async function main() {
     log("  install: " + hint("release binary or brew", "winget install gitleaks | choco install gitleaks", "brew install gitleaks"));
   }
 
-  log("\nAuto per-project init: a SessionStart hook bootstraps each new/unknown project ONCE");
-  log("(marks an unmarked root CLAUDE.md unless GSD-looking; per-project exclude for a GSD-owned");
-  log(".planning/CLAUDE.md; appends the GSD risk to an existing RISK_REGISTER.md).");
-  log("  opt out: CLAUDE_CURATED_AUTOMARK_ROOT=0  |  disable all: CLAUDE_CURATED_AUTOINIT=0");
   log(`\n${DRY ? "DRY RUN complete (no files written)." : "Done."} Restart Claude Code (hooks load at startup).`);
   const hookCounts = partial && partial.hooks
     ? Object.entries(partial.hooks).map(([ev, entries]) => `${ev} x${entries.length}`).join(", ")
     : "see settings.partial.json";
   log(`Verify with /hooks (expect: ${hookCounts}).`);
+
+  log("\n=== Project setup: what to run, and when ===");
+  log("");
+  log("Step 1 - RESTART Claude Code now. Machine-level setup (hooks, rules, skills,");
+  log("         CLAUDE.md, settings.json) only loads at startup.");
+  log("");
+  log("Step 2 - Open a Claude Code session in the project. On its FIRST session there,");
+  log("         a SessionStart hook configures it AUTOMATICALLY - nothing to run:");
+  log("           - marks an unmarked root CLAUDE.md as curated (skipped if it looks");
+  log("             GSD-generated)");
+  log("           - excludes a GSD-owned .planning/CLAUDE.md from auto-load (per project)");
+  log("           - appends the GSD-clobber risk to an existing RISK_REGISTER.md (every");
+  log("             session, not just the first)");
+  log("           - if graphify is installed: registers the project in the global graph,");
+  log("             installs a native post-commit hook, and (once) runs");
+  log("             'graphify claude install' for its own CLAUDE.md section");
+  log("           - if the git remote is GitHub/GitLab or a DB dependency is detected");
+  log("             with no matching MCP wired: suggests /init-mcp (suggestion only,");
+  log("             installs nothing, rechecked every session)");
+  log("           - for GSD projects (.planning/ present): patches model_profile to your");
+  log("             personal default (once), and flags config gaps (e.g. fallow enabled");
+  log("             but not installed) every session");
+  log("         Toggles: CLAUDE_CURATED_AUTOINIT=0 (disables all of the above),");
+  log("         CLAUDE_CURATED_AUTOMARK_ROOT=0, CLAUDE_MCP_SUGGEST=0,");
+  log("         CLAUDE_GRAPHIFY_AUTOSYNC=0.");
+  log("");
+  log("Step 3 - ONLY if the project needs stack-specific plugins (React, FastAPI, ...) -");
+  log("         this does NOT happen automatically. Run /init-stack in that project's");
+  log("         Claude Code session. It detects the stack, then asks you to run");
+  log("         'python3 ~/.claude/bin/init-stack.py -i' yourself in a real terminal");
+  log("         (interactive checklist) to install and enable the matching plugins.");
+  log("");
+  log("Step 4 - RESTART Claude Code again after /init-stack writes settings.json -");
+  log("         enabledPlugins resolves at startup too, same as step 1.");
+  log("");
+  log("Full reference (including the reconfigure/update table): README.md, section");
+  log("'Order of operations'.");
 }
 
 main();

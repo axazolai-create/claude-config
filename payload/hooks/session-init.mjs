@@ -28,6 +28,11 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 
 const MARKER = "CURATED:NOEDIT";
+// Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
+// marker can't self-trigger "already marked") - but lenient on whitespace: any line, any amount
+// of spaces/tabs around the line and between the `<!--`/`-->` brackets and the marker text
+// itself. Mirrors deny-curated-claude-md.mjs's own detection exactly - keep both in sync.
+const MARKER_RE = /^<!--\s*CURATED:NOEDIT\s*-->$/;
 const AUTOMARK = process.env.CLAUDE_CURATED_AUTOMARK_ROOT !== "0"; // default ON
 const ENABLED  = process.env.CLAUDE_CURATED_AUTOINIT      !== "0"; // default ON
 
@@ -73,7 +78,10 @@ let state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {}
 const firstTime = !state[root]; // do not early-exit: the risk-register step must retry every session
 if (!state[root]) state[root] = {}; // ensure the record exists so later independent one-time flags can attach
 
-const isMarked = (p) => { const t = safe(() => readFileSync(p, "utf8")); return !!t && t.includes(MARKER); };
+const isMarked = (p) => {
+  const t = safe(() => readFileSync(p, "utf8"));
+  return !!t && t.split(/\r?\n/).some((line) => MARKER_RE.test(line.trim()));
+};
 const looksGsd = (p) => {
   const t = safe(() => readFileSync(p, "utf8")) || "";
   return /gsd-core|\/gsd-|GSD project|\.planning\/(PROJECT|ROADMAP|STATE)\.md/i.test(t);
