@@ -3,12 +3,15 @@
 // - The RISK_REGISTER step runs EVERY session and is idempotent: it finds the shallowest
 //   RISK_REGISTER.md (root / .planning / its subfolders) and ensures the GSD-clobber entry,
 //   so it self-heals even if the register appears or moves after the first session.
-// - Auto-mark root CLAUDE.md and the per-project .planning exclude run ONCE per project.
+// - Auto-mark root CLAUDE.md and the per-project .planning exclude ALSO run every session now
+//   (see the "timing bug" note further down for why - they used to be gated on `firstTime` and
+//   that was wrong).
 // Reliable side effects (do NOT depend on additionalContext, which can be dropped on fresh
 // sessions):
-//   - unmarked root CLAUDE.md that is not GSD-generated -> auto-mark as curated (one-time)
-//     (opt out: CLAUDE_CURATED_AUTOMARK_ROOT=0)
-//   - GSD-owned (unmarked) .planning/CLAUDE.md          -> add per-project claudeMdExcludes (one-time)
+//   - unmarked root CLAUDE.md that is not GSD-generated -> auto-mark as curated (every session,
+//     idempotent - opt out: CLAUDE_CURATED_AUTOMARK_ROOT=0)
+//   - GSD-owned (unmarked) .planning/CLAUDE.md          -> add per-project claudeMdExcludes
+//     (every session, idempotent)
 //   - existing RISK_REGISTER.md                         -> append the GSD-clobber risk (every session)
 //   - graphify installed, root CLAUDE.md not curated    -> `graphify claude install` (one-time,
 //     runs before the auto-mark step above so it never touches an already-curated file;
@@ -21,6 +24,19 @@
 //     (git/DB can appear later, so this is not one-time; opt out: CLAUDE_MCP_SUGGEST=0).
 //     Never runs anything - just surfaces the command.
 // Master switch: CLAUDE_CURATED_AUTOINIT=0 disables everything. Never blocks the session.
+//
+// CONVENTION for anyone adding a new step here (the timing bug this file already hit once -
+// see below - and must not hit again): gating a file/settings MUTATION on `firstTime` is only
+// safe when the thing you're checking is GUARANTEED to already exist by session 1. If what
+// you're fixing is "some file/state that might not exist yet, might appear on session 5, 50,
+// or never" - like a generated CLAUDE.md, a tool getting installed later, a config key someone
+// adds by hand - `firstTime` will consume itself on session 1 (state[root] gets created
+// unconditionally a few lines up) whether or not your condition was even checkable yet, and
+// your step then NEVER RUNS AGAIN for that project. The fix is always the same shape: make the
+// step re-check EVERY session and be naturally idempotent (it only WRITES when its own
+// on-disk check says the fix isn't applied yet, so a no-op re-check costs one file read). See
+// the root-CLAUDE.md auto-mark, the .planning/CLAUDE.md exclude, and the claude_md_assembly
+// link-import check below for the pattern - none of them use `firstTime` anymore, on purpose.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
@@ -169,34 +185,73 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && process.env.CLAUDE_GRAPHIFY_
   }
 }
 
-// ONE-TIME per project: per-project exclude + auto-mark root CLAUDE.md + ambiguity nudge.
-if (firstTime) {
-  // 1) GSD-owned (unmarked) .planning/CLAUDE.md -> per-project exclude
-  const planningClaude = join(root, ".planning", "CLAUDE.md");
-  if (existsSync(planningClaude) && !isMarked(planningClaude)) {
-    const sp = join(root, ".claude", "settings.json");
-    const s = existsSync(sp) ? safe(() => JSON.parse(readFileSync(sp, "utf8"))) : {};
-    if (s) {
-      const ex = new Set(s.claudeMdExcludes || []); const before = ex.size;
-      ex.add("**/.planning/CLAUDE.md");
-      if (ex.size !== before) {
-        s.claudeMdExcludes = [...ex];
-        if (writeFile(sp, JSON.stringify(s, null, 2) + "\n"))
-          actions.push("excluded GSD .planning/CLAUDE.md from auto-load");
-      }
+// EVERY session, idempotent (see the CONVENTION note in the file header for why NOT
+// `if (firstTime)`): per-project .planning exclude + auto-mark root CLAUDE.md + ambiguity
+// nudge. Formerly gated on `firstTime` - the real-world timing bug that taught this lesson:
+// on a brand-new project's session 1, root CLAUDE.md often doesn't exist yet (the
+// `graphify claude install` step above, or a human, creates it later); `state[root]` gets
+// created unconditionally a few lines up regardless, so `firstTime` was already spent by the
+// time the file showed up on session 2+, and step 2 below then NEVER auto-marked it - silently,
+// forever, for that project. Both checks are cheap (existsSync + one read) and self-limiting
+// (isMarked()/claudeMdExcludes already-containing-the-entry make a fixed project a no-op on
+// every later session), so there is no real cost to re-checking indefinitely.
+
+// 1) GSD-owned (unmarked) .planning/CLAUDE.md -> per-project exclude
+const planningClaude = join(root, ".planning", "CLAUDE.md");
+if (existsSync(planningClaude) && !isMarked(planningClaude)) {
+  const sp = join(root, ".claude", "settings.json");
+  const s = existsSync(sp) ? safe(() => JSON.parse(readFileSync(sp, "utf8"))) : {};
+  if (s) {
+    const ex = new Set(s.claudeMdExcludes || []); const before = ex.size;
+    ex.add("**/.planning/CLAUDE.md");
+    if (ex.size !== before) {
+      s.claudeMdExcludes = [...ex];
+      if (writeFile(sp, JSON.stringify(s, null, 2) + "\n"))
+        actions.push("excluded GSD .planning/CLAUDE.md from auto-load");
     }
   }
+}
 
-  // 2) root CLAUDE.md: auto-mark unless it looks GSD-generated
-  const rootClaude = join(root, "CLAUDE.md");
-  if (existsSync(rootClaude) && !isMarked(rootClaude)) {
-    if (AUTOMARK && !looksGsd(rootClaude)) {
-      const t = safe(() => readFileSync(rootClaude, "utf8"));
-      if (t !== undefined && writeFile(rootClaude, `<!-- ${MARKER} -->\n` + t))
-        actions.push("marked root CLAUDE.md as curated");
-    } else {
-      notes.push(`Unmarked CLAUDE.md at ${rootClaude}` +
-        (looksGsd(rootClaude) ? " looks GSD-generated; left as-is." : `. If it's yours, add '<!-- ${MARKER} -->' as the first line.`));
+// 2) root CLAUDE.md: auto-mark unless it looks GSD-generated
+const rootClaude = join(root, "CLAUDE.md");
+if (existsSync(rootClaude) && !isMarked(rootClaude)) {
+  if (AUTOMARK && !looksGsd(rootClaude)) {
+    const t = safe(() => readFileSync(rootClaude, "utf8"));
+    if (t !== undefined && writeFile(rootClaude, `<!-- ${MARKER} -->\n` + t))
+      actions.push("marked root CLAUDE.md as curated");
+  } else if (!AUTOMARK) {
+    notes.push(`Unmarked CLAUDE.md at ${rootClaude}` +
+      (looksGsd(rootClaude) ? " looks GSD-generated; left as-is." : `. If it's yours, add '<!-- ${MARKER} -->' as the first line.`));
+  }
+}
+
+// EVERY session (not gated by firstTime - see why below): when GSD's claude_md_assembly.mode
+// is "link" (this repo's own personal default via gsd-config-patch.mjs), gsd-core writes
+// generated project context + the /gsd-profile-user profile into .claude/CLAUDE.md instead of
+// embedding it inline in the curated root CLAUDE.md - but it does NOT itself guarantee the root
+// file actually `@`-imports that generated file. Found in practice: a project whose root
+// CLAUDE.md predates (or was never touched by) gsd's write ends up with an 18KB generated
+// .claude/CLAUDE.md sitting there completely unloaded by any session. Re-checked every session,
+// NOT one-time-on-firstTime, because .claude/CLAUDE.md can appear well after a project's first
+// session (e.g. /gsd-profile-user run later, same timing gap as the graphify-install-vs-
+// automark issue above) - gating this on firstTime would permanently miss that case. Naturally
+// idempotent once fixed: the import line, once present, makes every later check a no-op.
+// Skips: root CLAUDE.md missing, already importing the file (any `@...claude/CLAUDE.md` line -
+// not an exact-string match, to tolerate a human's own relative-path phrasing), or itself
+// GSD-generated (gsd's own output doesn't need this nudge). Opt out: CLAUDE_GSD_LINK_IMPORT=0.
+if (process.env.CLAUDE_GSD_LINK_IMPORT !== "0") {
+  const genClaudeMd = join(root, ".claude", "CLAUDE.md");
+  const rootClaudeForLink = join(root, "CLAUDE.md");
+  if (existsSync(genClaudeMd) && existsSync(rootClaudeForLink)) {
+    const genContent = safe(() => readFileSync(genClaudeMd, "utf8")) || "";
+    const looksGenerated = /<!--\s*GSD:/.test(genContent);
+    if (looksGenerated && !looksGsd(rootClaudeForLink)) {
+      const rootContent = safe(() => readFileSync(rootClaudeForLink, "utf8"));
+      const alreadyImported = rootContent !== undefined && /^@.*\.claude[\\/]CLAUDE\.md\s*$/m.test(rootContent);
+      if (rootContent !== undefined && !alreadyImported) {
+        if (writeFile(rootClaudeForLink, "@.claude/CLAUDE.md\n\n" + rootContent))
+          actions.push("linked root CLAUDE.md to generated .claude/CLAUDE.md (@import was missing)");
+      }
     }
   }
 }
