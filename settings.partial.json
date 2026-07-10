@@ -33,15 +33,16 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/gsd-config-patch.mjs"] }
         ]
-      },
+      }
+    ],
+    "Stop": [
       {
-        "matcher": "Agent",
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/token-usage-log.mjs"] }
         ]
       }
     ],
-    "Stop": [
+    "SubagentStop": [
       {
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/token-usage-log.mjs"] }

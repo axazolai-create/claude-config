@@ -1,10 +1,24 @@
 #!/usr/bin/env node
 // Two hook events, one script (dispatches on hook_event_name), same pattern as
-// gsd-config-patch.mjs. Registered under BOTH PostToolUse (matcher: Agent) and Stop in
-// settings.partial.json.
+// gsd-config-patch.mjs. Registered under BOTH SubagentStop and Stop in settings.partial.json.
 //
-// PostToolUse:Agent -> one record per completed subagent call. All the data (tokens, resolved
-// model, duration) comes straight off `tool_response` - no transcript parsing needed.
+// SubagentStop -> one record per subagent call (kind:"subagent"). The hook payload itself
+// carries no token/model fields, so this reads `agent_transcript_path` - a transcript file
+// dedicated to that one agent_id (NOT the main session transcript) - from a persisted
+// per-agent-id byte cursor, and sums `usage` across the new assistant entries. `task` comes
+// from `background_tasks[].description` (matched by agent_id), `agent` from `agent_type`.
+// The per-agent cursor (not a one-shot full-file read) matters because the SAME agent_id can
+// SubagentStop more than once if the agent is resumed via SendMessage - reading the whole file
+// every time would double-count already-logged tokens.
+//
+// PREVIOUSLY this hook also listened on PostToolUse:Agent, expecting a second, later
+// PostToolUse event with `tool_response.status === "completed"` and real usage once a
+// backgrounded subagent finished. Investigation (2026-07-10) found that event never arrives:
+// every Agent tool call - fork or not, backgrounded or not - reports `status:"async_launched"`
+// at PostToolUse time and is never followed by a second PostToolUse:Agent call. That branch
+// was 100% dead code (verified: 62/62 historical Agent calls in this project's transcripts
+// were async_launched, 0 completed) - removed in favor of SubagentStop, which is the actual
+// completion event and carries `agent_transcript_path` + `agent_id`.
 //
 // Stop -> one record per main-agent turn. Stop's own input has no token/model fields, so this
 // reads `transcript_path` (JSONL) from a persisted per-session byte cursor, sums `usage` across
@@ -42,7 +56,8 @@ const PRICING_FILE = join(homedir(), ".claude", "state", "model-pricing.json");
 const GLOBAL_LOG = join(homedir(), ".claude", "state", "token-usage.jsonl");
 const PRUNE_STATE_FILE = join(homedir(), ".claude", "state", "token-usage-prune.json");
 // Shared per-root state file with session-init.mjs / gsd-config-patch.mjs - same namespace,
-// just a new independent key (tokenLogCursor) so this never collides with their flags.
+// just new independent keys (tokenLogCursor, subagentLogCursors) so this never collides with
+// their flags.
 const PROJECT_STATE_FILE = join(homedir(), ".claude", "state", "project-init.json");
 
 const COST_ENABLED = process.env.CLAUDE_TOKEN_USAGE_COST !== "0";
@@ -111,32 +126,58 @@ function writeRecord(root, record) {
 const root = findRoot(d.cwd || process.cwd());
 const project = projectNameOf(root);
 
-if (d.hook_event_name === "PostToolUse") {
-  if (d.tool_name !== "Agent") process.exit(0);
-  const resp = d.tool_response;
-  // "async_launched" (backgrounded subagents, run_in_background) have no final usage yet at this
-  // point - only a "completed" foreground call carries real numbers here.
-  if (!resp || resp.status !== "completed") process.exit(0);
+if (d.hook_event_name === "SubagentStop") {
+  const transcriptPath = d.agent_transcript_path;
+  const agentId = d.agent_id;
+  if (!transcriptPath || !agentId) process.exit(0);
 
-  const input = d.tool_input || {};
-  const usage = resp.usage || {};
-  const model = resp.resolvedModel;
+  let state = existsSync(PROJECT_STATE_FILE) ? (safe(() => readJSON(PROJECT_STATE_FILE)) || {}) : {};
+  if (!state[root]) state[root] = {};
+  if (!state[root].subagentLogCursors) state[root].subagentLogCursors = {};
+  const fromOffset = state[root].subagentLogCursors[agentId] || 0;
+
+  const { entries, newOffset } = readNewJSONLEntries(transcriptPath, fromOffset);
+  state[root].subagentLogCursors[agentId] = newOffset;
+  writeFile(PROJECT_STATE_FILE, JSON.stringify(state, null, 2) + "\n");
+
+  const assistantEntries = entries.filter((e) => e && e.type === "assistant" && e.message && e.message.usage);
+  if (!assistantEntries.length) process.exit(0); // resumed agent produced no new usage since last SubagentStop
+
+  const totals = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  let model;
+  let firstTs, lastTs;
+  for (const e of assistantEntries) {
+    const u = e.message.usage || {};
+    totals.input_tokens += u.input_tokens || 0;
+    totals.output_tokens += u.output_tokens || 0;
+    totals.cache_read_input_tokens += u.cache_read_input_tokens || 0;
+    totals.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
+    if (e.message.model) model = e.message.model;
+    if (e.timestamp) { firstTs = firstTs || e.timestamp; lastTs = e.timestamp; }
+  }
+
+  const bgTask = Array.isArray(d.background_tasks) ? d.background_tasks.find((t) => t.id === agentId) : undefined;
+
   const record = {
     date: new Date().toISOString(),
     kind: "subagent",
     project,
     session_id: d.session_id,
-    task: input.description || (input.prompt ? String(input.prompt).slice(0, 200) : undefined),
-    agent: input.subagent_type,
+    task: bgTask && bgTask.description,
+    agent: d.agent_type || (bgTask && bgTask.agent_type),
     model,
-    input_tokens: usage.input_tokens,
-    output_tokens: usage.output_tokens,
-    total_tokens: resp.totalTokens,
-    duration_ms: resp.totalDurationMs,
+    input_tokens: totals.input_tokens,
+    output_tokens: totals.output_tokens,
+    total_tokens: totals.input_tokens + totals.output_tokens + totals.cache_read_input_tokens + totals.cache_creation_input_tokens,
   };
-  if (usage.cache_read_input_tokens !== undefined) record.cache_read_tokens = usage.cache_read_input_tokens;
-  if (usage.cache_creation_input_tokens !== undefined) record.cache_creation_tokens = usage.cache_creation_input_tokens;
-  const cost = costFor(model, usage);
+  // Span between first and last usage-bearing assistant message in this batch - a lower bound on
+  // wall-clock runtime (excludes launch latency, which SubagentStop's payload doesn't expose).
+  // Omitted (rather than written as 0) for single-message agents where that span is meaningless.
+  const durationMs = firstTs && lastTs ? Date.parse(lastTs) - Date.parse(firstTs) : NaN;
+  if (Number.isFinite(durationMs) && durationMs > 0) record.duration_ms = durationMs;
+  if (totals.cache_read_input_tokens) record.cache_read_tokens = totals.cache_read_input_tokens;
+  if (totals.cache_creation_input_tokens) record.cache_creation_tokens = totals.cache_creation_input_tokens;
+  const cost = costFor(model, totals);
   if (cost !== undefined) record.cost_usd = cost;
 
   writeRecord(root, record);
@@ -160,7 +201,7 @@ if (d.hook_event_name === "Stop") {
   writeFile(PROJECT_STATE_FILE, JSON.stringify(state, null, 2) + "\n");
 
   // isSidechain filters out subagent-internal reasoning IF it were ever inlined into the main
-  // transcript (defensive - PostToolUse:Agent already captures subagent usage separately, this
+  // transcript (defensive - SubagentStop already captures subagent usage separately, this
   // guards against double-counting it here too).
   const assistantEntries = entries.filter((e) => e && e.type === "assistant" && !e.isSidechain && e.message && e.message.usage);
   if (!assistantEntries.length) process.exit(0); // nothing to log this turn (e.g. only tool-call round trips landed since last cursor, no new assistant usage)

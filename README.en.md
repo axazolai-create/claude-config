@@ -166,7 +166,7 @@ So this package does three things:
       graphify-global-sync-run.mjs       # shared worker (called by the hook above and the native post-commit)
     session-init.mjs                     # SessionStart: project bootstrap (+ registration in graphify,
                                           #   + installing the native post-commit hook in the project)
-    token-usage-log.mjs                  # PostToolUse:Agent + Stop — token/$ spend log in JSONL
+    token-usage-log.mjs                  # SubagentStop + Stop — token/$ spend log in JSONL
     lib/
       token-usage-shared.mjs             # shared helpers (findRoot, JSONL read/append, cursor)
       token-usage-prune.mjs              # global log retention (3mo / last-but-one day / min 10)
@@ -410,17 +410,23 @@ Reset a specific project's state (to re-run it) — delete its entry from
   IDE, `--amend`), independent of Claude Code. If a `post-commit` already exists (husky,
   pre-commit, graphify's own local hook) — it's appended to, not overwritten. Same toggle:
   `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
-- **token-usage-log.mjs** (PostToolUse: `Agent` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
+- **token-usage-log.mjs** (`SubagentStop` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
   **hooks/lib/token-usage-prune.mjs**, **hooks/lib/token-usage-pricing-refresh.mjs**. After
-  every completed sub-agent call and after every main-agent turn, appends a line (JSONL) with
+  every sub-agent completion and after every main-agent turn, appends a line (JSONL) with
   task/agent/model/tokens/date/cost estimate to **both** logs —
   `<project>/.claude/token-usage.jsonl` (kept forever, never pruned) and
   `~/.claude/state/token-usage.jsonl` (cross-project, with retention — a union of: no older
   than 3 calendar months from the last entry / the last-but-one day of activity / a minimum of
-  10 entries). For a sub-agent, data comes straight from `tool_response` (no transcript
-  parsing); for the main turn — from `transcript_path` via a saved byte cursor (a known caveat:
-  the transcript can lag slightly on write, so in rare cases the turn's last API call is only
-  counted on the next `Stop`). The `cost_usd` estimate is best-effort, from the
+  10 entries). Sub-agent logging originally relied on a second `PostToolUse:Agent` call with
+  `status:"completed"` — a 2026-07-10 investigation found that event never arrives (every Agent
+  call, backgrounded or not, reports `"async_launched"` and `PostToolUse:Agent` never fires
+  again for it), so no `kind:"subagent"` record was ever written. Replaced with `SubagentStop`:
+  data comes from `agent_transcript_path` (a transcript file dedicated to that one sub-agent)
+  via a saved byte cursor keyed **per agent_id** (not per session — the same agent can
+  `SubagentStop` more than once if resumed via `SendMessage`); for the main turn — from
+  `transcript_path` via a saved byte cursor keyed per session (a known caveat: the transcript
+  can lag slightly on write, so in rare cases the turn's last API call is only counted on the
+  next `Stop`). The `cost_usd` estimate is best-effort, from the
   `~/.claude/state/model-pricing.json` pricing table, which refreshes itself once a day by
   scraping the public pricing page (there's no official pricing API — see
   `RISK-TOKENLOG-001`). To view aggregates — the `/token-usage` skill (`--global` for the

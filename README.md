@@ -160,7 +160,7 @@ notepad bootstrap.ps1; .\bootstrap.ps1
       graphify-global-sync-run.mjs       # общий воркер (зовут и хук выше, и нативный post-commit)
     session-init.mjs                     # SessionStart: разовый бутстрап (+ регистрация в graphify,
                                           #   + установка нативного post-commit хука в проекте)
-    token-usage-log.mjs                  # PostToolUse:Agent + Stop — лог расхода токенов/$ в JSONL
+    token-usage-log.mjs                  # SubagentStop + Stop — лог расхода токенов/$ в JSONL
     lib/
       token-usage-shared.mjs             # общие хелперы (findRoot, JSONL read/append, cursor)
       token-usage-prune.mjs              # ретеншен глобального лога (3мес / предпоследние сутки / min 10)
@@ -399,17 +399,23 @@ CLAUDE_GSD_LINK_IMPORT=0         # не чинить отсутствующий 
   из IDE, `--amend`), независимо от Claude Code. Если `post-commit` уже существует (husky,
   pre-commit, локальный хук graphify) — дописывается, не затирается. Тот же тумблер
   `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
-- **token-usage-log.mjs** (PostToolUse: `Agent` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
+- **token-usage-log.mjs** (`SubagentStop` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
   **hooks/lib/token-usage-prune.mjs**, **hooks/lib/token-usage-pricing-refresh.mjs**. После
-  каждого завершённого вызова суб-агента и после каждого хода основного агента дописывает
+  каждого завершения суб-агента и после каждого хода основного агента дописывает
   строку (JSONL) с задачей/агентом/моделью/токенами/датой/оценкой стоимости в
   **оба** лога — `<проект>/.claude/token-usage.jsonl` (хранится вечно, не чистится) и
   `~/.claude/state/token-usage.jsonl` (кросс-проектный, с ретеншеном — union из: не старше 3
   календарных месяцев от последней записи / предпоследние сутки активности / минимум 10
-  записей). Для суб-агента данные берутся напрямую из `tool_response` (без парсинга транскрипта);
-  для основного хода — из `transcript_path` по сохранённому byte-курсору (известная оговорка:
-  транскрипт может чуть отставать по записи, в редком случае последний API-вызов хода
-  досчитывается на следующем `Stop`). Оценка `cost_usd` — best-effort, по таблице цен
+  записей). Изначально суб-агент пытались логировать вторым `PostToolUse:Agent`-вызовом со
+  статусом `"completed"` — расследование 2026-07-10 показало, что это событие никогда не
+  приходит (каждый вызов Agent, фоновый или нет, репортит `"async_launched"` и больше
+  `PostToolUse:Agent` не срабатывает), из-за чего ни одной записи `kind:"subagent"` не писалось
+  вообще. Заменено на `SubagentStop`: данные берутся из `agent_transcript_path` (отдельный
+  транскрипт именно этого суб-агента) по сохранённому byte-курсору **на agent_id** (не на
+  сессию — один и тот же агент может дать `SubagentStop` больше одного раза, если его
+  резюмировали через `SendMessage`); для основного хода — из `transcript_path` по сохранённому
+  byte-курсору на сессию (известная оговорка: транскрипт может чуть отставать по записи, в
+  редком случае последний API-вызов хода досчитывается на следующем `Stop`). Оценка `cost_usd` — best-effort, по таблице цен
   `~/.claude/state/model-pricing.json`, которая сама обновляется раз в сутки скрейпингом
   публичной страницы цен (нет официального pricing API — см. `RISK-TOKENLOG-001`). Смотреть
   агрегаты — скилл `/token-usage` (`--global` для кросс-проектного лога, `--week`/`--month`/`--all`
