@@ -54,6 +54,13 @@
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/session-init.mjs"] }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/leanmode-subagent.mjs"] }
+        ]
+      }
     ]
   },
   "permissions": {

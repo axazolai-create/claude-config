@@ -165,10 +165,22 @@ notepad bootstrap.ps1; .\bootstrap.ps1
       token-usage-shared.mjs             # общие хелперы (findRoot, JSONL read/append, cursor)
       token-usage-prune.mjs              # ретеншен глобального лога (3мес / предпоследние сутки / min 10)
       token-usage-pricing-refresh.mjs    # фон. скрейпинг таблицы цен раз в сутки
+    leanmode-subagent.mjs                # SubagentStart: YAGNI-правила per-agent_type (см. ниже)
+    lib/
+      leanmode-rules.mjs                 # карта agent_type->уровень, резолвер BASE+dial, шифт-таблица
+      leanmode-lite-rule.md              # текст правила: lite
+      leanmode-full-rule.md              # текст правила: full
+      leanmode-ultra-rule.md             # текст правила: ultra (расширяет full)
+      mark-initstack-done.mjs            # зовётся из /init-stack; ставит initStackRun в project-init.json
+  agents/
+    leanmode-executor.md                 # саб-агент для явного per-task lean-опта (см. ниже)
+  commands/
+    leanmode.md                          # /leanmode — интерактив/--флаг, ставит project-level dial
   skills/
     using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Superpowers
     token-usage/SKILL.md                 # /token-usage — сводка по логу расхода токенов
   state/project-init.json                # создаётся в рантайме; список уже инициализированных проектов
+                                          #   (+ initStackRun на project root — ставит /init-stack)
   state/token-usage.jsonl                # создаётся в рантайме; глобальный лог расхода токенов
   state/model-pricing.json               # создаётся в рантайме; таблица цен (обновляется раз в сутки)
 ```
@@ -405,6 +417,21 @@ CLAUDE_GSD_LINK_IMPORT=0         # не чинить отсутствующий 
   `CLAUDE_TOKEN_USAGE_LOG=0` (выключить целиком), `CLAUDE_TOKEN_USAGE_COST=0` (без оценки
   стоимости и без фонового обновления цен), `CLAUDE_TOKEN_USAGE_PRUNE=0` (не чистить глобальный
   лог).
+- **leanmode-subagent.mjs** (`SubagentStart`, событие используется впервые в этом репо — до сих
+  пор были только SessionStart/PreToolUse/PostToolUse/Stop) + **hooks/lib/leanmode-rules.mjs**.
+  Первичная замена стороннего плагина `ponytail`: перед стартом саб-агента, по его `agent_type`,
+  инжектит YAGNI-текст ("пиши минимум кода") в его контекст — но не всем поровну: карта
+  `DEFAULT_LEANMODE_MAP` даёт `off/lite/full` каждому известному `agent_type` по отдельности (11
+  из ~40 не-`off`; всё остальное — намеренно `off`, ничего не пишущие код агенты вроде
+  `gsd-planner`/`gsd-security-auditor` эту инъекцию не получают вообще). Поверх — per-project
+  оверрайды (`.claude/leanmode.json`) и общепроектный dial (`off/lite/full/ultra`,
+  `/leanmode`-командой), который **сдвигает**, а не заменяет карту — `off` при сдвиге не
+  трогается ни в одну сторону (design rationale и полная карта:
+  `docs/superpowers/specs/2026-07-10-leanmode-design.md`, вне дистрибуции). dial по умолчанию —
+  `full`, если для проекта хоть раз запускался `/init-stack` (флаг `initStackRun` в
+  `~/.claude/state/project-init.json`, ставит **hooks/lib/mark-initstack-done.mjs**, вызывается
+  последним шагом `/init-stack`, не зарегистрированный хук сам по себе); иначе — `off`. Тумблер:
+  `CLAUDE_LEANMODE=0`.
 
 Все хуки — на Node и зарегистрированы в **exec-форме** (`command: "node"`, `args: [абс.путь]`):
 без шелла, поэтому работают и под Windows без Git Bash, без проблем с `$HOME` и переводами строк.

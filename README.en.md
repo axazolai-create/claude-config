@@ -171,10 +171,22 @@ So this package does three things:
       token-usage-shared.mjs             # shared helpers (findRoot, JSONL read/append, cursor)
       token-usage-prune.mjs              # global log retention (3mo / last-but-one day / min 10)
       token-usage-pricing-refresh.mjs    # bg. scrape of the pricing table once a day
+    leanmode-subagent.mjs                # SubagentStart: per-agent_type YAGNI ruleset (see below)
+    lib/
+      leanmode-rules.mjs                 # agent_type->level map, BASE+dial resolver, shift table
+      leanmode-lite-rule.md              # rule text: lite
+      leanmode-full-rule.md              # rule text: full
+      leanmode-ultra-rule.md             # rule text: ultra (extends full)
+      mark-initstack-done.mjs            # called from /init-stack; sets initStackRun in project-init.json
+  agents/
+    leanmode-executor.md                 # subagent for explicit per-task lean opt-in (see below)
+  commands/
+    leanmode.md                          # /leanmode — interactive/--flag, sets the project-level dial
   skills/
     using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
     token-usage/SKILL.md                 # /token-usage — token spend log summary
   state/project-init.json                # created at runtime; list of already-initialized projects
+                                          #   (+ initStackRun per project root — set by /init-stack)
   state/token-usage.jsonl                # created at runtime; global token spend log
   state/model-pricing.json               # created at runtime; pricing table (refreshed once a day)
 ```
@@ -416,6 +428,21 @@ Reset a specific project's state (to re-run it) — delete its entry from
   over the last 24h). Toggles: `CLAUDE_TOKEN_USAGE_LOG=0` (disable entirely),
   `CLAUDE_TOKEN_USAGE_COST=0` (no cost estimate and no background price refresh),
   `CLAUDE_TOKEN_USAGE_PRUNE=0` (don't prune the global log).
+- **leanmode-subagent.mjs** (`SubagentStart`, the first hook in this repo on this event — until
+  now only SessionStart/PreToolUse/PostToolUse/Stop were used) + **hooks/lib/leanmode-rules.mjs**.
+  A first-party replacement for the third-party `ponytail` plugin: before a subagent starts,
+  keyed on its `agent_type`, injects a YAGNI ("write minimal code") text into its context — but
+  not evenly: `DEFAULT_LEANMODE_MAP` assigns `off/lite/full` per `agent_type` individually (11 of
+  ~40 non-`off`; everything else is deliberately `off` — agents that don't write code at all,
+  like `gsd-planner`/`gsd-security-auditor`, never get this injection). On top of that: per-project
+  overrides (`.claude/leanmode.json`) and a project-wide dial (`off/lite/full/ultra`, set via the
+  `/leanmode` command) that **shifts** the map rather than replacing it — `off` is pinned and
+  never moves either direction under the shift (full design rationale and map:
+  `docs/superpowers/specs/2026-07-10-leanmode-design.md`, outside the distribution). The dial
+  defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
+  flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
+  called as `/init-stack`'s last step — not a registered hook on its own); otherwise `off`.
+  Toggle: `CLAUDE_LEANMODE=0`.
 
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or

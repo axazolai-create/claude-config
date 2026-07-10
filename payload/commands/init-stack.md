@@ -125,3 +125,10 @@ On accept: run the install command, then confirm it landed in the right `package
 On decline: `Edit` `.planning/config.json` to set `code_quality.fallow.enabled: false`
 explicitly (don't leave it to silently inherit `true` from the personal default and fail
 later) - preserve every other key under `code_quality` and elsewhere.
+
+## 7. Mark leanmode dial default (always, no gate)
+Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (no output expected, always safe to
+re-run). This lets leanmode's project dial default to `full` for this project from now on,
+instead of staying `off` until someone explicitly runs `/leanmode` — see
+`docs/superpowers/specs/2026-07-10-leanmode-design.md` for why the dial is gated on
+`/init-stack` having run at all.
