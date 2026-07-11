@@ -106,11 +106,15 @@ function topTasksOf(recs, n) {
     .slice(0, n);
 }
 
-function fmtCost(totals) { return totals.hasCost ? ("$" + totals.cost_usd.toFixed(4)) : "n/a"; }
+// Thousands-grouped integer, space-separated ("1 000 000") - Russian numeric convention.
+function fmtInt(n) { return Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+// 2 decimals, rounded UP (ceiling) - never understate cost.
+function fmtCostVal(n) { return (Math.ceil(n * 100) / 100).toFixed(2); }
+function fmtCost(totals) { return totals.hasCost ? ("$" + fmtCostVal(totals.cost_usd)) : "n/a"; }
 function fmtRow(label, totals) {
-  return "  " + label.padEnd(22) + String(totals.count).padStart(6) + " recs  " +
-    String(totals.input_tokens).padStart(10) + " in  " +
-    String(totals.output_tokens).padStart(10) + " out  " +
+  return "  " + label.padEnd(22) + fmtInt(totals.count).padStart(8) + " recs  " +
+    fmtInt(totals.input_tokens).padStart(13) + " in  " +
+    fmtInt(totals.output_tokens).padStart(13) + " out  " +
     fmtCost(totals).padStart(10);
 }
 
@@ -130,7 +134,7 @@ function printReport(recs) {
   const topTasks = topTasksOf(recs, 5);
   console.log("top " + topTasks.length + " most expensive tasks:");
   for (const r of topTasks) {
-    console.log("  $" + r.cost_usd.toFixed(4) + "  " + (r.date || "").slice(0, 19) + "  [" + (r.kind || "?") + "/" + (r.agent || "?") + "]  " + (r.task || "(no task label)").slice(0, 80));
+    console.log("  $" + fmtCostVal(r.cost_usd) + "  " + (r.date || "").slice(0, 19) + "  [" + (r.kind || "?") + "/" + (r.agent || "?") + "]  " + (r.task || "(no task label)").slice(0, 80));
   }
 }
 

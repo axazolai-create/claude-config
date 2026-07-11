@@ -45,9 +45,13 @@ that field existed group under `non-project`.
 ## Reporting back
 
 Relay the script's own output - it's already formatted as a plain-text report, don't re-summarize
-it into prose or drop rows. If the script says "no log found," tell the user plainly that nothing
-has been recorded yet for that scope (a fresh project/machine, or the hook has been disabled via
-`CLAUDE_TOKEN_USAGE_LOG=0`) rather than presenting empty/zero data as if it were meaningful.
+it into prose or drop rows. This applies per project block too: when `--global` is set, paste
+**every** per-project section in full (TOTAL + by day + by model + by agent + top 5), same as the
+combined one above it - never collapse a section (e.g. "by agent") into a comma-separated prose
+list just because there are several projects to relay. If the script says "no log found," tell
+the user plainly that nothing has been recorded yet for that scope (a fresh project/machine, or
+the hook has been disabled via `CLAUDE_TOKEN_USAGE_LOG=0`) rather than presenting empty/zero data
+as if it were meaningful.
 
 If the user asks about the "$" figures specifically, remind them these are a **local best-effort
 estimate** (scraped pricing table, refreshed at most once/day) - not billing-grade, same caveat
