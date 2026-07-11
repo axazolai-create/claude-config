@@ -6,10 +6,10 @@
 // the same reasoning applied the other direction).
 //
 // Usage:
-//   node report.mjs                       # current project, last 24h
-//   node report.mjs --global               # global (cross-project) log, last 24h
-//   node report.mjs --week|--month|--all   # change the time window
-//   node report.mjs --root <dir>           # project-scope only: search from <dir> instead of cwd
+//   node report.mjs                              # current project, last 24h
+//   node report.mjs --global                      # global (cross-project) log, last 24h
+//   node report.mjs --5h|--week|--month|--all      # change the time window
+//   node report.mjs --root <dir>                  # project-scope only: search from <dir> instead of cwd
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -17,6 +17,7 @@ import { join, resolve, dirname } from "node:path";
 const argv = process.argv.slice(2);
 const GLOBAL = argv.includes("--global");
 const PERIOD =
+  argv.includes("--5h") ? "5h" :
   argv.includes("--week") ? "week" :
   argv.includes("--month") ? "month" :
   argv.includes("--all") ? "all" : "24h";
@@ -59,7 +60,7 @@ if (!existsSync(logPath)) {
   process.exit(0);
 }
 
-const PERIOD_MS = { "24h": 24 * 60 * 60 * 1000, week: 7 * 24 * 60 * 60 * 1000, month: 30 * 24 * 60 * 60 * 1000, all: Infinity };
+const PERIOD_MS = { "5h": 5 * 60 * 60 * 1000, "24h": 24 * 60 * 60 * 1000, week: 7 * 24 * 60 * 60 * 1000, month: 30 * 24 * 60 * 60 * 1000, all: Infinity };
 const cutoff = PERIOD === "all" ? -Infinity : Date.now() - PERIOD_MS[PERIOD];
 
 const all = readJSONLRecords(logPath);

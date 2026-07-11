@@ -18,16 +18,17 @@ their natural-language request:
 - **Scope**: `--global` reads the cross-project aggregate
   (`~/.claude/state/token-usage.jsonl`); no flag reads the **current project's own**
   `.claude/token-usage.jsonl`.
-- **Period**: `--week`, `--month`, or `--all` (full history, no time filter). No period flag
-  defaults to the **last 24 hours**.
+- **Period**: `--5h`, `--week`, `--month`, or `--all` (full history, no time filter). No period
+  flag defaults to the **last 24 hours**.
 
-Examples: `/token-usage` → project, last 24h. `/token-usage --global --month` → global log, last
-month. `/token-usage --all` → current project, full history.
+Examples: `/token-usage` → project, last 24h. `/token-usage --5h` → project, last 5 hours.
+`/token-usage --global --month` → global log, last month. `/token-usage --all` → current
+project, full history.
 
 ## Running the report
 
 ```
-node <SKILL_DIR>/scripts/report.mjs [--global] [--week|--month|--all]
+node <SKILL_DIR>/scripts/report.mjs [--global] [--5h|--week|--month|--all]
 ```
 
 Run it from the project root (or pass nothing extra - the script walks up from `cwd` looking for
