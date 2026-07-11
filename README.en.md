@@ -448,7 +448,10 @@ Reset a specific project's state (to re-run it) — delete its entry from
   defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
   flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
   called as `/init-stack`'s last step — not a registered hook on its own); otherwise `off`.
-  Toggle: `CLAUDE_LEANMODE=0`.
+  Toggle: `CLAUDE_LEANMODE=0`. The applied level (unless `off`) shows up next to the subagent
+  launch banner as a `leanmode: <level>` line (`systemMessage`) — the banner itself
+  (`agent_type(description) Model`) is rendered by the harness before hooks run, so its text
+  can't be rewritten directly.
 
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or

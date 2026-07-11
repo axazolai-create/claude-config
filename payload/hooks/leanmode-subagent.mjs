@@ -4,13 +4,16 @@
 // settings.partial.json on purpose - filtering happens here so adding a new agent_type to
 // DEFAULT_LEANMODE_MAP never requires touching the hook registration.
 // Master kill switch: CLAUDE_LEANMODE=0 disables this hook entirely.
+// The subagent launch banner itself can't be edited by any hook (it renders before hooks run),
+// so the applied level surfaces via systemMessage instead - a separate line next to the banner.
 import { readFileSync } from "node:fs";
 import { findRoot, resolveEffectiveLevel, loadRuleText } from "./lib/leanmode-rules.mjs";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
-function emit(ctx) {
+function emit(ctx, level) {
   try {
     process.stdout.write(JSON.stringify({
+      systemMessage: `leanmode: ${level}`,
       hookSpecificOutput: { hookEventName: "SubagentStart", additionalContext: ctx || "" }
     }));
   } catch { /* ignore */ }
@@ -32,4 +35,4 @@ if (level === "off") process.exit(0);
 const text = loadRuleText(level);
 if (!text) process.exit(0);
 
-emit(text);
+emit(text, level);

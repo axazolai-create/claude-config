@@ -437,7 +437,9 @@ CLAUDE_GSD_LINK_IMPORT=0         # не чинить отсутствующий 
   `full`, если для проекта хоть раз запускался `/init-stack` (флаг `initStackRun` в
   `~/.claude/state/project-init.json`, ставит **hooks/lib/mark-initstack-done.mjs**, вызывается
   последним шагом `/init-stack`, не зарегистрированный хук сам по себе); иначе — `off`. Тумблер:
-  `CLAUDE_LEANMODE=0`.
+  `CLAUDE_LEANMODE=0`. Применённый уровень (кроме `off`) виден рядом с баннером запуска саб-агента
+  строкой `leanmode: <level>` (`systemMessage`) — сам баннер (`agent_type(description) Model`)
+  правится харнессом до отработки хуков, так что переписать его текст напрямую нельзя.
 
 Все хуки — на Node и зарегистрированы в **exec-форме** (`command: "node"`, `args: [абс.путь]`):
 без шелла, поэтому работают и под Windows без Git Bash, без проблем с `$HOME` и переводами строк.
