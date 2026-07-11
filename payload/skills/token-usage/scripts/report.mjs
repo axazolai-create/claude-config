@@ -78,25 +78,33 @@ function add(totals, r) {
   if (typeof r.cost_usd === "number") { totals.cost_usd += r.cost_usd; totals.hasCost = true; }
 }
 
-const overall = emptyTotals();
-const byDay = new Map(), byModel = new Map(), byAgent = new Map();
-for (const r of records) {
-  add(overall, r);
-  const day = (r.date || "").slice(0, 10) || "unknown";
-  const model = r.model || "unknown";
-  const agent = r.agent || "unknown";
-  if (!byDay.has(day)) byDay.set(day, emptyTotals());
-  if (!byModel.has(model)) byModel.set(model, emptyTotals());
-  if (!byAgent.has(agent)) byAgent.set(agent, emptyTotals());
-  add(byDay.get(day), r);
-  add(byModel.get(model), r);
-  add(byAgent.get(agent), r);
+const dayOf = (r) => (r.date || "").slice(0, 10) || "unknown";
+const modelOf = (r) => r.model || "unknown";
+const agentOf = (r) => r.agent || "unknown";
+const projectOf = (r) => r.project || "non-project";
+
+function totalsOf(recs) {
+  const t = emptyTotals();
+  for (const r of recs) add(t, r);
+  return t;
 }
 
-const topTasks = [...records]
-  .filter((r) => typeof r.cost_usd === "number")
-  .sort((a, b) => b.cost_usd - a.cost_usd)
-  .slice(0, 5);
+function breakdown(recs, keyFn) {
+  const map = new Map();
+  for (const r of recs) {
+    const key = keyFn(r);
+    if (!map.has(key)) map.set(key, emptyTotals());
+    add(map.get(key), r);
+  }
+  return map;
+}
+
+function topTasksOf(recs, n) {
+  return [...recs]
+    .filter((r) => typeof r.cost_usd === "number")
+    .sort((a, b) => b.cost_usd - a.cost_usd)
+    .slice(0, n);
+}
 
 function fmtCost(totals) { return totals.hasCost ? ("$" + totals.cost_usd.toFixed(4)) : "n/a"; }
 function fmtRow(label, totals) {
@@ -106,21 +114,41 @@ function fmtRow(label, totals) {
     fmtCost(totals).padStart(10);
 }
 
+function printBreakdown(title, map, sortByTokens) {
+  console.log(title + ":");
+  const entries = [...map.entries()].sort(sortByTokens ? (a, b) => b[1].total_tokens - a[1].total_tokens : undefined);
+  for (const [key, totals] of entries) console.log(fmtRow(key, totals));
+  console.log("");
+}
+
+function printReport(recs) {
+  console.log(fmtRow("TOTAL", totalsOf(recs)));
+  console.log("");
+  printBreakdown("by day", breakdown(recs, dayOf), false);
+  printBreakdown("by model", breakdown(recs, modelOf), true);
+  printBreakdown("by agent", breakdown(recs, agentOf), true);
+  const topTasks = topTasksOf(recs, 5);
+  console.log("top " + topTasks.length + " most expensive tasks:");
+  for (const r of topTasks) {
+    console.log("  $" + r.cost_usd.toFixed(4) + "  " + (r.date || "").slice(0, 19) + "  [" + (r.kind || "?") + "/" + (r.agent || "?") + "]  " + (r.task || "(no task label)").slice(0, 80));
+  }
+}
+
 console.log("token-usage report - scope: " + (GLOBAL ? "global" : "project") + ", period: " + PERIOD);
 console.log("log: " + logPath);
 console.log("");
-console.log(fmtRow("TOTAL", overall));
-console.log("");
-console.log("by day:");
-for (const [day, totals] of [...byDay.entries()].sort()) console.log(fmtRow(day, totals));
-console.log("");
-console.log("by model:");
-for (const [model, totals] of [...byModel.entries()].sort((a, b) => b[1].total_tokens - a[1].total_tokens)) console.log(fmtRow(model, totals));
-console.log("");
-console.log("by agent:");
-for (const [agent, totals] of [...byAgent.entries()].sort((a, b) => b[1].total_tokens - a[1].total_tokens)) console.log(fmtRow(agent, totals));
-console.log("");
-console.log("top " + topTasks.length + " most expensive tasks:");
-for (const r of topTasks) {
-  console.log("  $" + r.cost_usd.toFixed(4) + "  " + (r.date || "").slice(0, 19) + "  [" + (r.kind || "?") + "/" + (r.agent || "?") + "]  " + (r.task || "(no task label)").slice(0, 80));
+printReport(records);
+
+if (GLOBAL) {
+  const byProject = breakdown(records, projectOf);
+  const projectsByTokens = [...byProject.entries()].sort((a, b) => b[1].total_tokens - a[1].total_tokens).map(([p]) => p);
+  for (const project of projectsByTokens) {
+    const recs = records.filter((r) => projectOf(r) === project);
+    console.log("");
+    console.log("=".repeat(60));
+    console.log("project: " + project);
+    console.log("=".repeat(60));
+    console.log("");
+    printReport(recs);
+  }
 }

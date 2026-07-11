@@ -37,6 +37,11 @@ uses). Prints: overall totals, a breakdown by day / by model / by agent, and the
 expensive individual tasks in the window (skipped if no records carry a `cost_usd` - the pricing
 table hasn't refreshed yet, or `CLAUDE_TOKEN_USAGE_COST=0` is set).
 
+When `--global` is set, the same full report (totals + by day/model/agent + top 5) repeats **once
+per project** after the combined one, sorted by that project's total tokens descending - every
+record already carries a `project` marker (basename of the project root); records logged before
+that field existed group under `non-project`.
+
 ## Reporting back
 
 Relay the script's own output - it's already formatted as a plain-text report, don't re-summarize
