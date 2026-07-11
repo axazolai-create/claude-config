@@ -410,6 +410,18 @@ Reset a specific project's state (to re-run it) — delete its entry from
   IDE, `--amend`), independent of Claude Code. If a `post-commit` already exists (husky,
   pre-commit, graphify's own local hook) — it's appended to, not overwritten. Same toggle:
   `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
+  A separate `additionalContext` hint (not a mutation, every session): when the leanmode dial
+  for the project isn't `off`, reminds me (the assistant) of a standing convention every
+  session — before dispatching any subagent via the Agent tool, resolve its effective level
+  (`resolveEffectiveLevel(subagentType, root)`) and announce it in one line right before the
+  tool call: fold `(leanmode=<level>)` into whatever narration I'm already about to write (a
+  GSD wave/dispatch line, a Superpowers `Subagent (type): "task"` line) instead of a second
+  line; the standalone template `Запускаю суб-агента <type> (<model>) в режиме
+  (leanmode=<level>)` is only for when nothing else narrates that launch. Why prose instead of
+  a hook: the launch banner (`agent_type(description) Model`) is drawn by the harness before
+  any hook runs, and `SubagentStart`'s own `systemMessage` (see `leanmode-subagent.mjs` below)
+  is empirically confirmed to never render anywhere — prose is the only channel left to
+  surface the level before the banner appears. Same toggle: `CLAUDE_LEANMODE=0`.
 - **token-usage-log.mjs** (`SubagentStop` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
   **hooks/lib/token-usage-prune.mjs**, **hooks/lib/token-usage-pricing-refresh.mjs**. After
   every sub-agent completion and after every main-agent turn, appends a line (JSONL) with
@@ -448,10 +460,13 @@ Reset a specific project's state (to re-run it) — delete its entry from
   defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
   flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
   called as `/init-stack`'s last step — not a registered hook on its own); otherwise `off`.
-  Toggle: `CLAUDE_LEANMODE=0`. The applied level (unless `off`) shows up next to the subagent
-  launch banner as a `leanmode: <level>` line (`systemMessage`) — the banner itself
-  (`agent_type(description) Model`) is rendered by the harness before hooks run, so its text
-  can't be rewritten directly.
+  Toggle: `CLAUDE_LEANMODE=0`. The hook also emits `systemMessage: "leanmode: <level>"`
+  alongside `additionalContext` — kept in the source in case a future harness version renders
+  it, but empirically (2026-07-11, three real subagent launches) confirmed that
+  `SubagentStart`'s `systemMessage` doesn't show up anywhere today: not on the banner (which
+  the harness draws before hooks run and can't be rewritten regardless), not as a separate
+  line either. The level is actually surfaced in practice through a separate mechanism — see
+  `session-init.mjs` above.
 
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or

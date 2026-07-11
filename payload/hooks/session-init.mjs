@@ -42,6 +42,7 @@ import { homedir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
+import { resolveDial } from "./lib/leanmode-rules.mjs";
 
 const MARKER = "CURATED:NOEDIT";
 // Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
@@ -396,6 +397,29 @@ if (process.env.CLAUDE_MCP_SUGGEST !== "0") {
 
   if (suggestions.length)
     notes.push(`MCP suggestion: ${suggestions.join("; ")}. Run /init-mcp to wire it (also offers a self-hosted SearXNG web-search MCP); it asks before changing anything and is re-runnable to switch/remove.`);
+}
+
+// ---- leanmode announcement convention reminder ----
+// Not a mutation, not gated on firstTime - a standing behavioral instruction for the assistant
+// itself, re-surfaced every session (additionalContext isn't guaranteed to survive across a
+// long conversation - see the file header). Only worth showing when leanmode actually does
+// something for this project (dial != "off"); a project with the dial off gets no reminder,
+// same silence the SubagentStart hook itself already applies at "off".
+// The banner a subagent launch prints (`agent_type(description) Model`) is drawn by the harness
+// before any hook runs, so leanmode-subagent.mjs's own SubagentStart-emitted systemMessage
+// cannot appear on it or as a separate line - confirmed empirically (2026-07-11, debug-log
+// instrumentation + three real subagent launches): the hook fires and emits correctly, but
+// systemMessage from SubagentStart never renders anywhere. The only way to surface the level
+// BEFORE that banner is the assistant announcing it as plain prose.
+if (process.env.CLAUDE_LEANMODE !== "0" && resolveDial(root) !== "off") {
+  notes.push("leanmode is active for this project - before dispatching any subagent via the " +
+    "Agent tool, resolve its effective level (resolveEffectiveLevel(subagentType, root) from " +
+    "~/.claude/hooks/lib/leanmode-rules.mjs) and announce it in one line right before the tool " +
+    "call. Fold '(leanmode=<level>)' into whatever narration you'd already write for that " +
+    "dispatch (a GSD wave/dispatch line, a Superpowers 'Subagent (type): \"task\"' line) instead " +
+    "of adding a second line; only fall back to a standalone 'Запускаю суб-агента <type> " +
+    "(<model>) в режиме (leanmode=<level>)' line when nothing else narrates that launch. Skip " +
+    "the announcement entirely when the resolved level is off.");
 }
 
 // ---- GSD /init-stack settings gap check -> suggest /init-stack ----
