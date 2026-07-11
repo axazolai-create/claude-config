@@ -33,6 +33,10 @@
 
 ## Communication style (Russian replies)
 - Reply in Russian (see LANGUAGE). Keep replies orthographically correct.
+- **Before sending, scan for stray Latin letters accidentally mixed mid-word into Cyrillic
+  text** (keyboard-layout slip, e.g. «objawление» instead of «объявление») — a word is
+  either fully Cyrillic or fully Latin, never a mix, outside intentional inline English
+  terms covered by the priority-order rule below.
 - **Priority order for any technical term:** natural Russian word → real English term → (never) transliteration.
 - **Prefer the Russian translation** whenever it is unambiguous, no harder to understand, and does NOT turn one word into several. In that case use the Russian word — not a transliteration and not the English term. E.g. `seam` → «стык», `merge` → «слияние», `nested` → «вложенный».
 - **Keep the plain English term (Latin script)** only when translating would lose precision, be ambiguous, or need a multi-word phrase for a single term: `endpoint`, `RSC`, `claim`, `guard`, `payload`, `middleware`, `race condition`.

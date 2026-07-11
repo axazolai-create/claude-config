@@ -461,12 +461,19 @@ Reset a specific project's state (to re-run it) — delete its entry from
   flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
   called as `/init-stack`'s last step — not a registered hook on its own); otherwise `off`.
   Toggle: `CLAUDE_LEANMODE=0`. The hook also emits `systemMessage: "leanmode: <level>"`
-  alongside `additionalContext` — kept in the source in case a future harness version renders
-  it, but empirically (2026-07-11, three real subagent launches) confirmed that
-  `SubagentStart`'s `systemMessage` doesn't show up anywhere today: not on the banner (which
-  the harness draws before hooks run and can't be rewritten regardless), not as a separate
-  line either. The level is actually surfaced in practice through a separate mechanism — see
-  `session-init.mjs` above.
+  alongside `additionalContext` — kept in the source in case the harness renders it.
+  Empirically (2026-07-11, three real subagent launches, debug-log instrumentation)
+  confirmed: in the orchestrator's own thread, `SubagentStart`'s `systemMessage` doesn't show
+  up — not on the banner (which the harness draws before hooks run and can't be rewritten
+  regardless), not as a separate line there either. Independently corroborated at the source:
+  the third-party `ponytail` plugin this design was copied from (see above) — its
+  `ponytail-runtime.js` also emits only `additionalContext` for native Claude Code's
+  `SubagentStart`, no `systemMessage`; its own author evidently doesn't rely on that field
+  there either. The level is surfaced to the orchestrator in practice through a separate
+  mechanism — see `session-init.mjs` above. Separate, not yet re-confirmed via debug-log:
+  one observation showed a line `SubagentStart:<type> says: <message>` inside a backgrounded
+  subagent's own expanded transcript (`↓ to expand`) — plausibly a different render location
+  for `systemMessage` (not the parent thread), not a contradiction of the finding above.
 
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or
