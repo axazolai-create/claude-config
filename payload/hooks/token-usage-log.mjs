@@ -28,6 +28,12 @@
 // the NEXT Stop instead of this one. Not lost, just attributed one turn late. Accepted, same risk
 // class as the lock-staleness assumption already accepted for graphify-global-sync.mjs.
 //
+// `model` is written via lib/token-usage-shared.mjs's normalizeModel() - strips a trailing
+// dated-snapshot suffix ("-YYYYMMDD") so e.g. "claude-haiku-4-5-20251001" is recorded as
+// "claude-haiku-4-5", matching the short aliased ids other models already resolve to
+// (report.mjs's own normalizeModel() applies the same strip at display time for older records
+// captured before this existed).
+//
 // Every record is written to BOTH a per-project log (<root>/.claude/token-usage.jsonl, kept
 // forever, never pruned) and a global cross-project log (~/.claude/state/token-usage.jsonl,
 // pruned per token-usage-prune.mjs's retention rule).
@@ -41,7 +47,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import {
-  safe, writeFile, readJSON, findRoot, projectNameOf,
+  safe, writeFile, readJSON, findRoot, projectNameOf, normalizeModel,
   appendJSONL, readNewJSONLEntries, ensureGitignored,
 } from "./lib/token-usage-shared.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
@@ -152,7 +158,7 @@ if (d.hook_event_name === "SubagentStop") {
     totals.output_tokens += u.output_tokens || 0;
     totals.cache_read_input_tokens += u.cache_read_input_tokens || 0;
     totals.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
-    if (e.message.model) model = e.message.model;
+    if (e.message.model) model = normalizeModel(e.message.model);
     if (e.timestamp) { firstTs = firstTs || e.timestamp; lastTs = e.timestamp; }
   }
 
@@ -214,7 +220,7 @@ if (d.hook_event_name === "Stop") {
     totals.output_tokens += u.output_tokens || 0;
     totals.cache_read_input_tokens += u.cache_read_input_tokens || 0;
     totals.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
-    if (e.message.model) model = e.message.model;
+    if (e.message.model) model = normalizeModel(e.message.model);
   }
 
   // Real user prompt text only: plain string content, not a tool_result array, not an isMeta

@@ -37,21 +37,22 @@ uses). Prints: overall totals, a breakdown by day / by model / by agent, and the
 expensive individual tasks in the window (skipped if no records carry a `cost_usd` - the pricing
 table hasn't refreshed yet, or `CLAUDE_TOKEN_USAGE_COST=0` is set).
 
-When `--global` is set, the same full report (totals + by day/model/agent + top 5) repeats **once
-per project** after the combined one, sorted by that project's total tokens descending - every
-record already carries a `project` marker (basename of the project root); records logged before
-that field existed group under `non-project`.
+When `--global` is set, the leading block is headed `COMBINED` (banner line, same style as the
+per-project headers below it), then the same full report (totals + by day/model/agent + top 5)
+repeats **once per project** under a `project: <name>` header, sorted by that project's total
+tokens descending - every record already carries a `project` marker (basename of the project
+root); records logged before that field existed group under `non-project`.
 
 ## Reporting back
 
 Relay the script's own output - it's already formatted as a plain-text report, don't re-summarize
 it into prose or drop rows. This applies per project block too: when `--global` is set, paste
-**every** per-project section in full (TOTAL + by day + by model + by agent + top 5), same as the
-combined one above it - never collapse a section (e.g. "by agent") into a comma-separated prose
-list just because there are several projects to relay. If the script says "no log found," tell
-the user plainly that nothing has been recorded yet for that scope (a fresh project/machine, or
-the hook has been disabled via `CLAUDE_TOKEN_USAGE_LOG=0`) rather than presenting empty/zero data
-as if it were meaningful.
+**every** block in full - `COMBINED` and each `project: <name>` block alike (TOTAL + by day + by
+model + by agent + top 5) - never collapse a section (e.g. "by agent") into a comma-separated
+prose list just because there are several projects to relay. If the script says "no log found,"
+tell the user plainly that nothing has been recorded yet for that scope (a fresh project/machine,
+or the hook has been disabled via `CLAUDE_TOKEN_USAGE_LOG=0`) rather than presenting empty/zero
+data as if it were meaningful.
 
 If the user asks about the "$" figures specifically, remind them these are a **local best-effort
 estimate** (scraped pricing table, refreshed at most once/day) - not billing-grade, same caveat

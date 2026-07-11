@@ -78,8 +78,13 @@ function add(totals, r) {
   if (typeof r.cost_usd === "number") { totals.cost_usd += r.cost_usd; totals.hasCost = true; }
 }
 
+// Strips a trailing dated-snapshot suffix ("-YYYYMMDD") for display - covers records written
+// before token-usage-log.mjs started normalizing at capture time, e.g.
+// "claude-haiku-4-5-20251001" -> "claude-haiku-4-5".
+function normalizeModel(model) { return model ? model.replace(/-\d{8}$/, "") : model; }
+
 const dayOf = (r) => (r.date || "").slice(0, 10) || "unknown";
-const modelOf = (r) => r.model || "unknown";
+const modelOf = (r) => normalizeModel(r.model) || "unknown";
 const agentOf = (r) => r.agent || "unknown";
 const projectOf = (r) => r.project || "non-project";
 
@@ -138,9 +143,17 @@ function printReport(recs) {
   }
 }
 
+function printSectionHeader(title) {
+  console.log("=".repeat(60));
+  console.log(title);
+  console.log("=".repeat(60));
+  console.log("");
+}
+
 console.log("token-usage report - scope: " + (GLOBAL ? "global" : "project") + ", period: " + PERIOD);
 console.log("log: " + logPath);
 console.log("");
+if (GLOBAL) printSectionHeader("COMBINED");
 printReport(records);
 
 if (GLOBAL) {
@@ -149,10 +162,7 @@ if (GLOBAL) {
   for (const project of projectsByTokens) {
     const recs = records.filter((r) => projectOf(r) === project);
     console.log("");
-    console.log("=".repeat(60));
-    console.log("project: " + project);
-    console.log("=".repeat(60));
-    console.log("");
+    printSectionHeader("project: " + project);
     printReport(recs);
   }
 }
