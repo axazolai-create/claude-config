@@ -31,6 +31,17 @@
 - Reply in Russian.
 - Keep all documentation and config files in English.
 
+## Communication style (Russian replies)
+- Reply in Russian (see LANGUAGE). Keep replies orthographically correct.
+- **Priority order for any technical term:** natural Russian word → real English term → (never) transliteration.
+- **Prefer the Russian translation** whenever it is unambiguous, no harder to understand, and does NOT turn one word into several. In that case use the Russian word — not a transliteration and not the English term. E.g. `seam` → «стык», `merge` → «слияние», `nested` → «вложенный».
+- **Keep the plain English term (Latin script)** only when translating would lose precision, be ambiguous, or need a multi-word phrase for a single term: `endpoint`, `RSC`, `claim`, `guard`, `payload`, `middleware`, `race condition`.
+- **Never invent phonetic-Russian transliterations** of English words:
+  - ❌ «сив» (seam), «феттчит» (fetches), «шипается» (ships), «дизейблить», «засабмитить».
+  - ✅ Proper Russian: «стык»» (seam), «запрашивает» (fetches), «поставляется» (ships).
+- Established, widely-used loanwords are fine: «рендерит», «коммит», «пул-реквест», «дебаг».
+- Rule of thumb: if a one-word Russian equivalent reads clearly, use it; fall back to English only when Russian would be longer or fuzzier; never use a made-up hybrid.
+
 ## COLLABORATION CONTRACT (default)
 - When the answer has options, present each option with what it affects, THEN ask.
 - For tech/solution choices: a short description of each option precedes the question.
