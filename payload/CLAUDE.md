@@ -94,66 +94,27 @@
 
 ## RULES RESOLUTION & STACK MARKERS
 - How rules layer (base -> direction -> cross-cutting) and how the per-project snapshot is
-  built are documented once, in `~/.claude/rules-src/README.md` — see that file rather than
-  duplicating it here. What's active for a project = its `.claude/stack-rules.md`.
-- Stack markers (drive detection and the rebuild fingerprint): pyproject.toml -> Python | package.json -> Node/TS |
-  next.config.* -> Next | nest-cli.json -> Nest | vite.config.* -> React |
-  build.gradle.kts -> Kotlin | plugin.xml -> IntelliJ/Gateway plugin | *.sql -> SQL |
-  *.sh / *.ps1 -> shell | AndroidManifest.xml -> Android (Kotlin) |
-  *.xcodeproj/Info.plist -> iOS (Swift) | pubspec.yaml -> Flutter (Dart) |
-  metro.config.js / app.config.* -> React Native | turbo.json -> Turborepo monorepo |
-  nx.json -> Nx monorepo | bot.ts/bot.py + telegraf/grammy/aiogram/python-telegram-bot ->
-  Telegram bot
+  built are documented once in `~/.claude/rules-src/README.md`. What's active for a project =
+  its `.claude/stack-rules.md`.
+- The file->stack detection markers (which drive detection and the rebuild fingerprint) live
+  in the `stack-markers` skill — invoke it when you need the marker->stack mapping.
 
 # Model Selection Policy
-DEFAULT executor: claude-sonnet-5
-HIGH-ACCURACY / heavy reasoning: claude-opus-4-8
-
-## Use sonnet-5 for
-agentic coding, multi-step tool use, debug on brownfield, sustained tasks, knowledge work,
-high-throughput / latency-sensitive loops.
-
-## Use opus-4-8 for
-high cost-of-error tasks, deep research, complex judgment, large context, parallel agents,
-serious cyber-adjacent work (sonnet-5 weak here).
-Prefer when a wrong answer is expensive to recover from.
-
-## Effort rule
-sonnet-5 @ ExtraHigh ~= opus-4-8 @ medium-high on OSWorld-Verified / BrowseComp.
-If sonnet-5 at high effort stalls or under-delivers on an accuracy-critical task,
-escalate sonnet-5 -> opus-4-8 rather than grinding sonnet-5 further.
-Reserve max-effort sonnet-5 for throughput cases where opus latency/limits are the constraint.
+- DEFAULT executor: claude-sonnet-5. Escalate to claude-opus-4-8 for high cost-of-error /
+  deep reasoning / large context / parallel agents / serious cyber work.
+- Full sonnet-vs-opus routing + the effort rule → the `model-selection-policy` skill.
 
 ## CODEBASE KNOWLEDGE GRAPH (graphify)
-- A cross-project graph of the whole codebase lives at `~/.graphify/global-graph.json`
-  (built via `graphify extract <repo> --global --as <name>`).
-- For architecture / "where is X / what connects X to Y" / cross-repo questions, PREFER querying
-  the graph over grepping many files:
-  `graphify query "<question>" --graph ~/.graphify/global-graph.json`
-  (also `graphify path "A" "B" --graph ...`, `graphify explain "X" --graph ...`).
-- A single project's own graph (if built) is in that project's `graphify-out/` (`graph.json`,
-  `GRAPH_REPORT.md`); prefer the per-project graph for questions scoped to that repo, and the
-  global graph for cross-repo questions. Do not paste large graph dumps; query for the subgraph.
-- Setup/refresh is out of band: `node ~/.claude/bin/graphify-setup.mjs --doctor --build-global <repos...>`.
-- New projects auto-register into the global graph on first session; every later commit
-  refreshes their entry in the background (Claude-driven commits via
-  `hooks/graphify-global-sync.mjs` + a native per-repo `post-commit` hook, so manual/IDE
-  commits and `--amend` are covered). No-op without graphify. Toggle: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
-- `/graphify` (any input to the knowledge graph) → use the installed graphify skill
-  (`~/.claude/skills/graphify/SKILL.md`) before doing anything else.
+- For architecture / "where is X / what connects X to Y" / cross-repo questions PREFER the
+  code graph over grepping: global graph `~/.graphify/global-graph.json`, per-project
+  `graphify-out/`. Query for the subgraph, never paste dumps. Query/path/explain CLI,
+  autosync and setup live in the `graphify` skill — invoke it (`/graphify`) for those.
 
 ## CONTEXT-MODE (tool routing, if active)
-- context-mode (base plugin, see PLUGINS & SKILLS) intercepts `WebFetch` entirely (hard deny +
-  redirect, every call) and nudges `Bash`/`Grep`/`Read`-on-large-files toward its own `ctx_*`
-  MCP tools (`ctx_fetch_and_index`, `ctx_execute`, `ctx_execute_file`, `ctx_batch_execute`,
-  `ctx_search`) so raw tool output stays out of context instead of flooding it. Reach for
-  these PROACTIVELY — don't wait to get denied first, and don't make the user ask each time:
-  - Fetching a URL -> `ctx_fetch_and_index(url, source)` then `ctx_search(queries)`, never `WebFetch`.
-  - Filtering/counting/aggregating command or grep output -> `ctx_execute`/`ctx_batch_execute`,
-    not a raw `Bash` pipeline you intend to read the full output of.
-  - Analyzing/summarizing a large file -> `ctx_execute_file`. `Read` is still correct when the
-    file needs editing (`Edit` needs the exact bytes in context to match against).
-  - If a `ctx_*` tool errors as not-found, it's a deferred schema, not unavailable —
-    `ToolSearch` it once (`select:<tool name>`) and retry; never fall back to the raw tool.
-  - Diagnostics: `ctx doctor` (or `/ctx-doctor`). Session start self-upgrades a stale
-    context-mode in the background (opt out: `CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE=0`).
+- context-mode (base plugin) hard-denies `WebFetch` (use `ctx_fetch_and_index`+`ctx_search`)
+  and nudges Bash/Grep/large-`Read` toward its `ctx_*` MCP tools so raw output stays out of
+  context. Reach for them PROACTIVELY, not after a denial: filter/aggregate command output
+  via `ctx_execute`/`ctx_batch_execute`; summarize large files via `ctx_execute_file` (plain
+  `Read` only when you will `Edit`). If a `ctx_*` tool errors as not-found it's a deferred
+  schema — `ToolSearch` `select:<tool>` once and retry, never fall back to the raw tool.
+  Diagnostics: `/ctx-doctor`.

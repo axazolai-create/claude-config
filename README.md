@@ -182,6 +182,8 @@ notepad bootstrap.ps1; .\bootstrap.ps1
   skills/
     using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Superpowers
     token-usage/SKILL.md                 # /token-usage — сводка по логу расхода токенов
+    stack-markers/SKILL.md               # маппинг файл-маркер->стек, вынесен из CLAUDE.md (см. .claude/_analize/)
+    model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, вынесен из CLAUDE.md
   rules-src/                             # источник правил стека — НЕ автозагружается Claude Code;
                                           #   компилируется в <проект>/.claude/stack-rules.md (см. ниже)
   state/project-init.json                # создаётся в рантайме; список уже инициализированных проектов

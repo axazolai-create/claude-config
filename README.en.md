@@ -188,6 +188,8 @@ So this package does three things:
   skills/
     using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
     token-usage/SKILL.md                 # /token-usage — token spend log summary
+    stack-markers/SKILL.md               # file-marker->stack mapping, split out of CLAUDE.md (see .claude/_analize/)
+    model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, split out of CLAUDE.md
   rules-src/                             # stack rule sources — NOT auto-loaded by Claude Code;
                                           #   compiled into <project>/.claude/stack-rules.md (see below)
   state/project-init.json                # created at runtime; list of already-initialized projects
