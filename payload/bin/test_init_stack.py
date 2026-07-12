@@ -56,6 +56,18 @@ class RealTemplatesTests(unittest.TestCase):
         self.assertNotIn("typescript-lsp@claude-plugins-official", ids)
         self.assertNotIn("expo@claude-plugins-official", ids)
 
+    def test_python_bare_stack_reuses_backend_python_base(self):
+        entries, _ = init_stack.gather(["python"])
+        ids = {e["id"] for e in entries if e["id"]}
+        self.assertIn("pyright-lsp@claude-plugins-official", ids)     # backend/python/_base.json, as leaf
+        self.assertIn("context7@claude-plugins-official", ids)        # root _base universal
+
+    def test_node_bare_stack_reuses_backend_node_base(self):
+        entries, _ = init_stack.gather(["node"])
+        ids = {e["id"] for e in entries if e["id"]}
+        self.assertIn("typescript-lsp@claude-plugins-official", ids)  # backend/node/_base.json, as leaf
+        self.assertIn("context7@claude-plugins-official", ids)        # root _base universal
+
     def test_no_template_for_unknown_stack(self):
         entries, _ = init_stack.gather(["not-a-real-stack"])
         self.assertEqual(entries[0]["state"], "no_template")

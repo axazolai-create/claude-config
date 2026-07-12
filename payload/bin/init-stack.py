@@ -155,6 +155,11 @@ def detect() -> list[str]:
         found.append("react-native")
     elif "react" in node:
         found.append("react")
+    # Bare "node" stack: package.json exists but no frontend/backend framework matched above -
+    # a plain Node/TS script, library, or unopinionated backend. Mirrors "sql": "DB/_base.json"
+    # (see STACK_PATHS) - reuses the direction's own _base.json as a framework-less leaf.
+    if node and not any(s in found for s in ("nest", "next", "react", "react-native")):
+        found.append("node")
     py = _py_requirements()
     if "django" in py or (ROOT / "manage.py").exists():
         found.append("django")
@@ -186,6 +191,11 @@ def detect() -> list[str]:
         found.append("telegram-node")
     if any(lib in py for lib in ("aiogram", "python-telegram-bot", "pytelegrambotapi")):
         found.append("telegram-python")
+    # Bare "python" stack: pyproject.toml/requirements*.txt exists but no framework or bot lib
+    # matched above - a plain script, library, or unopinionated backend. Same fallback pattern
+    # as "node" above.
+    if py and not any(s in found for s in ("django", "fastapi", "flask", "telegram-python")):
+        found.append("python")
     if _glob_any("*.sql"):
         found.append("sql")
     seen: set[str] = set()
@@ -289,9 +299,11 @@ STACK_PATHS: dict[str, str] = {
     "next": "frontend/next.json",
     "react-native": "frontend/react-native.json",
     "nest": "backend/node/nest.json",
+    "node": "backend/node/_base.json",
     "django": "backend/python/django.json",
     "fastapi": "backend/python/fastapi.json",
     "flask": "backend/python/flask.json",
+    "python": "backend/python/_base.json",
     "android": "mobile/android.json",
     "swift": "mobile/swift.json",
     "dart": "mobile/dart.json",

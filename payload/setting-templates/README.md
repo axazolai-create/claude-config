@@ -24,10 +24,10 @@ setting-templates/
   backend/
     _base.json                 # empty - no plugin shared between node/python today
     node/
-      _base.json                # typescript-lsp
+      _base.json                # typescript-lsp; also the "node" stack's own leaf (no framework)
       nest.json
     python/
-      _base.json                 # pyright-lsp
+      _base.json                 # pyright-lsp; also the "python" stack's own leaf (no framework)
       django.json
       fastapi.json
       flask.json
@@ -46,14 +46,26 @@ setting-templates/
     python.json                   # extends: ["backend/python/_base.json"] (cross-branch)
 ```
 
-`/init-stack` detects the project's stack(s) (`react`, `next`, `react-native`, `nest`, `django`,
-`fastapi`, `flask`, `android`, `swift`, `dart`, `kotlin`, `sql`, `turbo`, `nx`, `telegram-node`,
-`telegram-python`), looks up each one's file via the `STACK_PATHS` table in `bin/init-stack.py`,
+`/init-stack` detects the project's stack(s) (`react`, `next`, `react-native`, `nest`, `node`,
+`django`, `fastapi`, `flask`, `python`, `android`, `swift`, `dart`, `kotlin`, `sql`, `turbo`, `nx`,
+`telegram-node`, `telegram-python`), looks up each one's file via the `STACK_PATHS` table in
+`bin/init-stack.py`,
 resolves its full inheritance chain, checks each declared plugin, and merges the `merge` block
 into the project's `.claude/settings.json`. It also surfaces any `skills[]` a template declares
 (npx-installed Agent Skills) and, in `-i`, offers to `npx skills add` the missing ones - skills are
 opt-in (never auto-installed) and have no enable/disable, so their present-check is by directory
 name and approximate (the install command is the source of truth; slugs drift - verify at install).
+
+### Framework-less fallback stacks
+
+`node` and `python` fire when the language is present (`package.json`, or `pyproject.toml`/
+`requirements*.txt`) but no more specific framework matched (no `nest`/`next`/`react`/
+`react-native`, no `django`/`fastapi`/`flask`/`telegram-python`) - a plain script, library, or
+unopinionated backend. Both map straight to their direction's own `_base.json`
+(`backend/node/_base.json`, `backend/python/_base.json`) instead of a dedicated leaf file,
+same as `sql` -> `DB/_base.json` — there is no framework-specific plugin to add on top, only the
+language server the `_base.json` already declares. A framework stack and its bare fallback never
+fire together (e.g. a Django project detects `django` only, not `django` + `python`).
 
 ## Inheritance: vertical + explicit `extends` + `pick`
 
