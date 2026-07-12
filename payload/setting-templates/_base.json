@@ -1,6 +1,6 @@
 {
   "stack": "root",
-  "description": "Root extension point, inherited by every stack. Universal, low-footprint plugins: up-to-date library docs (Context7) and active security review (Security Guidance). Semgrep + Serena are declared but OPT-IN (not auto-enabled) to avoid always-on bloat.",
+  "description": "Root extension point, inherited by every stack. Universal, low-footprint plugins: up-to-date library docs (Context7) and active security review (Security Guidance). Serena is declared but OPT-IN (not auto-enabled) to avoid always-on bloat.",
   "merge": {
     "enabledPlugins": {
       "context7@claude-plugins-official": true,
@@ -44,25 +44,6 @@
         "cmd": "claude plugin install security-guidance@claude-plugins-official --scope project",
         "bash": "claude plugin install security-guidance@claude-plugins-official --scope project",
         "slash": "/plugin install security-guidance@claude-plugins-official"
-      }
-    },
-    {
-      "id": "semgrep@claude-plugins-official",
-      "description": "VERIFIED 2026-07: this is 'Semgrep Guardian' (source: github.com/semgrep/mcp-marketplace), NOT a local-only wrapper around the OSS semgrep CLI - it is a closed-source hook binary + MCP server ('guardian') that registers on SessionStart (async), PreToolUse/PostToolUse (Write|Edit|Bash), and UserPromptSubmit. Its own README's install steps end with 'ask claude to login to semgrep, using the guardian mcp' - a Semgrep AppSec Platform (cloud) login is part of normal setup, opening a browser auth flow (observed: fires again on every terminal/session restart via the SessionStart hook). No documented local/offline mode exists in its manifest. OPT-IN (not auto-enabled) - if you want a no-cloud-login setup, do NOT enable this; use rules/security.md + security-guidance@claude-plugins-official instead (both fully local). Only enable if cloud-connected guardrails + the login are acceptable.",
-      "check": {
-        "installed_file": "~/.claude/plugins/installed_plugins.json",
-        "cmd": "claude plugin list",
-        "bash": "jq -e '.plugins[\"semgrep@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
-        "slash": "/plugin list"
-      },
-      "install": {
-        "marketplace_add": {
-          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
-          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
-        },
-        "cmd": "claude plugin install semgrep@claude-plugins-official --scope project",
-        "bash": "claude plugin install semgrep@claude-plugins-official --scope project",
-        "slash": "/plugin install semgrep@claude-plugins-official"
       }
     },
     {

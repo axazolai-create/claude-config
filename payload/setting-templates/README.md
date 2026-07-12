@@ -152,9 +152,7 @@ fire together (e.g. a Django project detects `django` only, not `django` + `pyth
   manifest: `hooks/hooks.json` (does it register hooks that run on their own?), `.mcp.json`
   (a known local OSS binary, or a vendor's closed one?), and its README's install steps. The
   catalog `source` field is a tell: a bundled `./plugins/<name>` path is usually safe; an
-  external `git-subdir`/`url` source needs its manifest checked. (Example: semgrep@
-  claude-plugins-official is really "Semgrep Guardian" — a closed hook+MCP binary that fires
-  a browser login on every session restart, not a local OSS engine.)
+  external `git-subdir`/`url` source needs its manifest checked.
 - A marketplace's own `.gitmodules` can force SSH even when `marketplace_add` clones over
   HTTPS: `git submodule` always honors the literal submodule URL, so `git@github.com:...`
   URLs in the marketplace repo's `.gitmodules` fail the whole add on a machine without a
