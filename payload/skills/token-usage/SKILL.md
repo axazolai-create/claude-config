@@ -1,6 +1,6 @@
 ---
 name: token-usage
-description: Reports token/cost usage recorded by the token-usage-log hook (main-agent turns and subagent calls, per project + a global cross-project aggregate). Use whenever the user runs /token-usage, or asks things like "how many tokens did this session use", "what's my spend today/this week/this month", "which agent/model cost the most", "show token usage across all projects". Reads pre-recorded `.claude/token-usage.jsonl` (per-project) or `~/.claude/state/token-usage.jsonl` (global) - it does not itself measure anything live, it summarizes what the hook already logged. If neither log has any records yet, say so plainly rather than guessing at numbers.
+description: Reports token/cost usage recorded by the token-usage-log hook (per project + a --global cross-project aggregate). Use when the user runs /token-usage or asks "how many tokens did this session use", "what's my spend today/this week/this month", "which agent/model cost the most", "token usage across all projects". Summarizes pre-recorded logs only - nothing is measured live; if no records exist yet, say so plainly instead of guessing at numbers.
 ---
 
 # Token Usage Report

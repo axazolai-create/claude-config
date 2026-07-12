@@ -1,18 +1,9 @@
-// Retention for the GLOBAL token-usage log only (~/.claude/state/token-usage.jsonl).
-// Per-project `.claude/token-usage.jsonl` is never pruned - this module is never called on it.
-//
-// A record is KEPT if it satisfies at least one of three independent conditions (their union);
-// everything else is deleted. See docs/superpowers/specs/2026-07-08-token-usage-log-design.md
-// section H for the full rationale and worked examples this was validated against:
-//   1. 3-month window: record.date >= lastDate - 3 calendar months, where lastDate is the max
-//      `date` across all CURRENT records (anchored to the log's own newest entry, not "now").
-//   2. Penultimate-day floor: the second-most-recent distinct UTC calendar day with any
-//      activity (however old) is always kept in full. Stops a long-dormant-then-resumed log
-//      from losing all trace of "the last session before this one." Naturally becomes a no-op
-//      (redundant with rule 1) under dense recent activity - it only matters exactly when
-//      there's a real gap, which is what it's for.
-//   3. Count floor: the 10 most recent records by date are always kept, regardless of age. On a
-//      log with <= 10 records total this alone keeps everything.
+// Retention for the GLOBAL token-usage log only (~/.claude/state/token-usage.jsonl);
+// per-project `.claude/token-usage.jsonl` is never pruned. Runs at most once per 24h
+// (PRUNE_THROTTLE_MS below; disable with CLAUDE_TOKEN_USAGE_PRUNE=0). A record is KEPT if it
+// matches ANY of: (1) within 3 calendar months of the log's own newest entry, (2) on the
+// penultimate distinct UTC activity day, or (3) among the 10 most recent records. Full
+// rationale + worked examples: docs/superpowers/specs/2026-07-08-token-usage-log-design.md §H.
 import { existsSync } from "node:fs";
 import { safe, writeFile, readJSON, readJSONLRecords } from "./token-usage-shared.mjs";
 

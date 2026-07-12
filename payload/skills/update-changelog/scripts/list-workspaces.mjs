@@ -2,18 +2,10 @@
 // Enumerates monorepo workspace directories from the repo root. Used by the Monorepo mode
 // section of SKILL.md to find candidate parts (web/backend/mobile/...) before running
 // detect-project.mjs / write-changelog.mjs against each one with --root.
-//
-// Detection order (first match wins — these tools normally sit on top of one workspace
-// list, not several conflicting ones):
-//   1. pnpm-workspace.yaml            "packages:" list (simple YAML — hand-parsed, no dep)
-//   2. package.json "workspaces"      array form, or { packages: [...] } object form
-//   3. turbo.json / nx.json present, but neither of the above found -> conventional
-//      fallback globs: apps/*, packages/*  (only directories that actually exist)
-//
-// A glob entry is only expanded if it ends in "/*" (list immediate subdirectories) or names
-// an exact existing directory — this deliberately does NOT implement full glob syntax
-// (no "**", no brace expansion) since real-world workspace lists are almost always one of
-// those two shapes. Prints a single JSON object to stdout.
+// Detection order (first match wins): pnpm-workspace.yaml "packages:" -> package.json
+// "workspaces" (array or { packages: [...] }) -> turbo.json/nx.json present -> conventional
+// fallback globs apps/*, packages/*. Globs are prefix-matched only ("dir/*" lists immediate
+// subdirectories, otherwise an exact directory). Prints a single JSON object to stdout.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -103,4 +95,4 @@ console.log(JSON.stringify({
    detectionSource: source,
    workspaceGlobsUsed: workspaceGlobs ?? [],
    workspaces,
-}, null, 2))
+}))

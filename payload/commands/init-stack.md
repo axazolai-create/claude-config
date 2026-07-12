@@ -83,16 +83,15 @@ with `Edit`, preserving every other key (this is a plain JSON merge, not a full-
 never drop sibling keys under `workflow` or elsewhere). On decline, write nothing; gsd-core's
 own auto-detect remains the effective behavior.
 
-## 6. `fallow` devDependency proposal (only if `.planning/config.json` exists AND a Node stack
-## was detected in step 1 - i.e. `stacks` contains any of `react`/`next`/`react-native`/
-## `nest`/`turbo`/`nx`/`telegram-node`, or plain `package.json` exists at repo root)
-My personal default config (`~/.claude/hooks/gsd-config-patch.mjs`) sets
-`code_quality.fallow.enabled: true` whenever a project has a root `package.json`, on the
-assumption that `fallow` (an external structural-analysis binary - detects unused exports,
-unused files, circular dependencies, and duplicate code blocks) gets installed as a
-devDependency here. gsd-core's own code review workflow FAILS OUTRIGHT (not a graceful skip)
-if `code_quality.fallow.enabled` is `true` but the binary can't be resolved - so this step
-closes that gap at project-setup time rather than leaving it to surface as a review-time error.
+## 6. `fallow` devDependency proposal (GSD + Node only)
+Only if `.planning/config.json` exists AND step 1 detected a Node stack (`stacks` contains
+any of `react`/`next`/`react-native`/`nest`/`turbo`/`nx`/`telegram-node`, or a plain
+`package.json` exists at repo root).
+
+`gsd-config-patch.mjs` defaults `code_quality.fallow.enabled: true` for any project with a
+root `package.json`, and gsd-core's code review FAILS OUTRIGHT (not a graceful skip) when
+that flag is true but the `fallow` binary (external structural-analysis tool) can't be
+resolved. This step closes that gap at setup time instead of at review time.
 
 **Check first** whether it's already installed - skip this step entirely if either is true:
 ```bash
@@ -108,18 +107,11 @@ WORKING DIRECTORY when `/gsd-code-review`/`/gsd-ship` runs - which is the repo r
   `pnpm add -D fallow -w`
 - Otherwise (plain single-package Node repo): `pnpm add -D fallow`
 
-Ask via `AskUserQuestion` before running anything (mirrors this file's own rule for step 2 -
-my on-screen confirmation IS the OK to install):
-```text
-AskUserQuestion([{
-  question: "Install `fallow` as a devDependency so code_quality.fallow (already enabled in your default GSD config) actually works here?",
-  header: "fallow",
-  options: [
-    { label: "Yes - install", description: "<pnpm add -D fallow -w | pnpm add -D fallow, based on monorepo detection above>" },
-    { label: "No - leave fallow.enabled unset for this project", description: "Sets code_quality.fallow.enabled: false in .planning/config.json via Edit, overriding my personal default for this repo only, so review doesn't hard-fail here." }
-  ]
-}])
-```
+Ask via `AskUserQuestion` before running anything (my on-screen confirmation IS the OK to
+install; header "fallow"): install `fallow` as a devDependency so `code_quality.fallow`
+(already enabled by the personal GSD default) works here? Options: **Yes - install** (the
+pnpm command chosen above) / **No** (explicitly set `code_quality.fallow.enabled: false`
+for this repo so review doesn't hard-fail).
 On accept: run the install command, then confirm it landed in the right `package.json`
 (root, not a nested workspace package) by checking `devDependencies.fallow` there.
 On decline: `Edit` `.planning/config.json` to set `code_quality.fallow.enabled: false`
@@ -127,8 +119,6 @@ explicitly (don't leave it to silently inherit `true` from the personal default 
 later) - preserve every other key under `code_quality` and elsewhere.
 
 ## 7. Mark leanmode dial default (always, no gate)
-Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (no output expected, always safe to
-re-run). This lets leanmode's project dial default to `full` for this project from now on,
-instead of staying `off` until someone explicitly runs `/leanmode` — see
-`docs/superpowers/specs/2026-07-10-leanmode-design.md` for why the dial is gated on
-`/init-stack` having run at all.
+Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
+project dial default to `full` for this project instead of staying `off` (rationale:
+`docs/superpowers/specs/2026-07-10-leanmode-design.md`).

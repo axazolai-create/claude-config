@@ -43,8 +43,7 @@ if (recent) {
       console.log(JSON.stringify({ error: `Starting commit not found: ${since}` }))
       process.exit(1)
    }
-   // Full history reachable from branch tip after `since`, in first-commit-first order —
-   // deliberately NOT --first-parent, so commits brought in by a regular (non-squash) merge
+   // Deliberately NOT --first-parent: commits brought in by a regular (non-squash) merge
    // are included individually rather than collapsed into the merge commit.
    logArgs = ['log', '--reverse', `${since}..${branch}`, `--pretty=format:${format}`]
 } else {
@@ -63,4 +62,4 @@ const commits = raw
       return { hash, subject: subject ?? '', body: (body ?? '').trim() }
    })
 
-console.log(JSON.stringify(commits, null, 2))
+console.log(JSON.stringify(commits))

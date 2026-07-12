@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 // Lists changed file paths per commit in a range — used in Monorepo mode to attribute each
 // commit to the workspace(s) it touched (by matching paths against each workspace's relDir
-// prefix, from list-workspaces.mjs). Kept as a separate script from list-commits.mjs rather
-// than adding --name-only there: git interleaves the file list AFTER the pretty-printed line
-// and BEFORE the next commit, which would collide with the existing \x1e record-separator
-// parsing in list-commits.mjs. Decoupling avoids touching a script the single-project skill
-// already depends on.
+// prefix, from list-workspaces.mjs). Separate script from list-commits.mjs because git's
+// --name-only output would collide with that script's \x1e record-separator parsing.
 //
 // Same two range modes as list-commits.mjs:
 //   --branch <name> --since <hash>   full history reachable from <name> after <hash>
@@ -54,8 +51,7 @@ if (recent) {
       console.log(JSON.stringify({ error: `Starting commit not found: ${since}` }))
       process.exit(1)
    }
-   // Deliberately NOT --first-parent — must match list-commits.mjs's own history walk so
-   // hash keys line up with what that script returned for the same range.
+   // same history walk as list-commits.mjs (NOT --first-parent) so hash keys line up
    logArgs = ['log', '--reverse', `${since}..${branch}`, '--name-only', `--pretty=format:${format}`]
 } else {
    console.error('Usage: list-changed-files.mjs --branch <name> (--since <hash> | --recent <n>)')
@@ -80,4 +76,4 @@ for (const part of parts) {
    result[hash] = files
 }
 
-console.log(JSON.stringify(result, null, 2))
+console.log(JSON.stringify(result))

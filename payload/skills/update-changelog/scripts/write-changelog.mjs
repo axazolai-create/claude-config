@@ -4,11 +4,7 @@
 // version.json to the final version. Never touches git itself — the calling skill stages
 // and commits exactly these files afterward (see SKILL.md step 6).
 //
-// Input file shape (--entries-file <path>):
-// {
-//   "entries": [ { "version": "v0.3.5", "changes": ["feat: ..."] }, ... ],  // newest-first
-//   "finalVersion": "0.3.5"                                                // no "v" prefix
-// }
+// --entries-file: { entries: [{version:'vX.Y.Z', changes:[...]}...] newest-first, finalVersion:'X.Y.Z' (no v) }
 //
 // --root <path> (optional, default process.cwd()): write into a specific directory instead
 // of cwd. Added for Monorepo mode (SKILL.md) — called once per destination workspace, each
@@ -85,4 +81,4 @@ console.log(JSON.stringify({
    packageJsonUpdated: true,
    versionJsonPath: versionJsonUpdated ? versionJsonPath : null,
    versionJsonUpdated,
-}, null, 2))
+}))

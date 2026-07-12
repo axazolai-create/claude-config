@@ -1,25 +1,13 @@
 #!/usr/bin/env node
-// Standalone, self-contained (no sibling imports) - spawned detached via `node <path>`, same
-// pattern as hooks/lib/graphify-global-sync-run.mjs. Fetches Anthropic's public pricing docs
-// page, parses the "Model pricing" HTML table, and writes ~/.claude/state/model-pricing.json.
-//
-// Best-effort scraping: there is NO official pricing API, so this depends on the docs page's
-// current HTML structure (a plain <table> with <thead>/<tbody>/<tr>/<td>, verified 2026-07-08).
-// If Anthropic changes that structure, parsing can silently return fewer rows - the
-// MIN_EXPECTED_MODELS guard below turns that into a loud skip (existing file untouched) instead
-// of writing a corrupt/partial price table. See RISK-TOKENLOG-001 in RISK_REGISTER.md.
-//
-// Model name -> price-table key: the page lists human names ("Claude Sonnet 5", "Claude Opus
-// 4.8"); slugify() turns those into the SAME "claude-<family>-<version>" prefix convention as
-// real API model ids (e.g. "claude-sonnet-4-5", "claude-haiku-4-5-20251001"). token-usage-log.mjs
-// looks up cost by PREFIX match (longest prefix wins), not exact id match, so a dated suffix on
-// the real resolved model id still matches without this file needing to know the exact date.
-//
-// The Sonnet 5 row currently appears twice on the page (introductory pricing "through August 31,
-// 2026" vs. the price starting after that date) - both slugify to the same prefix, and the FIRST
-// occurrence in table order wins (see `seen` below), which is always today's active price. This
-// is self-updating: whenever Anthropic reorders/removes the introductory row after the cutover,
-// a re-scrape just picks up whatever row is first at that time.
+// Standalone, self-contained (no sibling imports) - spawned detached by token-usage-log.mjs
+// (throttled to once per 24h; skipped when CLAUDE_TOKEN_USAGE_COST=0). Fetches Anthropic's
+// public pricing docs page, parses the "Model pricing" HTML table, and writes
+// ~/.claude/state/model-pricing.json. Best-effort scraping (no official pricing API); the
+// MIN_EXPECTED_MODELS guard below turns a silent parse break into a loud skip that leaves the
+// existing file untouched (RISK-TOKENLOG-001). Model names are slugified to the same
+// "claude-<family>-<version>" prefix convention as real API model ids; token-usage-log.mjs
+// looks up cost by longest-prefix match, so dated id suffixes still match. Full design:
+// docs/superpowers/specs/2026-07-08-token-usage-log-design.md.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";

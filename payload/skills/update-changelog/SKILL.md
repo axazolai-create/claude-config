@@ -1,6 +1,6 @@
 ---
 name: update-changelog
-description: Backfills a project's changelog.json from git history — turns a range of commits into human-readable, Russian, end-user-facing changelog entries with one patch version bump per entry. Use this whenever the user runs /update-changelog, asks to "update the changelog", "generate changelog entries from commits", "bump the version and changelog", or wants git history turned into release notes. Applies to any Node-based project with a user-facing frontend surface (a website, a mobile app, or a bot's webapp) that already uses (or wants) the `{version, changes[]}` changelog.json format — single project or monorepo. In a monorepo (web/backend/mobile, etc.) it also maintains a single date-sorted aggregate cross-part feed (`{version, name, date, changes[]}` entries in one configured file, each tagged with the part's name) — see "Monorepo mode". Configuration lives in a committed `.changelog.config.json` (aggregate file location + part-name map). Runs on demand, or via an enqueue-then-drain auto-trigger: a post-commit hook queues commit hashes and `/update-changelog --drain` turns the queue into entries. Do not use for generic CHANGELOG.md / Keep-a-Changelog style projects — this format targets a JSON changelog consumed by a frontend renderer.
+description: Backfills a project's changelog.json from git history — commits become Russian, end-user-facing entries, one patch version bump per entry. Use when the user runs /update-changelog (incl. --drain), asks to "update the changelog", "generate changelog entries from commits", "bump the version and changelog", or wants git history turned into release notes. For Node projects with a user-facing frontend using the {version, changes[]} changelog.json format — single project or monorepo (per-part changelogs plus one aggregate cross-part feed; config in .changelog.config.json). Not for generic CHANGELOG.md / Keep-a-Changelog projects.
 ---
 
 # Update Changelog
@@ -45,7 +45,7 @@ Ask the user two things before touching any commits — never guess these:
    pick, not a good fit for AskUserQuestion's fixed options — ask conversationally.
 
 If the range turns out to contain zero commits after the chosen starting point, say so and
-stop — don't touch any file (spec step 8).
+stop — don't touch any file.
 
 ## 2. Gather the commit range
 
@@ -55,9 +55,8 @@ node .claude/skills/update-changelog/scripts/list-commits.mjs --branch <branch> 
 
 Returns oldest-first JSON: `[{ hash, subject, body }, ...]`. This walks **full history**
 reachable from the branch tip after `since` — including commits brought in through a regular
-(non-squash) merge, not just the first-parent line. That matches how this repo actually
-merges feature work (see `2ac2cdd` "Merge branch 'ai-redisign-pr' into dev", which alone
-carries ~30 commits).
+(non-squash) merge, not just the first-parent line (a single regular merge can carry
+dozens of real commits).
 
 ## 3. Editorial pass — the actual work
 
@@ -72,13 +71,11 @@ Ask: *would a shop-floor operator using the finished app ever notice this?* A UI
 new capability, a fixed bug, a changed data behavior — yes. Repo housekeeping, planning
 documents, reference-file syncs, internal tooling, config-only changes, merge commits — no.
 
-Skip anything that fails this test (spec step 7). Concrete examples from this repo's own
-history:
-- `docs(quick-260630-p0f): storage GetReleaseZones migration plan/summary/verification` →
-  skip (GSD planning artifact, zero app effect)
-- `chore(reference): sync swagger.json with backend build 2026.06.30 17:54` → skip (internal
-  API contract sync, not a shipped change by itself)
-- `Merge branch 'ai-redisign-pr' into dev`, `pre merge` → skip (git plumbing, no content)
+Skip anything that fails this test. Examples:
+- `docs(...)`: GSD planning artifacts (plan/summary/verification) → skip (zero app effect)
+- `chore(reference): sync swagger.json with backend build` → skip (internal API contract
+  sync, not a shipped change by itself)
+- merge commits, `pre merge` → skip (git plumbing, no content)
 - `style(menu): remove button rounding in side nav` → **keep** (visible UI change)
 - `fix(storage): render releases with null or unmatched zoneId in "Без зоны" group` →
   **keep** (fixes something the operator would have seen break)
@@ -86,9 +83,8 @@ history:
 ### 3.2 Strip before rewriting
 
 Before composing the Russian sentence, mentally discard from the source commit:
-- Any mention of AI, Claude, or GSD — including commit trailers like
-  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`, which show up in
-  this repo's commit bodies and must never leak into the changelog.
+- Any mention of AI, Claude, or GSD — including `Co-Authored-By: Claude ...` commit
+  trailers; they must never leak into the changelog.
 - GSD scope/decision identifiers: phase numbers (`16-01`), quick-task ids (`quick-260630-p0f`),
   decision codes (`D-05`, `DKP-02`), references to `PLAN.md` / `STATE.md` / `ROADMAP.md` /
   "checkpoint" / "human-verify".
@@ -124,9 +120,8 @@ conventional-commit type accordingly:
   concise, capitalized like a sentence, ends with a period.
 - `changes[1..]` (optional) — at most 1–2 more plain Russian sentences (**no prefix**) pulled
   from the commit body, only if they add genuinely new information beyond the title, after the
-  same stripping pass. Most commits will end up with just `changes[0]` — that matches this
-  project's existing convention (single-line entries are the norm, extra bullets are the
-  exception).
+  same stripping pass. Most commits will end up with just `changes[0]` — single-line
+  entries are the norm, extra bullets the exception.
 
 **Worked example** (illustrative):
 
@@ -152,12 +147,11 @@ non-event, not something the operator experiences).
 
 ### 3.5 If no sentence can be formed
 
-Skip the commit — no entry, no version bump for it (spec step 7). **Exception:** the very
+Skip the commit — no entry, no version bump for it. **Exception:** the very
 last commit in the range must always be accounted for, even if it's unparseable on its own or
 the last three commits in the range are all meaningless together. In that case do **not**
-write a changelog entry for it — a line that only says "nothing worth mentioning happened" is
-worse than no line, and it's exactly the kind of noise the "Незначительные правки"/
-"Незначительные изменения" filler used to add. Instead, consume a version number for it
+write a changelog entry for it — a line that only says "nothing worth mentioning happened"
+is worse than no line. Instead, consume a version number for it
 **silently**: bump the patch component by 1 with no matching entry in `changes[]`. This still
 guarantees the version written to `version.json`/`package.json` reflects the true tip of the
 range, without cluttering the visible log. See step 4 for how this interacts with
@@ -168,8 +162,7 @@ range, without cluttering the visible log. See step 4 for how this interacts wit
 Only commits that survive step 3 consume a version number — skipped commits don't bump
 anything. Starting from `baselineVersion` (e.g. `0.3.0`), increment the **patch** component by
 exactly 1 per surviving entry, in commit order: `0.3.1`, `0.3.2`, `0.3.3`, ... Never touch
-major/minor regardless of commit type — that matches your project's actual version history
-(every commit from v0.2.23 onward is a flat patch increment, feat and fix alike).
+major/minor regardless of commit type.
 
 The silent trailing bump from step 3.5 (unparseable tail, no entry written) also consumes one
 patch version, on top of the last real entry. `finalVersion` — the number written to
@@ -202,17 +195,17 @@ node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file 
 ```
 
 This prepends the entries to `changelog.json` (creating it at the repo root if it doesn't
-exist anywhere yet — spec step 1), updates `package.json`'s `version` field in place (regex
-replace, doesn't reformat the rest of the file), and rewrites `version.json` if the project
-has one — all without the `v` prefix in those two files, matching your project's existing
-convention (`changelog.json` uses `"v0.3.0"`, `package.json`/`version.json` use `"0.3.0"`).
+exist anywhere yet), updates `package.json`'s `version` field in place (regex replace,
+doesn't reformat the rest of the file), and rewrites `version.json` if the project has
+one — all without the `v` prefix in those two files (`changelog.json` uses `"v0.3.0"`,
+`package.json`/`version.json` use `"0.3.0"`).
 
 ## 6. Commit
 
 Stage **exactly** the files `write-changelog.mjs` reported touching (`changelogPath`,
-`packageJsonPath`, and `versionJsonPath` when non-null) — never `git add -A` / `git add .`.
-This repo routinely has unrelated work-in-progress changes sitting in the tree, and this
-skill must not sweep them into its commit.
+`packageJsonPath`, and `versionJsonPath` when non-null) — never `git add -A` / `git add .` —
+the tree may hold unrelated work-in-progress changes, and this skill must not sweep them
+into its commit.
 
 ```
 git add <changelogPath> <packageJsonPath> [<versionJsonPath>]
@@ -220,8 +213,8 @@ git commit -m "v<finalVersion>"
 ```
 
 `finalVersion` is the same value from the scratch file (step 5) — with the `v` prefix and
-nothing else in the message, matching your project's existing version-bump commits (e.g.
-`v0.3.14`). Don't add a body, don't mention the changelog contents, don't add trailers.
+nothing else in the message. Don't add a body, don't mention the changelog contents, don't
+add trailers.
 
 ## 7. Report back
 
@@ -268,7 +261,7 @@ For each commit, match its changed file paths against each workspace's `relDir` 
 - No changed path falls under any workspace's `relDir` (root-level tooling, shared
   `packages/*` outside the app dirs, CI config, root `README`) → there is no home part. A
   no-home commit gets **no entry in any part** — it is skipped even if it would pass the
-  meaningfulness test (§3.1); there is no cross-part fan-out (see §8 of DESIGN.md). Most
+  meaningfulness test (§3.1); there is no cross-part fan-out. Most
   root-level commits fail §3.1 and are skipped anyway, same as today.
 
 ### M4. Home entry — unchanged
@@ -314,8 +307,8 @@ node .claude/skills/update-changelog/scripts/write-aggregate.mjs \
 
 `aggregatePath` comes from `.changelog.config.json` (`aggregatePath(config)`); the file is
 upserted (key `name|version`, last write wins) and re-sorted by `date` descending on every
-run. If there is no config or it defines no aggregate, skip this step with a warning
-(`R-CL-05`) — per-part changelogs still work without it.
+run. If there is no config or it defines no aggregate, skip this step with a warning —
+per-part changelogs still work without it.
 
 ### M8. Commit — one combined commit is fine
 
@@ -357,14 +350,14 @@ Idempotent; installs three things:
 - a `post-commit` hook (appended, preserving any existing hook) that enqueues `HEAD` into
   `.claude/changelog-queue` — but **skips** while a drain lock is held and skips commits whose
   message starts `релиз:`/`патч:` (the drain's own bump commits), so the drain can never
-  re-trigger itself (`R-CL-01`);
+  re-trigger itself;
 - `.changelog.config.json` (committed) with the aggregate location + part-name map, if absent;
 - `.gitignore` entries for `.claude/changelog-queue` and `.claude/changelog.lock`.
 
 ### Drain (`/update-changelog --drain`)
 
 1. `node scripts/queue.mjs lock --root <root>` — take the lock (TTL 15 min; a stale lock from
-   a crashed drain is auto-cleared, `R-CL-04`).
+   a crashed drain is auto-cleared).
 2. `readQueue` the pending hashes.
 3. For each hash **oldest → newest**, run the §3 editorial pass in single-commit semantics:
    a commit that passes the meaningfulness test → one entry + one patch bump for its home
@@ -373,7 +366,7 @@ Idempotent; installs three things:
    bump is a *range-end* guarantee only — it must **never** fire per-commit here, or the
    version would bump on every no-op commit.
 4. `clearHashes` **only** the hashes actually processed (append-only queue; unprocessed hashes
-   survive a partial run — `R-CL-04`).
+   survive a partial run).
 5. Compose **one** bump commit per part, labelled by `classify-bump.mjs` (§6.2): patch-only →
    `патч:`, a major/minor increase → `релиз:`. One line per part, e.g.
    `патч: сайт v0.4.7, сервер v1.9.2`. Stage exactly the touched files (per-part changelog +
@@ -395,4 +388,4 @@ claude -p "/update-changelog --drain"
 ```
 
 drains the **whole queue in one batch** (one model invocation, not one per commit — keeps
-cost/rate pressure bounded, `R-CL-02`). Keep this entrypoint opt-in.
+cost/rate pressure bounded). Keep this entrypoint opt-in.

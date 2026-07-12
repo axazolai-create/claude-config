@@ -58,4 +58,4 @@ console.log(JSON.stringify({
    changelogEntryCount: changelogEntries.length,
    versionJsonPath: versionJsonExists ? versionJsonPath : null,
    baselineVersion,
-}, null, 2))
+}))

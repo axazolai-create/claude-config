@@ -2,14 +2,29 @@
 // Shared worker: refresh THIS project's entry in the graphify cross-project global
 // graph (~/.graphify/global-graph.json). Invoked from two places:
 //   - hooks/graphify-global-sync.mjs (Claude Code PostToolUse) - fires after a
-//     `git commit` Claude itself runs through the Bash tool. Zero-setup, works from
-//     session one, but structurally can only see commits Claude's Bash tool makes.
+//     `git commit`, `git push`, or `git tag` Claude itself runs through the Bash tool.
+//     Zero-setup, works from session one, but structurally can only see commands
+//     Claude's Bash tool makes.
 //   - <repo>/.git/hooks/post-commit (native git hook) - installed once per project
 //     by session-init.mjs. Fires for EVERY commit git itself creates: manual/IDE
 //     commits, `--amend`, rebases that call it, regardless of Claude Code being
 //     involved at all. This is what actually covers "amends and user commits".
 // Both callers may fire for the same commit - harmless, the PID/mtime lock below
 // dedups so only one extraction actually runs.
+// Hook trigger surface (2026-07-08): commit|push|tag, not just commit. `push` covers the
+// "just pushed, nothing new committed this session" case commit-only missed. `tag` covers
+// GSD phase/milestone close: when a GSD project has `git.create_tag: true` (the tier-2
+// gsd-config-patch.mjs default), gsd-core tags on phase/milestone completion
+// (`gsd/phase-{phase}-{slug}`, `gsd/{milestone}-{slug}`), so a tag is a reliable,
+// git-visible "a phase just closed" signal without parsing gsd-core's own state.
+// Deliberately NOT narrowed to only these three: this worker is a cheap, detached,
+// lock-deduped background extraction - unlike the LOCAL per-project graphify-out/ cadence
+// (rules-src/templates/graphify.PROJECT.md), where narrowing to review/verify gates matters
+// because gsd-core's rebuild is heavier and synchronous-ish. There's no such cost here, so
+// commit stays as a trigger too rather than being replaced by the narrower set.
+// No Superpowers-close-specific trigger: Superpowers' review skills leave no git-visible
+// signal of their own (no tag, no distinct command) - that case is covered incidentally by
+// the commit/push triggers, since finishing a Superpowers branch always ends in one of those.
 // Usage: node graphify-global-sync-run.mjs [repoPath]  (defaults to cwd)
 // Never throws, never blocks: no-ops (exit 0) if this isn't a git repo, HEAD has no
 // commits yet, or `graphify` isn't installed - this must never surface as an error

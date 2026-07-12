@@ -137,33 +137,20 @@ name and approximate (the install command is the source of truth; slugs drift - 
   its presence at every level in this repo is a deliberate consistency choice, not a resolver
   requirement.
 - Before writing/trusting a plugin's `description` here, verify it against the plugin's own
-  manifest, not its name or catalog blurb: check `hooks/hooks.json` (does it register
-  `SessionStart`/`PreToolUse`/etc that runs on its own, beyond a tool the user has to invoke?),
-  `.mcp.json` (what does the MCP server actually launch - a known local OSS binary/`uvx` package,
-  or a vendor's closed binary?), and its own README's install steps. Caught 2026-07:
-  `semgrep@claude-plugins-official` was documented here as "OSS engine, local-only, avoid
-  --config auto" — actually "Semgrep Guardian", a closed-source hook+MCP binary whose own README
-  ends the install steps with "ask claude to login to semgrep", and which fires a browser login
-  on every session restart via an async `SessionStart` hook. The catalog `source` field is a
-  tell: a local `./plugins/<name>` path (bundled in this repo) is usually safe to take at face
-  value; an external `git-subdir`/`url` source (a vendor's own repo) needs its manifest checked.
-- A marketplace's own `.gitmodules` can still force SSH even when `marketplace_add` uses an
-  HTTPS URL. Caught 2026-07 on `turborepo@pleaseai`: `marketplace_add` clones
-  `https://github.com/pleaseai/claude-code-plugins` fine over HTTPS, but that repo's submodules
-  (`external-plugins/code-review`, `firebase`, `flutter`, `grafana`, `nanobanana`, `postgres`,
-  `security`, `spec-kit` — none needed by turborepo, just bundled in the same marketplace repo)
-  are declared with `git@github.com:...` URLs in its `.gitmodules`. `git submodule` always
-  honors the literal submodule URL regardless of how the parent was cloned, so on a machine
-  without GitHub's SSH host key trusted (or without an SSH key registered to that GitHub
-  account) the whole marketplace add fails with "SSH host key is not in your known_hosts file" /
-  "Permission denied (publickey)" even though the plugin you actually want has no SSH
-  dependency. Fix on the affected machine (not something this repo can fix — the offending
-  `.gitmodules` lives in the vendor's repo): `git config --global
-  url."https://github.com/".insteadOf "git@github.com:"` — rewrites all `git@github.com:` fetches
-  to HTTPS, no SSH key needed, works for anonymous/public-repo submodule clones. Then retry
-  `marketplace_add`. (Trusting the host key alone, e.g. `ssh-keyscan github.com >>
-  ~/.ssh/known_hosts`, only clears the host-key error; it still fails with Permission denied if
-  the account has no SSH key registered with GitHub.)
+  manifest: `hooks/hooks.json` (does it register hooks that run on their own?), `.mcp.json`
+  (a known local OSS binary, or a vendor's closed one?), and its README's install steps. The
+  catalog `source` field is a tell: a bundled `./plugins/<name>` path is usually safe; an
+  external `git-subdir`/`url` source needs its manifest checked. (Example: semgrep@
+  claude-plugins-official is really "Semgrep Guardian" — a closed hook+MCP binary that fires
+  a browser login on every session restart, not a local OSS engine.)
+- A marketplace's own `.gitmodules` can force SSH even when `marketplace_add` clones over
+  HTTPS: `git submodule` always honors the literal submodule URL, so `git@github.com:...`
+  URLs in the marketplace repo's `.gitmodules` fail the whole add on a machine without a
+  GitHub SSH key ("SSH host key is not in your known_hosts file" / "Permission denied
+  (publickey)") — even when the plugin you want has no SSH dependency. Fix on the affected
+  machine: `git config --global url."https://github.com/".insteadOf "git@github.com:"`,
+  then retry `marketplace_add`. (Trusting the host key alone doesn't help if the account
+  has no SSH key registered; seen on `turborepo@pleaseai`.)
 
 ## Related tools (non-plugin)
 
