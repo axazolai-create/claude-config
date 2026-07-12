@@ -29,6 +29,7 @@ After installing — **restart Claude Code** (hooks and settings are only read a
   - [Flags (non-interactive / for CI)](#flags-non-interactive-for-ci)
 - [Protection model: the marker, not the path](#protection-model-the-marker-not-the-path)
 - [Project auto-init (SessionStart)](#project-auto-init-sessionstart)
+- [Stack rules (stack-rules): a snapshot instead of auto-loading](#stack-rules-stack-rules-a-snapshot-instead-of-auto-loading)
 - [What each hook does and why](#what-each-hook-does-and-why)
 - [Required tools and fallback](#required-tools-and-fallback)
 - [PowerShell tool on Windows (optional, manual — not via setup.mjs)](#powershell-tool-on-windows-optional-manual-not-via-setupmjs)
@@ -166,6 +167,8 @@ So this package does three things:
       graphify-global-sync-run.mjs       # shared worker (called by the hook above and the native post-commit)
     session-init.mjs                     # SessionStart: project bootstrap (+ registration in graphify,
                                           #   + installing the native post-commit hook in the project)
+    lib/
+      stack-rules-check.mjs              # sourceHash/stackFingerprint of the stack-rules snapshot (+ CLI)
     token-usage-log.mjs                  # SubagentStop + Stop — token/$ spend log in JSONL
     lib/
       token-usage-shared.mjs             # shared helpers (findRoot, JSONL read/append, cursor)
@@ -185,6 +188,8 @@ So this package does three things:
   skills/
     using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
     token-usage/SKILL.md                 # /token-usage — token spend log summary
+  rules-src/                             # stack rule sources — NOT auto-loaded by Claude Code;
+                                          #   compiled into <project>/.claude/stack-rules.md (see below)
   state/project-init.json                # created at runtime; list of already-initialized projects
                                           #   (+ initStackRun per project root — set by /init-stack)
   state/token-usage.jsonl                # created at runtime; global token spend log
@@ -196,7 +201,7 @@ So this package does three things:
 ## How the installer works (`setup.mjs`)
 
 - Copies all files into `~/.claude` (creates folders), sets +x on `.mjs` under POSIX.
-- **Scope — `~/.claude` only** (hooks, `rules/`, `skills/`, `CLAUDE.md`, `settings.json`).
+- **Scope — `~/.claude` only** (hooks, `rules-src/`, `skills/`, `CLAUDE.md`, `settings.json`).
   Project plugins are NOT part of this — that's a separate, independent mechanism,
   `/init-stack` (see below), with its own script (`bin/init-stack.py`) and its own output. If
   after running `setup.mjs` the output only shows plugin-related messages — `/init-stack` was
@@ -208,7 +213,7 @@ Two tiers of files, handled differently, **deliberately**:
 - **Managed content** — `.mjs` scripts, and really any `.md`/text file that is NOT marked
   `CURATED:NOEDIT`. The package is the source of truth, so such a file **is always overwritten
   with the archive's version, no questions asked** — exactly like scripts. This is what makes
-  "drop in a fresh package, old files get updated" real not just for `.mjs`, but for `rules/`,
+  "drop in a fresh package, old files get updated" real not just for `.mjs`, but for `rules-src/`,
   `skills/`, `README.md`, etc.
 - **Curated content** — a file whose **current on-disk content** carries the `CURATED:NOEDIT`
   marker (in practice — your `~/.claude/CLAUDE.md`). Never touched silently: a diff is shown,
@@ -248,7 +253,7 @@ everything from the archive (a superset) — `unchanged`, nothing is written. No
 that differs from the archive — `updated`, no prompt.
 
 **Important if you already have manual edits in non-curated `.md` files** (e.g. your own
-`rules/node.react.md`): starting with this version they will be silently overwritten with the
+`rules-src/node.react.md`): starting with this version they will be silently overwritten with the
 archive's version on the next `setup.mjs` run (the same behavior `.mjs` has always had). If you
 have such edits and need to keep them — either move them into the archive (this repo) before
 running, or put the `<!-- CURATED:NOEDIT -->` marker as the first line of the file itself to
@@ -257,7 +262,7 @@ you're not sure exactly what will update.
 
 At the end of the run — **`--- summary ---`** (a full file list tagged created/updated/
 unchanged/merged/replaced/skipped) and **`--- by category ---`** (a per-folder digest: `hooks:
-N updated, M unchanged`, `rules: ...`, etc.) — so you don't have to guess whether rules and
+N updated, M unchanged`, `rules-src: ...`, etc.) — so you don't have to guess whether rules and
 hooks updated by scanning a long path list.
 
 ### Diff readability
@@ -273,7 +278,7 @@ hooks updated by scanning a long path list.
 The repo is split into two zones:
 
 - **`payload/`** — everything that actually gets installed into `~/.claude` (`hooks/`,
-  `skills/`, `rules/`, `commands/`, `setting-templates/`, `bin/`, `add-risk.mjs`,
+  `skills/`, `rules-src/`, `commands/`, `setting-templates/`, `bin/`, `add-risk.mjs`,
   `graphify-sync-all.mjs`, `CLAUDE.md`). The installer **mirrors the whole `payload/` tree**
   into `~/.claude`, preserving structure relative to `payload/` (i.e. `payload/hooks/foo.mjs`
   → `~/.claude/hooks/foo.mjs`).
@@ -348,14 +353,12 @@ fresh sessions sometimes):
   option for web search). **Re-checked every session** (git/DB can appear later, so this isn't
   one-time) and stops on its own once the matching MCP is wired. Web search isn't detected
   passively (on-demand) — mentioned as an option. Toggle: `CLAUDE_MCP_SUGGEST=0`.
-- **fixes `claude_md_assembly.mode: "link"` when the root doesn't import it** — under this
-  mode, gsd-core writes generated project context + the profile (`/gsd-profile-user`) into a
-  separate `.claude/CLAUDE.md`, but doesn't itself guarantee that the root `CLAUDE.md` actually
-  `@`-imports it. In practice this produced an 18KB generated file that was never loaded into
-  any session at all. **Re-checked every session** (not one-time — `.claude/CLAUDE.md` can
-  appear after the first session, e.g. from `/gsd-profile-user`), stops on its own once the
-  import is present. Skips when: the root file is missing, already imports
-  `.claude/CLAUDE.md`, or itself looks GSD-generated. Toggle: `CLAUDE_GSD_LINK_IMPORT=0`.
+- **checks the stack-rules snapshot** (a hint only — touches no files): compares the
+  frontmatter of `.claude/stack-rules.md` against the current state of `~/.claude/rules-src/`
+  and the project's stack (`hooks/lib/stack-rules-check.mjs`); when the snapshot is missing or
+  stale, appends an instruction to `additionalContext` to build it via a subagent; when
+  everything matches — stays silent. Mechanism details — the "Stack rules (stack-rules)"
+  section below. Toggle: `CLAUDE_STACK_RULES=0`.
 
 Toggles (environment variables the hook reads):
 
@@ -363,11 +366,59 @@ Toggles (environment variables the hook reads):
 CLAUDE_CURATED_AUTOMARK_ROOT=0   # don't auto-mark the root (show a hint instead)
 CLAUDE_CURATED_AUTOINIT=0        # disable auto-init entirely
 CLAUDE_MCP_SUGGEST=0             # don't suggest /init-mcp on a git/DB signal
-CLAUDE_GSD_LINK_IMPORT=0         # don't fix a missing @.claude/CLAUDE.md import
+CLAUDE_STACK_RULES=0             # don't check the stack-rules snapshot (see the section below)
 ```
 
 Reset a specific project's state (to re-run it) — delete its entry from
 `~/.claude/state/project-init.json`.
+
+---
+
+## Stack rules (stack-rules): a snapshot instead of auto-loading
+
+Language/framework rules live in `~/.claude/rules-src/` and are **not auto-loaded**. The
+folder used to be `~/.claude/rules/` — but Claude Code loads everything inside that path
+itself (path-scoped via `paths:` frontmatter, unconditionally without it), and that mechanism
+has no off switch: `rules/README.md` + `rules/templates/*.md` were landing in EVERY session of
+EVERY project (~7.3 KB of pure overhead). The only way to stop it is to move the files out of
+the scanned path — hence the rename.
+
+How rules reach a session now:
+
+- **A per-project snapshot `<project>/.claude/stack-rules.md`** — a compiled digest of
+  `rules-src/` scoped to the project's stack: the language's base rules + the framework's
+  direction rules + cross-cutting ones (testing/security, etc.), with overlaps deduplicated;
+  every "Avoid" list is carried over verbatim, version pins as-is. It's built by a subagent
+  following `~/.claude/rules-src/README.md` § "Building stack-rules". The `paths:` frontmatter
+  in the sources is kept — it's now selection metadata for the compiler; Claude Code doesn't
+  read it.
+- **Into context** the snapshot gets via an `@stack-rules.md` import line in the project's
+  auto-loaded `.claude/CLAUDE.md`. The file itself is added to the project's `.gitignore` at
+  build time — it's machine-generated personal config and doesn't belong in the project's repo.
+- **A session-start check** — a `session-init.mjs` step + `hooks/lib/stack-rules-check.mjs`:
+  the snapshot's frontmatter is compared — `sourceHash` (a hash of path+size+mtime of every
+  file under `~/.claude/rules-src/`) and `stackFingerprint` (a hash of the detected stack
+  signature files: package.json, next.config.*, pyproject.toml, etc.). Snapshot missing or
+  hashes diverged → an instruction to dispatch a subagent for a (re)build is appended to
+  `additionalContext` (hooks can't spawn subagents themselves, so the hook only instructs);
+  everything matches → it stays silent. Check by hand:
+  `node ~/.claude/hooks/lib/stack-rules-check.mjs [project-root]`. Toggle:
+  `CLAUDE_STACK_RULES=0`.
+- **Templates** (`rules-src/templates/`) are no longer auto-loaded — they're applied during
+  the snapshot build: `next.AGENTS.md` → `AGENTS.md` at the project root when a Next stack is
+  detected and the file doesn't exist yet; `graphify.PROJECT.md` → the root `CLAUDE.md` when
+  the project has a `graphify-out/` (if the root file is curated or missing, the suggestion is
+  surfaced to you instead of writing).
+
+**Migration on install**: `setup.mjs` cleans the old `~/.claude/rules/` — it removes the
+files whose relative path exists in the bundle's `rules-src/` (old bundle-owned copies: leave
+them in place and they'd keep auto-loading, doubling every rule), keeps your own files
+untouched (printing a note — move them into `rules-src/` by hand if the auto-loading isn't
+intended), and deletes the folder entirely once it's empty. Existing projects need no action:
+the first session after the upgrade finds no snapshot and gets the build instruction.
+
+Design and rationale: `docs/superpowers/specs/2026-07-12-stack-rules-design.md` (outside the
+distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
 
 ---
 
@@ -422,6 +473,9 @@ Reset a specific project's state (to re-run it) — delete its entry from
   any hook runs, and `SubagentStart`'s own `systemMessage` (see `leanmode-subagent.mjs` below)
   is empirically confirmed to never render anywhere — prose is the only channel left to
   surface the level before the banner appears. Same toggle: `CLAUDE_LEANMODE=0`.
+  One more `additionalContext` hint (also every session, not a mutation): the stack-rules
+  snapshot check via `hooks/lib/stack-rules-check.mjs` — see the "Stack rules (stack-rules)"
+  section above. Toggle: `CLAUDE_STACK_RULES=0`.
 - **token-usage-log.mjs** (`SubagentStop` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
   **hooks/lib/token-usage-prune.mjs**, **hooks/lib/token-usage-pricing-refresh.mjs**. After
   every sub-agent completion and after every main-agent turn, appends a line (JSONL) with

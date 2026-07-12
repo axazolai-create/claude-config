@@ -8,8 +8,8 @@ paths:
 ---
 
 @AGENTS.md
-<!-- Imports this project's root AGENTS.md if present; no-op otherwise. See rules/README.md
-     ("templates/" section) for what this is and where the template lives. -->
+<!-- Marker for the stack-rules compiler: rewritten to `@../AGENTS.md` in the snapshot so it
+     imports the project's root AGENTS.md. See rules-src/README.md ("templates/" section). -->
 
 # Next.js (direction)
 - Target Next.js 16+. Turbopack is stable and the default bundler.

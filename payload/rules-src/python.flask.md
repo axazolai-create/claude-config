@@ -7,8 +7,6 @@ paths:
 ---
 
 # Flask (direction)
-> Weak path-scoping — import per project if it doesn't trigger:
-> `@~/.claude/rules/python.flask.md`
 - App-factory pattern + blueprints; no global app object with logic attached.
 - Validate input explicitly (pydantic/marshmallow); don't trust `request` directly.
 - Config via object/env; never hardcode secrets.

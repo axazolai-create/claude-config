@@ -7,8 +7,6 @@ paths:
 ---
 
 # FastAPI (direction)
-> Path-scoping for FastAPI is weak — if it doesn't trigger, import it in the project
-> CLAUDE.md: `@~/.claude/rules/python.fastapi.md`
 - Pydantic v2 models for every request/response; never return raw ORM objects.
 - Dependency injection via `Depends`; put auth, db sessions, config there.
 - Async endpoints with async DB drivers; don't block the event loop with sync I/O.

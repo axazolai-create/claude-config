@@ -65,6 +65,6 @@
     ]
   },
   "permissions": {
-    "deny": ["Edit(~/.claude/CLAUDE.md)", "Write(~/.claude/CLAUDE.md)", "MultiEdit(~/.claude/CLAUDE.md)"]
+    "deny": ["Edit(~/.claude/CLAUDE.md)", "Write(~/.claude/CLAUDE.md)"]
   }
 }

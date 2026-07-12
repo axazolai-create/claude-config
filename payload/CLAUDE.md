@@ -6,10 +6,9 @@
   override prose here. Design accordingly:
   - INVARIANTS are enforced by hooks/managed policy, NOT by this prose. No project file can
     relax them. This file only documents intent.
-  - Everything else is a DEFAULT. A project `CLAUDE.md` may override it; treat such an
+  - Everything else — including behavioral rules that cannot be hook-gated ("don't invent
+    APIs") — is a DEFAULT: advisory, a project `CLAUDE.md` may override it; treat such an
     override as intended, not a violation.
-- Behavioral rules that cannot be hook-gated (e.g. "don't invent APIs") are DEFAULTS by
-  nature — they are advisory and degrade gracefully.
 
 ## INVARIANTS (hook / managed-policy enforced; never relaxed by any project file)
 - No secrets, tokens, or connection strings in commits. (PreToolUse: secrets-gate.mjs)
@@ -21,9 +20,11 @@
 
 ## READING ORDER (every session, before acting)
 - Open the project-level `CLAUDE.md` (if present) before acting. Do not act from memory alone.
-- If `.planning/` exists, this is a GSD project — `rules/gsd.md` auto-loads (path-scoped to
-  `.planning/**`) with the full methodology routing and CLAUDE.md quarantine rules.
-- Language/framework rules in `~/.claude/rules/` load automatically by file type.
+- If `.planning/` exists, this is a GSD project — the project's stack-rules snapshot
+  includes `rules-src/gsd.md` (methodology routing + CLAUDE.md quarantine rules).
+- Language/framework rules are compiled per project into `.claude/stack-rules.md` from
+  `~/.claude/rules-src/` (checked at session start; see `rules-src/README.md`). They are
+  NOT auto-loaded by file type anymore.
 - If `.claude/settings.json` is missing the stack plugins for this repo, tell the user to
   run `/init-stack` and restart — do NOT enable plugins yourself (see PLUGINS & SKILLS).
 
@@ -32,19 +33,13 @@
 - Keep all documentation and config files in English.
 
 ## Communication style (Russian replies)
-- Reply in Russian (see LANGUAGE). Keep replies orthographically correct.
-- **Before sending, scan for stray Latin letters accidentally mixed mid-word into Cyrillic
-  text** (keyboard-layout slip, e.g. «objawление» instead of «объявление») — a word is
-  either fully Cyrillic or fully Latin, never a mix, outside intentional inline English
-  terms covered by the priority-order rule below.
-- **Priority order for any technical term:** natural Russian word → real English term → (never) transliteration.
-- **Prefer the Russian translation** whenever it is unambiguous, no harder to understand, and does NOT turn one word into several. In that case use the Russian word — not a transliteration and not the English term. E.g. `seam` → «стык», `merge` → «слияние», `nested` → «вложенный».
-- **Keep the plain English term (Latin script)** only when translating would lose precision, be ambiguous, or need a multi-word phrase for a single term: `endpoint`, `RSC`, `claim`, `guard`, `payload`, `middleware`, `race condition`.
-- **Never invent phonetic-Russian transliterations** of English words:
-  - ❌ «сив» (seam), «феттчит» (fetches), «шипается» (ships), «дизейблить», «засабмитить».
-  - ✅ Proper Russian: «стык»» (seam), «запрашивает» (fetches), «поставляется» (ships).
-- Established, widely-used loanwords are fine: «рендерит», «коммит», «пул-реквест», «дебаг».
-- Rule of thumb: if a one-word Russian equivalent reads clearly, use it; fall back to English only when Russian would be longer or fuzzier; never use a made-up hybrid.
+- Keep replies orthographically correct. **Before sending, scan for stray Latin letters
+  mixed mid-word into Cyrillic** (keyboard-layout slip: «objawление» → «объявление») — a
+  word is fully Cyrillic or fully Latin, never a mix, outside intentional inline English
+  terms per the priority rule below.
+- **Term priority:** natural Russian word → real English term → (never) transliteration.
+  - Plain English (Latin script) when translating loses precision or needs a multi-word.
+  - Never invented phonetic hybrids; established loanwords are fine («рендерит», «коммит», «пул-реквест»).
 
 ## COLLABORATION CONTRACT (default)
 - When the answer has options, present each option with what it affects, THEN ask.
@@ -54,11 +49,9 @@
   quality, and load-bearing code examples (<100 lines).
 - Log risks to `RISK_REGISTER.md` with stable IDs, not inline. Put it in `.planning/` if a
   GSD project exists, otherwise the project root. Flag when a decision touches an Open risk.
-- Never report elapsed time for a background agent/task by estimating from the number or
-  sum of wakeup/poll events while waiting — that estimate is unreliable (has been off by
-  5x in practice). The only reliable signal a background task finished is its actual
-  completion notification; wait for it. If elapsed time genuinely needs reporting, read a
-  real timestamp before and after, never infer it from loop/poll count.
+- Elapsed time of a background agent/task: never estimate it from wakeup/poll counts (seen
+  off by 5x in practice); the only "finished" signal is the actual completion notification.
+  If elapsed time must be reported, read real timestamps before and after.
 
 ## CONVENTIONS (default; a project CLAUDE.md may override)
 - Never invent APIs/flags — verify or ask if unsure. (advisory; not hook-gated)
@@ -69,20 +62,15 @@
   belong in that project's own `CLAUDE.md`, not assumed globally).
 
 ## SUDO ELEVATION (default; Windows)
-- Windows 11 ships an inline `sudo` (Settings -> System -> For developers -> "Enable sudo"),
-  OFF by default. Verify with `sudo config` before assuming it's usable — if it errors
-  ("Sudo is disabled on this computer"), tell the user instead of attempting the command; do
-  not fall back to another elevation method.
-- Its prompt behavior (silent vs. UAC confirmation) depends on the configured mode (New
-  Window / Disable input / Inline, with or without "always ask") — never assume a UAC dialog
-  is a substitute for asking first.
-- Ask permission first, in-session (AskUserQuestion or a direct question), with explicit
-  justification: why elevation is needed and which exact command will run under `sudo`. Only
-  after explicit consent, run `sudo <command>`. Never run it silently/preemptively — no
-  answer, no call.
-- Appropriate when the operation genuinely requires admin rights (ACL restricted to
-  SYSTEM/Administrators, registering a Scheduled Task, writing to protected directories)
-  while the session runs under a non-privileged/UAC-filtered token.
+- Windows 11's inline `sudo` is OFF by default — verify with `sudo config` first; on
+  "Sudo is disabled on this computer", tell the user and do NOT fall back to another
+  elevation method.
+- Ask permission first, in-session (AskUserQuestion or a direct question), naming the exact
+  command and why elevation is needed; run `sudo <command>` only after explicit consent —
+  never silently/preemptively (no answer, no call), and never treat a UAC dialog
+  (mode-dependent, may not appear at all) as a substitute for asking.
+- Appropriate only when the operation genuinely needs admin rights (SYSTEM/Administrators
+  ACL, Scheduled Task registration, protected directories) under a UAC-filtered token.
 - Example: `sudo powershell -ExecutionPolicy Bypass -File 'C:\path\to\Script.ps1'`
 
 ## PLUGINS & SKILLS (loading policy)
@@ -98,17 +86,17 @@
 - Keep an `enabledPlugins` key in `.claude/settings.json` even if `{}` — otherwise entries
   in settings.local.json are silently dropped on merge.
 
-## GSD / SUPERPOWERS METHODOLOGY (conditional — see `rules/gsd.md`)
+## GSD / SUPERPOWERS METHODOLOGY (conditional — see `rules-src/gsd.md`)
 - Full routing (which `/gsd-*` command per phase, worktree ownership, TDD/debug/code-review
-  single-enforcer rule) and the CLAUDE.md quarantine mechanics live in `rules/gsd.md`,
-  path-scoped to `.planning/**` so they only load in GSD projects. Kept out of this file to
-  avoid loading GSD-specific prose into every non-GSD project's context.
+  single-enforcer rule) and the CLAUDE.md quarantine mechanics live in `rules-src/gsd.md`,
+  compiled into the stack-rules snapshot only for GSD projects (`.planning/` marker). Kept
+  out of this file to avoid loading GSD-specific prose into every non-GSD project's context.
 
 ## RULES RESOLUTION & STACK MARKERS
-- How language/framework rules stack (base -> direction -> cross-cutting) and the caveat
-  about frameworks sharing extensions are documented once, in `~/.claude/rules/README.md` —
-  see that file rather than duplicating it here. Check what actually loaded with `/memory`.
-- Quick fallback if rules don't trigger: pyproject.toml -> Python | package.json -> Node/TS |
+- How rules layer (base -> direction -> cross-cutting) and how the per-project snapshot is
+  built are documented once, in `~/.claude/rules-src/README.md` — see that file rather than
+  duplicating it here. What's active for a project = its `.claude/stack-rules.md`.
+- Stack markers (drive detection and the rebuild fingerprint): pyproject.toml -> Python | package.json -> Node/TS |
   next.config.* -> Next | nest-cli.json -> Nest | vite.config.* -> React |
   build.gradle.kts -> Kotlin | plugin.xml -> IntelliJ/Gateway plugin | *.sql -> SQL |
   *.sh / *.ps1 -> shell | AndroidManifest.xml -> Android (Kotlin) |
@@ -147,14 +135,12 @@ Reserve max-effort sonnet-5 for throughput cases where opus latency/limits are t
   `GRAPH_REPORT.md`); prefer the per-project graph for questions scoped to that repo, and the
   global graph for cross-repo questions. Do not paste large graph dumps; query for the subgraph.
 - Setup/refresh is out of band: `node ~/.claude/bin/graphify-setup.mjs --doctor --build-global <repos...>`.
-- New projects auto-register into the global graph on first session. Every commit thereafter
-  triggers a background refresh of that project's entry — both a Claude-driven `git commit`
-  (`hooks/graphify-global-sync.mjs`) AND a native `.git/hooks/post-commit` installed once per
-  project, so manual/IDE commits and `--amend` are covered too, not just commits Claude itself
-  runs. No-ops if `graphify` isn't installed. Toggle: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-  When the user types `/graphify`, use the installed graphify skill or instructions before
-  doing anything else.
+- New projects auto-register into the global graph on first session; every later commit
+  refreshes their entry in the background (Claude-driven commits via
+  `hooks/graphify-global-sync.mjs` + a native per-repo `post-commit` hook, so manual/IDE
+  commits and `--amend` are covered). No-op without graphify. Toggle: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
+- `/graphify` (any input to the knowledge graph) → use the installed graphify skill
+  (`~/.claude/skills/graphify/SKILL.md`) before doing anything else.
 
 ## CONTEXT-MODE (tool routing, if active)
 - context-mode (base plugin, see PLUGINS & SKILLS) intercepts `WebFetch` entirely (hard deny +
@@ -167,9 +153,7 @@ Reserve max-effort sonnet-5 for throughput cases where opus latency/limits are t
     not a raw `Bash` pipeline you intend to read the full output of.
   - Analyzing/summarizing a large file -> `ctx_execute_file`. `Read` is still correct when the
     file needs editing (`Edit` needs the exact bytes in context to match against).
-  - If a `ctx_*` tool errors as not-found, it's a deferred schema, not unavailable — `ToolSearch`
-    it once (`select:ctx_fetch_and_index,ctx_search,ctx_execute,ctx_execute_file,ctx_batch_execute`)
-    and retry; do not fall back to the raw tool just because the schema wasn't loaded yet.
-  - Diagnostics: `ctx doctor` (or `/ctx-doctor`) runs context-mode's own self-check. Session
-    start already checks its version/staleness in the background and self-upgrades if stale
-    (see `hooks/session-init.mjs`; opt out: `CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE=0`).
+  - If a `ctx_*` tool errors as not-found, it's a deferred schema, not unavailable —
+    `ToolSearch` it once (`select:<tool name>`) and retry; never fall back to the raw tool.
+  - Diagnostics: `ctx doctor` (or `/ctx-doctor`). Session start self-upgrades a stale
+    context-mode in the background (opt out: `CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE=0`).

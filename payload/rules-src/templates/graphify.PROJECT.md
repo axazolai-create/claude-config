@@ -3,7 +3,7 @@
 
 This project has a local knowledge graph at `graphify-out/` (`graph.json`, `GRAPH_REPORT.md`)
 — separate from GSD's own `.planning/graphs/graph.json` if this is also a GSD project (two
-unrelated tools; see `~/.claude/rules/gsd.md` § "graphify is two unrelated tools").
+unrelated tools; see `~/.claude/rules-src/gsd.md` § "graphify is two unrelated tools").
 
 - For codebase questions, prefer `graphify query "<question>"` over raw grep once
   `graphify-out/graph.json` exists. Use `graphify path "<A>" "<B>"` for relationships and

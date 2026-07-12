@@ -9,7 +9,7 @@
  *     `<!-- CURATED:NOEDIT -->` line) - this is config-as-code: the bundle is the source of
  *     truth, so it is always refreshed to the bundled version on every run, no prompt. This is
  *     what makes "drop in a fresh package, run setup, old files get the new data" actually true
- *     for rules/, skills/, README.md, etc. - not just for scripts.
+ *     for rules-src/, skills/, README.md, etc. - not just for scripts.
  *   - CURATED content (any file carrying a `<!-- CURATED:NOEDIT -->` line, anywhere in the
  *     file, whitespace-tolerant - in practice your `~/.claude/CLAUDE.md`) - never silently
  *     touched. Shows a unified diff and asks per file:
@@ -42,7 +42,7 @@ import { createInterface } from "node:readline";
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
 // SRC = REPO_ROOT/payload - everything that actually gets installed into ~/.claude
-// (hooks/, skills/, rules/, commands/, setting-templates/, bin/, add-risk.mjs,
+// (hooks/, skills/, rules-src/, commands/, setting-templates/, bin/, add-risk.mjs,
 // graphify-sync-all.mjs, CLAUDE.md). Kept as two separate constants (not one) because
 // settings.partial.json below is read from REPO_ROOT, not SRC - it configures the installer,
 // it isn't itself installed.
@@ -348,6 +348,40 @@ function overwriteTemplatesDir() {
   }
 }
 
+/* ---------- one-time migration: ~/.claude/rules -> ~/.claude/rules-src ---------- */
+// Rules moved out of ~/.claude/rules/ (auto-loaded by Claude Code with no off switch) into
+// rules-src/ (compiled into per-project .claude/stack-rules.md - see payload/rules-src/README.md).
+// Old bundle-owned copies left in ~/.claude/rules/ would keep auto-loading and double every
+// rule, so remove each file whose relative path exists in the bundle's rules-src/, keep
+// user-authored files, and drop directories that end up empty. pruneStale() can't cover this:
+// its "still referenced in bundle" name gate misfires here (the rules-src README lists every
+// rule filename in prose).
+function migrateRulesDir() {
+  const oldDir = join(CDIR, "rules");
+  if (!existsSync(oldDir)) return;
+  const bundleRels = new Set(walkDir(join(SRC, "rules-src")));
+  for (const rel of walkDir(oldDir)) {
+    if (!bundleRels.has(rel)) continue; // user-authored: keep (it still auto-loads)
+    const dst = join(oldDir, ...rel.split("/"));
+    if (DRY) { summary.push(`would-prune ${dst} (moved to rules-src)`); continue; }
+    try { rmSync(dst, { force: true }); summary.push(`pruned   ${dst} (moved to rules-src)`); }
+    catch { summary.push(`prune-failed ${dst}`); }
+  }
+  if (DRY) return;
+  // Remove now-empty directories bottom-up (raw readdir, so hidden leftovers block deletion
+  // rather than being silently destroyed), then report anything user-authored that remains.
+  const rmEmptyDirs = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true }))
+      if (e.isDirectory()) rmEmptyDirs(join(dir, e.name));
+    if (!readdirSync(dir).length) { rmSync(dir, { recursive: true, force: true }); return true; }
+    return false;
+  };
+  if (safe(() => rmEmptyDirs(oldDir))) summary.push(`pruned   ${oldDir} (empty after migration)`);
+  else if (existsSync(oldDir))
+    log(`\nNOTE: ~/.claude/rules still holds user files not from this bundle - they keep ` +
+      `auto-loading path-scoped; move them into ~/.claude/rules-src by hand if that's not intended.`);
+}
+
 async function pruneStale() {
   const oldManifest = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8"))) || { files: [] };
   const currentRels = new Set(manifestNow.map((f) => f.rel));
@@ -564,6 +598,7 @@ async function main() {
   }
 
   /* ---------- prune stale files + persist manifest ---------- */
+  migrateRulesDir();
   overwriteTemplatesDir();
   await pruneStale();
   if (!DRY) {
@@ -638,6 +673,9 @@ async function main() {
   log("           - if graphify is installed: registers the project in the global graph,");
   log("             installs a native post-commit hook, and (once) runs");
   log("             'graphify claude install' for its own CLAUDE.md section");
+  log("           - checks the compiled rules snapshot (.claude/stack-rules.md) against");
+  log("             ~/.claude/rules-src and instructs the session to (re)build it when");
+  log("             missing or stale (opt out: CLAUDE_STACK_RULES=0)");
   log("           - if the git remote is GitHub/GitLab or a DB dependency is detected");
   log("             with no matching MCP wired: suggests /init-mcp (suggestion only,");
   log("             installs nothing, rechecked every session)");

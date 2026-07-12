@@ -35,14 +35,15 @@
 // your step then NEVER RUNS AGAIN for that project. The fix is always the same shape: make the
 // step re-check EVERY session and be naturally idempotent (it only WRITES when its own
 // on-disk check says the fix isn't applied yet, so a no-op re-check costs one file read). See
-// the root-CLAUDE.md auto-mark, the .planning/CLAUDE.md exclude, and the claude_md_assembly
-// link-import check below for the pattern - none of them use `firstTime` anymore, on purpose.
+// the root-CLAUDE.md auto-mark and the .planning/CLAUDE.md exclude below for the pattern -
+// neither uses `firstTime` anymore, on purpose.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
+import { checkStackRules } from "./lib/stack-rules-check.mjs";
 
 const MARKER = "CURATED:NOEDIT";
 // Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
@@ -186,16 +187,9 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && process.env.CLAUDE_GRAPHIFY_
   }
 }
 
-// EVERY session, idempotent (see the CONVENTION note in the file header for why NOT
-// `if (firstTime)`): per-project .planning exclude + auto-mark root CLAUDE.md + ambiguity
-// nudge. Formerly gated on `firstTime` - the real-world timing bug that taught this lesson:
-// on a brand-new project's session 1, root CLAUDE.md often doesn't exist yet (the
-// `graphify claude install` step above, or a human, creates it later); `state[root]` gets
-// created unconditionally a few lines up regardless, so `firstTime` was already spent by the
-// time the file showed up on session 2+, and step 2 below then NEVER auto-marked it - silently,
-// forever, for that project. Both checks are cheap (existsSync + one read) and self-limiting
-// (isMarked()/claudeMdExcludes already-containing-the-entry make a fixed project a no-op on
-// every later session), so there is no real cost to re-checking indefinitely.
+// EVERY session, idempotent - NOT `if (firstTime)`; this pair is the original victim of the
+// timing bug described in the header CONVENTION. Both checks are cheap (existsSync + one
+// read) and self-limiting, so re-checking indefinitely costs nothing.
 
 // 1) GSD-owned (unmarked) .planning/CLAUDE.md -> per-project exclude
 const planningClaude = join(root, ".planning", "CLAUDE.md");
@@ -223,37 +217,6 @@ if (existsSync(rootClaude) && !isMarked(rootClaude)) {
   } else if (!AUTOMARK) {
     notes.push(`Unmarked CLAUDE.md at ${rootClaude}` +
       (looksGsd(rootClaude) ? " looks GSD-generated; left as-is." : `. If it's yours, add '<!-- ${MARKER} -->' as the first line.`));
-  }
-}
-
-// EVERY session (not gated by firstTime - see why below): when GSD's claude_md_assembly.mode
-// is "link" (this repo's own personal default via gsd-config-patch.mjs), gsd-core writes
-// generated project context + the /gsd-profile-user profile into .claude/CLAUDE.md instead of
-// embedding it inline in the curated root CLAUDE.md - but it does NOT itself guarantee the root
-// file actually `@`-imports that generated file. Found in practice: a project whose root
-// CLAUDE.md predates (or was never touched by) gsd's write ends up with an 18KB generated
-// .claude/CLAUDE.md sitting there completely unloaded by any session. Re-checked every session,
-// NOT one-time-on-firstTime, because .claude/CLAUDE.md can appear well after a project's first
-// session (e.g. /gsd-profile-user run later, same timing gap as the graphify-install-vs-
-// automark issue above) - gating this on firstTime would permanently miss that case. Naturally
-// idempotent once fixed: the import line, once present, makes every later check a no-op.
-// Skips: root CLAUDE.md missing, already importing the file (any `@...claude/CLAUDE.md` line -
-// not an exact-string match, to tolerate a human's own relative-path phrasing), or itself
-// GSD-generated (gsd's own output doesn't need this nudge). Opt out: CLAUDE_GSD_LINK_IMPORT=0.
-if (process.env.CLAUDE_GSD_LINK_IMPORT !== "0") {
-  const genClaudeMd = join(root, ".claude", "CLAUDE.md");
-  const rootClaudeForLink = join(root, "CLAUDE.md");
-  if (existsSync(genClaudeMd) && existsSync(rootClaudeForLink)) {
-    const genContent = safe(() => readFileSync(genClaudeMd, "utf8")) || "";
-    const looksGenerated = /<!--\s*GSD:/.test(genContent);
-    if (looksGenerated && !looksGsd(rootClaudeForLink)) {
-      const rootContent = safe(() => readFileSync(rootClaudeForLink, "utf8"));
-      const alreadyImported = rootContent !== undefined && /^@.*\.claude[\\/]CLAUDE\.md\s*$/m.test(rootContent);
-      if (rootContent !== undefined && !alreadyImported) {
-        if (writeFile(rootClaudeForLink, "@.claude/CLAUDE.md\n\n" + rootContent))
-          actions.push("linked root CLAUDE.md to generated .claude/CLAUDE.md (@import was missing)");
-      }
-    }
   }
 }
 
@@ -373,6 +336,27 @@ if (process.env.CLAUDE_TOOL_AUTOUPGRADE !== "0") {
   if (toolStateChanged) writeFile(toolStateFile, JSON.stringify(toolState, null, 2) + "\n");
 }
 
+// ---- stack-rules snapshot check ----
+// Rules live in ~/.claude/rules-src/ (NOT auto-loaded) and reach the session as a compiled
+// per-project snapshot .claude/stack-rules.md, @imported from .claude/CLAUDE.md. Hooks can't
+// spawn subagents, so on desync this only INSTRUCTS the session to dispatch the rebuild
+// (rules-src/README.md § "Building stack-rules"). Re-checked every session, naturally
+// idempotent: silent whenever frontmatter hashes match. Opt out: CLAUDE_STACK_RULES=0.
+// Design: docs/superpowers/specs/2026-07-12-stack-rules-design.md.
+if (process.env.CLAUDE_STACK_RULES !== "0") {
+  const srcDir = join(homedir(), ".claude", "rules-src");
+  if (existsSync(srcDir)) {
+    const check = safe(() => checkStackRules(root, srcDir));
+    if (check && check.status !== "ok") {
+      notes.push(`stack-rules: .claude/stack-rules.md is ${check.status} for this project. ` +
+        `First action of this session: dispatch a general-purpose subagent to (re)build it ` +
+        `following ~/.claude/rules-src/README.md section "Building stack-rules"; the snapshot ` +
+        `frontmatter must carry sourceHash: ${check.sourceHash} and stackFingerprint: ` +
+        `${check.stackFingerprint}.`);
+    }
+  }
+}
+
 // ---- proactive MCP suggestion (git host / database) -> /init-mcp ----
 // A HINT only - never auto-runs anything. Surfaces /init-mcp when the repo shows a signal it helps
 // with (a GitHub/GitLab remote, or database usage), unless that MCP is already wired. Re-checked
@@ -414,12 +398,9 @@ if (process.env.CLAUDE_MCP_SUGGEST !== "0") {
 if (process.env.CLAUDE_LEANMODE !== "0" && resolveDial(root) !== "off") {
   notes.push("leanmode is active for this project - before dispatching any subagent via the " +
     "Agent tool, resolve its effective level (resolveEffectiveLevel(subagentType, root) from " +
-    "~/.claude/hooks/lib/leanmode-rules.mjs) and announce it in one line right before the tool " +
-    "call. Fold '(leanmode=<level>)' into whatever narration you'd already write for that " +
-    "dispatch (a GSD wave/dispatch line, a Superpowers 'Subagent (type): \"task\"' line) instead " +
-    "of adding a second line; only fall back to a standalone 'Запускаю суб-агента <type> " +
-    "(<model>) в режиме (leanmode=<level>)' line when nothing else narrates that launch. Skip " +
-    "the announcement entirely when the resolved level is off.");
+    "~/.claude/hooks/lib/leanmode-rules.mjs) and fold '(leanmode=<level>)' into the line that " +
+    "already narrates that dispatch; a standalone one-line announcement only when nothing " +
+    "else narrates the launch. Skip entirely when the resolved level is off.");
 }
 
 // ---- GSD /init-stack settings gap check -> suggest /init-stack ----
