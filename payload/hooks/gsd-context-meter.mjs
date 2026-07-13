@@ -11,9 +11,12 @@ import { computeUsedTokenMetrics, rewriteContextBar } from "./lib/gsd-context-me
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+process.stdout.on("error", () => {});
+
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => { input += chunk; });
+process.stdin.on("error", () => {});
 process.stdin.on("end", () => {
   let output = "";
   try {
