@@ -498,6 +498,31 @@ async function main() {
     }
   }
 
+  /* ---------- gsd-defaults.partial.json: mirror + apply to ~/.gsd/defaults.json ----------
+   * gsd-defaults.partial.json is REPO_ROOT meta (same treatment as settings.partial.json -
+   * source of truth, not walked by placeFile()). Its content must also persist inside
+   * ~/.claude so /init-stack's standalone CLI (payload/gsd-defaults-sync.mjs, which has no
+   * access to REPO_ROOT once installed) can re-read it later - so this step always
+   * overwrites the installed mirror copy, then applies it via the just-installed lib. */
+  if (!DRY) {
+    const partialDefaultsRaw = read(join(REPO_ROOT, "gsd-defaults.partial.json"));
+    if (partialDefaultsRaw !== undefined) {
+      const mirrorPath = join(CDIR, "gsd-defaults.partial.json");
+      if (write(mirrorPath, partialDefaultsRaw)) summary.push(`updated  ${mirrorPath} (mirror copy)`);
+      const gsdSyncLibPath = join(CDIR, "hooks", "lib", "gsd-defaults-sync.mjs");
+      if (existsSync(gsdSyncLibPath)) {
+        try {
+          const mod = await import(pathToFileURL(gsdSyncLibPath).href);
+          const gsdDefaultsPartial = safe(() => JSON.parse(partialDefaultsRaw));
+          if (gsdDefaultsPartial) {
+            const r = mod.syncGsdGlobalDefaults({ homeDir: HOME, partial: gsdDefaultsPartial });
+            if (r.changed) summary.push(`merged   ${r.path} (deep additive; your values kept)`);
+          }
+        } catch { /* best-effort; never blocks install */ }
+      }
+    }
+  }
+
   /* ---------- settings.json: structured additive merge ---------- */
   // Source of truth for "what hooks/permissions we want" is settings.partial.json itself - NOT a
   // second hardcoded copy in here. That duplication is exactly how this used to drift (a hook
@@ -551,6 +576,17 @@ async function main() {
       } else if (!(k in merged.permissions)) {
         merged.permissions[k] = v;
       }
+    }
+
+    // statusLine: only take over from an absent value or from gsd-core's own default
+    // (gsd-statusline.js) - this path IS shown to the user via the diff+prompt below, so
+    // (unlike the non-interactive CLI's ensureStatuslineOverride) it's safe to compute the
+    // desired value unconditionally and let the existing diff make the change visible.
+    if (partial.statusLine) {
+      const curCmd = merged.statusLine && merged.statusLine.command;
+      const isOurs = typeof curCmd === "string" && curCmd.includes("gsd-context-meter");
+      const isGsdCoreDefault = typeof curCmd === "string" && curCmd.includes("gsd-statusline.js");
+      if (!curCmd || isGsdCoreDefault || isOurs) merged.statusLine = partial.statusLine;
     }
 
     const curStr = JSON.stringify(cur, null, 2);
