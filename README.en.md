@@ -355,12 +355,20 @@ fresh sessions sometimes):
   option for web search). **Re-checked every session** (git/DB can appear later, so this isn't
   one-time) and stops on its own once the matching MCP is wired. Web search isn't detected
   passively (on-demand) — mentioned as an option. Toggle: `CLAUDE_MCP_SUGGEST=0`.
-- **checks the stack-rules snapshot** (a hint only — touches no files): compares the
-  frontmatter of `.claude/stack-rules.md` against the current state of `~/.claude/rules-src/`
-  and the project's stack (`hooks/lib/stack-rules-check.mjs`); when the snapshot is missing or
-  stale, appends an instruction to `additionalContext` to build it via a subagent; when
-  everything matches — stays silent. Mechanism details — the "Stack rules (stack-rules)"
-  section below. Toggle: `CLAUDE_STACK_RULES=0`.
+- **checks whether the stack-rules snapshot exists** (a hint only — touches no files): just
+  checks `.claude/stack-rules.md` for existence. No more staleness detection - simplified
+  2026-07-13; it used to compare the snapshot's frontmatter against the current state of
+  `~/.claude/rules-src/` and the project's stack (`hooks/lib/stack-rules-check.mjs`), removed
+  as too eager (fired on every session with any drift). When the file is missing, appends a
+  suggestion to run `/init-stack` to `additionalContext` — generating the snapshot is now one
+  of that command's own steps. Mechanism details — the "Stack rules (stack-rules)" section
+  below. Toggle: `CLAUDE_STACK_RULES=0`.
+- **prunes the global token-usage log** (`~/.claude/state/token-usage.jsonl`) — calls
+  `pruneGlobalLogIfDue()` from `hooks/lib/token-usage-prune.mjs`. The function throttles itself
+  to once/24h (its own state file), so an actual sweep doesn't happen every session. Moved here
+  2026-07-13: it used to run from `token-usage-log.mjs` on `SubagentStop`/`Stop` — retention is
+  a session-start concern, not a per-log-write one. Toggle: `CLAUDE_TOKEN_USAGE_PRUNE=0`
+  (checked inside the function itself).
 
 Toggles (environment variables the hook reads):
 
@@ -368,7 +376,8 @@ Toggles (environment variables the hook reads):
 CLAUDE_CURATED_AUTOMARK_ROOT=0   # don't auto-mark the root (show a hint instead)
 CLAUDE_CURATED_AUTOINIT=0        # disable auto-init entirely
 CLAUDE_MCP_SUGGEST=0             # don't suggest /init-mcp on a git/DB signal
-CLAUDE_STACK_RULES=0             # don't check the stack-rules snapshot (see the section below)
+CLAUDE_STACK_RULES=0             # don't check for the stack-rules snapshot (see the section below)
+CLAUDE_TOKEN_USAGE_PRUNE=0       # don't prune the global token-usage log
 ```
 
 Reset a specific project's state (to re-run it) — delete its entry from
@@ -391,21 +400,22 @@ How rules reach a session now:
   `rules-src/` scoped to the project's stack: the language's base rules + the framework's
   direction rules + cross-cutting ones (testing/security, etc.), with overlaps deduplicated;
   every "Avoid" list is carried over verbatim, version pins as-is. It's built by a subagent
-  following `~/.claude/rules-src/README.md` § "Building stack-rules". The `paths:` frontmatter
-  in the sources is kept — it's now selection metadata for the compiler; Claude Code doesn't
-  read it.
+  following `~/.claude/rules-src/README.md` § "Building stack-rules" — as a step of
+  `/init-stack`, or by hand on request. The `paths:` frontmatter in the sources is kept — it's
+  now selection metadata for the compiler; Claude Code doesn't read it.
 - **Into context** the snapshot gets via an `@stack-rules.md` import line in the project's
   auto-loaded `.claude/CLAUDE.md`. The file itself is added to the project's `.gitignore` at
   build time — it's machine-generated personal config and doesn't belong in the project's repo.
-- **A session-start check** — a `session-init.mjs` step + `hooks/lib/stack-rules-check.mjs`:
-  the snapshot's frontmatter is compared — `sourceHash` (a hash of path+size+mtime of every
-  file under `~/.claude/rules-src/`) and `stackFingerprint` (a hash of the detected stack
-  signature files: package.json, next.config.*, pyproject.toml, etc.). Snapshot missing or
-  hashes diverged → an instruction to dispatch a subagent for a (re)build is appended to
-  `additionalContext` (hooks can't spawn subagents themselves, so the hook only instructs);
-  everything matches → it stays silent. Check by hand:
-  `node ~/.claude/hooks/lib/stack-rules-check.mjs [project-root]`. Toggle:
-  `CLAUDE_STACK_RULES=0`.
+- **A session-start check** — simplified 2026-07-13 to a plain `existsSync` on
+  `.claude/stack-rules.md` (`session-init.mjs`), no more hash comparison. File missing → a
+  suggestion to run `/init-stack` is appended to `additionalContext` — generating the snapshot
+  is now one of its own steps. File present → the hook stays silent and does NOT re-check
+  anything else: the snapshot is never auto-flagged as stale, even if `rules-src/` or the
+  project's stack changed — refresh it by re-running `/init-stack` or asking for a rebuild
+  explicitly. This used to be a `sourceHash`/`stackFingerprint` comparison
+  (`hooks/lib/stack-rules-check.mjs`) — the lib is still there (the compiler subagent still
+  uses it to stamp hashes into the frontmatter), but `session-init.mjs` no longer calls it:
+  comparing on every session turned out too eager. Toggle: `CLAUDE_STACK_RULES=0`.
 - **Templates** (`rules-src/templates/`) are no longer auto-loaded — they're applied during
   the snapshot build: `next.AGENTS.md` → `AGENTS.md` at the project root when a Next stack is
   detected and the file doesn't exist yet; `graphify.PROJECT.md` → the root `CLAUDE.md` when
@@ -479,13 +489,14 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   snapshot check via `hooks/lib/stack-rules-check.mjs` — see the "Stack rules (stack-rules)"
   section above. Toggle: `CLAUDE_STACK_RULES=0`.
 - **token-usage-log.mjs** (`SubagentStop` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
-  **hooks/lib/token-usage-prune.mjs**, **hooks/lib/token-usage-pricing-refresh.mjs**. After
-  every sub-agent completion and after every main-agent turn, appends a line (JSONL) with
-  task/agent/model/tokens/date/cost estimate to **both** logs —
-  `<project>/.claude/token-usage.jsonl` (kept forever, never pruned) and
-  `~/.claude/state/token-usage.jsonl` (cross-project, with retention — a union of: no older
-  than 3 calendar months from the last entry / the last-but-one day of activity / a minimum of
-  10 entries). Sub-agent logging originally relied on a second `PostToolUse:Agent` call with
+  **hooks/lib/token-usage-pricing-refresh.mjs**. After every sub-agent completion and after
+  every main-agent turn, appends a line (JSONL) with task/agent/model/tokens/date/cost estimate
+  to **both** logs — `<project>/.claude/token-usage.jsonl` (kept forever, never pruned) and
+  `~/.claude/state/token-usage.jsonl` (cross-project). This hook only appends — retention for
+  the global log (**hooks/lib/token-usage-prune.mjs**: a union of no older than 3 calendar
+  months from the last entry / the last-but-one day of activity / a minimum of 10 entries) runs
+  FROM SessionStart (see above), not from here — moved 2026-07-13. Sub-agent logging originally
+  relied on a second `PostToolUse:Agent` call with
   `status:"completed"` — a 2026-07-10 investigation found that event never arrives (every Agent
   call, backgrounded or not, reports `"async_launched"` and `PostToolUse:Agent` never fires
   again for it), so no `kind:"subagent"` record was ever written. Replaced with `SubagentStop`:

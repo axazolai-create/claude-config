@@ -35,7 +35,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirS
 import { homedir, platform } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -481,6 +481,23 @@ async function main() {
     }
   }
 
+  /* ---------- gsd-* agents: add the context-mode MCP tool, only if that plugin is active ----------
+   * gsd-* agents (~/.claude/agents/gsd-*.md) belong to the separate gsd-core tool, not this
+   * bundle - this is best-effort cross-tool maintenance, same idea as the graphify CLAUDE.md
+   * step in session-init.mjs. Imports the just-installed copy of the lib (not the repo's own
+   * payload/ copy) so behavior always matches what actually landed in ~/.claude this run. */
+  if (!DRY) {
+    const libPath = join(CDIR, "hooks", "lib", "context-mode-gsd-agents.mjs");
+    if (existsSync(libPath)) {
+      try {
+        const mod = await import(pathToFileURL(libPath).href);
+        const r = mod.syncGsdAgentsContextMode({ claudeDir: CDIR });
+        if (r && r.active && r.updated.length)
+          summary.push(`updated  ${r.updated.length} gsd-* agent(s) with context-mode tool (${r.updated.join(", ")})`);
+      } catch { /* best-effort; never blocks install */ }
+    }
+  }
+
   /* ---------- settings.json: structured additive merge ---------- */
   // Source of truth for "what hooks/permissions we want" is settings.partial.json itself - NOT a
   // second hardcoded copy in here. That duplication is exactly how this used to drift (a hook
@@ -673,9 +690,9 @@ async function main() {
   log("           - if graphify is installed: registers the project in the global graph,");
   log("             installs a native post-commit hook, and (once) runs");
   log("             'graphify claude install' for its own CLAUDE.md section");
-  log("           - checks the compiled rules snapshot (.claude/stack-rules.md) against");
-  log("             ~/.claude/rules-src and instructs the session to (re)build it when");
-  log("             missing or stale (opt out: CLAUDE_STACK_RULES=0)");
+  log("           - checks whether the compiled rules snapshot (.claude/stack-rules.md)");
+  log("             exists; if not, suggests running /init-stack to generate it (no");
+  log("             automatic staleness check - opt out: CLAUDE_STACK_RULES=0)");
   log("           - if the git remote is GitHub/GitLab or a DB dependency is detected");
   log("             with no matching MCP wired: suggests /init-mcp (suggestion only,");
   log("             installs nothing, rechecked every session)");

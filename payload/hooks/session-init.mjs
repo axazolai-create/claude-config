@@ -43,7 +43,8 @@ import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
-import { checkStackRules } from "./lib/stack-rules-check.mjs";
+import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
+import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 
 const MARKER = "CURATED:NOEDIT";
 // Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
@@ -338,22 +339,20 @@ if (process.env.CLAUDE_TOOL_AUTOUPGRADE !== "0") {
 
 // ---- stack-rules snapshot check ----
 // Rules live in ~/.claude/rules-src/ (NOT auto-loaded) and reach the session as a compiled
-// per-project snapshot .claude/stack-rules.md, @imported from .claude/CLAUDE.md. Hooks can't
-// spawn subagents, so on desync this only INSTRUCTS the session to dispatch the rebuild
-// (rules-src/README.md § "Building stack-rules"). Re-checked every session, naturally
-// idempotent: silent whenever frontmatter hashes match. Opt out: CLAUDE_STACK_RULES=0.
-// Design: docs/superpowers/specs/2026-07-12-stack-rules-design.md.
+// per-project snapshot .claude/stack-rules.md, @imported from .claude/CLAUDE.md. Existence-only
+// check, no automatic staleness/drift detection (simplified 2026-07-13 - the prior sourceHash/
+// stackFingerprint desync check via hooks/lib/stack-rules-check.mjs was too eager to fire a
+// rebuild instruction every session; that lib is still used by the compiler subagent itself,
+// just no longer imported here). When the snapshot is missing, point at /init-stack, which now
+// owns generating it (rules-src/README.md § "Building stack-rules"). Once a snapshot exists it
+// stays as-is until the next explicit /init-stack run or rebuild request. Opt out:
+// CLAUDE_STACK_RULES=0.
 if (process.env.CLAUDE_STACK_RULES !== "0") {
-  const srcDir = join(homedir(), ".claude", "rules-src");
-  if (existsSync(srcDir)) {
-    const check = safe(() => checkStackRules(root, srcDir));
-    if (check && check.status !== "ok") {
-      notes.push(`stack-rules: .claude/stack-rules.md is ${check.status} for this project. ` +
-        `First action of this session: dispatch a general-purpose subagent to (re)build it ` +
-        `following ~/.claude/rules-src/README.md section "Building stack-rules"; the snapshot ` +
-        `frontmatter must carry sourceHash: ${check.sourceHash} and stackFingerprint: ` +
-        `${check.stackFingerprint}.`);
-    }
+  const snapshotPath = join(root, ".claude", "stack-rules.md");
+  if (!existsSync(snapshotPath)) {
+    notes.push(`stack-rules: .claude/stack-rules.md does not exist for this project. Run ` +
+      `/init-stack to generate it (it detects the stack and builds the snapshot as part of ` +
+      `its own steps).`);
   }
 }
 
@@ -436,6 +435,34 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
           "code_quality.fallow.enabled: false for this project.");
     }
   }
+}
+
+// ---- gsd-* agents: add the context-mode MCP tool, only if that plugin is active ----
+// Machine-wide, not project-scoped (gsd-* agents live in ~/.claude/agents/, owned by the
+// separate gsd-core tool - not this bundle), so it runs regardless of whether THIS session's
+// project is a GSD project. Every session, idempotent and self-healing: if context-mode isn't
+// installed/enabled it's a no-op, and if gsd-core's own updater later rewrites an agent file and
+// drops the tool, this puts it back on the next session. Opt out: CLAUDE_GSD_CONTEXTMODE_SYNC=0.
+if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
+  const claudeDir = join(homedir(), ".claude");
+  const r = safe(() => syncGsdAgentsContextMode({ claudeDir }));
+  if (r && r.active && r.updated.length)
+    actions.push(`added context-mode MCP tool to ${r.updated.length} gsd-* agent(s)`);
+}
+
+// ---- token-usage global log pruning: SessionStart only ----
+// Retention for ~/.claude/state/token-usage.jsonl (the cross-project log; per-project
+// .claude/token-usage.jsonl is never pruned) used to run from token-usage-log.mjs's
+// SubagentStop/Stop handler - tied to the wrong event for a retention sweep (it fired after
+// every subagent completion and every main-agent turn, throttled internally to once/24h but
+// still triggered from per-event hooks instead of session start). Moved here 2026-07-13:
+// token-usage-log.mjs now only appends, never prunes. pruneGlobalLogIfDue() keeps its own
+// 24h throttle (state file), so calling it every session is still a cheap no-op most of the
+// time. Toggle: CLAUDE_TOKEN_USAGE_PRUNE=0 (checked inside the function itself).
+if (process.env.CLAUDE_TOKEN_USAGE_LOG !== "0") {
+  const globalLog = join(homedir(), ".claude", "state", "token-usage.jsonl");
+  const pruneStateFile = join(homedir(), ".claude", "state", "token-usage-prune.json");
+  safe(() => pruneGlobalLogIfDue(globalLog, pruneStateFile));
 }
 
 // ONE-TIME per project (soft nudge, not urgent like the fallow gap above - gsd-core's own

@@ -36,11 +36,14 @@
 //
 // Every record is written to BOTH a per-project log (<root>/.claude/token-usage.jsonl, kept
 // forever, never pruned) and a global cross-project log (~/.claude/state/token-usage.jsonl,
-// pruned per token-usage-prune.mjs's retention rule).
+// pruned per token-usage-prune.mjs's retention rule). Pruning itself does NOT run from here
+// anymore (moved 2026-07-13): it's a retention sweep, not a per-event concern, so it's driven
+// exclusively from SessionStart (session-init.mjs) - this file only ever appends.
 //
 // Toggles: CLAUDE_TOKEN_USAGE_LOG=0 disables capture entirely (both events).
 //          CLAUDE_TOKEN_USAGE_COST=0 keeps token capture, skips cost estimate + pricing refresh.
-//          CLAUDE_TOKEN_USAGE_PRUNE=0 (read inside token-usage-prune.mjs) disables retention.
+//          CLAUDE_TOKEN_USAGE_PRUNE=0 (read inside token-usage-prune.mjs) disables retention,
+//          checked at SessionStart, not here.
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
@@ -50,7 +53,6 @@ import {
   safe, writeFile, readJSON, findRoot, projectNameOf, normalizeModel,
   appendJSONL, readNewJSONLEntries, ensureGitignored,
 } from "./lib/token-usage-shared.mjs";
-import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 
 if (process.env.CLAUDE_TOKEN_USAGE_LOG === "0") process.exit(0);
 
@@ -60,7 +62,6 @@ try { d = JSON.parse(safe(() => readFileSync(0, "utf8")) || "{}"); } catch { pro
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRICING_FILE = join(homedir(), ".claude", "state", "model-pricing.json");
 const GLOBAL_LOG = join(homedir(), ".claude", "state", "token-usage.jsonl");
-const PRUNE_STATE_FILE = join(homedir(), ".claude", "state", "token-usage-prune.json");
 // Shared per-root state file with session-init.mjs / gsd-config-patch.mjs - same namespace,
 // just new independent keys (tokenLogCursor, subagentLogCursors) so this never collides with
 // their flags.
@@ -126,7 +127,6 @@ function writeRecord(root, record) {
   ensureGitignored(root, "token-usage.jsonl");
 
   appendJSONL(GLOBAL_LOG, record);
-  pruneGlobalLogIfDue(GLOBAL_LOG, PRUNE_STATE_FILE);
 }
 
 const root = findRoot(d.cwd || process.cwd());

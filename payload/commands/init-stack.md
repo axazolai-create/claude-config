@@ -1,11 +1,11 @@
 ---
 description: Detect stack, run the interactive plugin selector in your terminal, then settings merge on apply
 argument-hint: "[--apply-all]"
-allowed-tools: Bash(python3 *), Bash(claude *), Bash(pnpm *), Read, Edit
+allowed-tools: Bash(python3 *), Bash(claude *), Bash(pnpm *), Bash(node *), Read, Write, Edit
 ---
 
 Set up stack-specific Claude Code plugins for THIS project. Never run installs, marketplace
-changes, or removals without my explicit OK. In the interactive flow (step 2) my on-screen
+changes, or removals without my explicit OK. In the interactive flow (step 3) my on-screen
 confirmation IS that OK - the tool installs exactly the plugins I check, nothing else.
 
 ## 1. Detect + classify (you run this)
@@ -13,7 +13,28 @@ Run: `python3 ~/.claude/bin/init-stack.py`
 Parse the `STATUS_JSON` block (`stacks`, `plugins[]` with `state`, `present[]` already-enabled) and
 show me the human report (state per plugin, and which are already enabled).
 
-## 2. Interactive install + activate (I run this myself, in my terminal) - the main path
+## 2. Stack-rules snapshot (build if missing)
+`.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
+no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). It has no
+automatic staleness check anymore (`session-init.mjs` only flags it as missing), so building it
+is now this command's job.
+
+Check:
+```bash
+node -e "process.exit(require('fs').existsSync('.claude/stack-rules.md') ? 0 : 1)" && echo "stack-rules.md already exists - skip this step"
+```
+
+If it already exists, skip the rest of this step - it stays as-is until an explicit rebuild (no
+drift detection; re-run `/init-stack`, or ask me for a rebuild, any time the rules should be
+regenerated after a `rules-src/` or stack change).
+
+If missing: dispatch a subagent (general-purpose) to build it, following
+`~/.claude/rules-src/README.md` § "Building stack-rules" exactly - reuse step 1's `stacks` list
+instead of re-detecting. For the frontmatter hash values, run
+`node ~/.claude/hooks/lib/stack-rules-check.mjs` (prints `sourceHash`/`stackFingerprint` for
+this project) and pass them to the subagent, or let it run that command itself.
+
+## 3. Interactive install + activate (I run this myself, in my terminal) - the main path
 An arrow-key UI cannot be driven through you, so tell me to run it directly:
 
     python3 ~/.claude/bin/init-stack.py -i
@@ -35,7 +56,7 @@ After the plugin step, `-i` also lists the stack's declared **skills** (npx Agen
 offers to `npx skills add` the missing ones. Skills are opt-in (none pre-checked), have no
 enable/disable, and their slugs drift - if an install fails, verify the current slug and retry.
 
-## 3. Non-interactive fallback (if I can't use a TTY)
+## 4. Non-interactive fallback (if I can't use a TTY)
 `-i` needs a real terminal. If I can't run it, this path does ACTIVATION ONLY (it does not
 install): confirm the id list with me first, then
 `python3 ~/.claude/bin/init-stack.py --enable <installed ids...> --remove <to_remove ids...>`
@@ -47,11 +68,11 @@ install it by hand first, by state (always wait for my OK):
 - **unavailable** -> `refresh`, then retry or fix the id in the template.
 Re-check after each: `python3 ~/.claude/bin/init-stack.py --status <plugin-id>` until `installed`.
 
-## 4. Finish
+## 5. Finish
 After settings are written, remind me: `enabledPlugins` resolves at STARTUP - I must RESTART Claude
 Code (or `/reload-plugins` if available). Do NOT claim plugins are active in the current session.
 
-## 5. GSD test/build command proposal (only if `.planning/config.json` exists)
+## 6. GSD test/build command proposal (only if `.planning/config.json` exists)
 gsd-core already auto-detects `workflow.test_command`/`workflow.build_command` from Makefile/
 package.json/Cargo.toml/go.mod/pyproject.toml when they're unset, so only propose an explicit
 value when the stack detected in step 1 gives a MORE SPECIFIC command than that generic guess
@@ -83,7 +104,7 @@ with `Edit`, preserving every other key (this is a plain JSON merge, not a full-
 never drop sibling keys under `workflow` or elsewhere). On decline, write nothing; gsd-core's
 own auto-detect remains the effective behavior.
 
-## 6. `fallow` devDependency proposal (GSD + Node only)
+## 7. `fallow` devDependency proposal (GSD + Node only)
 Only if `.planning/config.json` exists AND step 1 detected a Node stack (`stacks` contains
 any of `react`/`next`/`react-native`/`nest`/`turbo`/`nx`/`telegram-node`, or a plain
 `package.json` exists at repo root).
@@ -118,7 +139,7 @@ On decline: `Edit` `.planning/config.json` to set `code_quality.fallow.enabled: 
 explicitly (don't leave it to silently inherit `true` from the personal default and fail
 later) - preserve every other key under `code_quality` and elsewhere.
 
-## 7. Mark leanmode dial default (always, no gate)
+## 8. Mark leanmode dial default (always, no gate)
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
 `docs/superpowers/specs/2026-07-10-leanmode-design.md`).

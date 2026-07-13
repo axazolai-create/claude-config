@@ -23,6 +23,23 @@ ship. Artifacts live in `.planning/`.
 - Reason: GSD's value is the persisted, context-isolated artifact chain. Each phase output
   is the next phase's input; cherry-picking one phase out of the loop loses that chain.
 
+## GSD orchestrator token hygiene
+
+- In `/gsd-plan-phase` and `/gsd-execute-phase` orchestrator threads, route exploratory /
+  data-derivation Bash and Read calls (JSON parsing, path/config lookups, file
+  summarization) through `ctx_batch_execute` / `ctx_execute` / `ctx_execute_file` instead
+  of raw `Bash`/`Read`.
+- Do not reroute `gsd_run()` / `gsd-tools.cjs` protocol calls (gate checks, commit
+  validation, drift precheck, worktree checks) through the sandbox — gsd-core drives its
+  own control flow off their literal exit codes/stdout.
+- Keep the orchestrator thread itself on sonnet-5, not opus. Opus stays reserved for
+  planning/research/verification roles.
+- `TaskCreate`/`TaskUpdate` have no batch parameter — don't try to batch them.
+- Same routing applies inside GSD subagents: every `gsd-*` agent except
+  `gsd-doc-classifier` and `gsd-user-profiler` has `mcp__plugin_context-mode_context-mode__*`
+  in its `tools:` grant (`~/.claude/agents/<name>.md`). Their own exploratory Bash/Read/Grep 
+  should route through the sandbox the same way as the orchestrator.
+
 ## Superpowers is retained only for gaps GSD does not fill
 
 - Skill authoring (no GSD equivalent).

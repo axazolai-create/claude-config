@@ -914,9 +914,29 @@ def offer_skills(stacks: list[str]) -> None:
         print("Failed:", ", ".join(failed), "- verify the `npx skills add` slug and retry.")
 
 
+# ---------- gsd-* agents: context-mode MCP tool sync (best-effort, cross-tool) ----------
+def sync_gsd_context_mode_agents() -> None:
+    """gsd-* agents (~/.claude/agents/gsd-*.md) belong to the separate gsd-core tool, not this
+    bundle, so the actual patch logic lives in Node (hooks/lib/context-mode-gsd-agents.mjs,
+    shared with setup.mjs and session-init.mjs). Python has no import path into a .mjs module,
+    so this spawns the CLI wrapper instead. Silent no-op if node or the script isn't present -
+    never blocks stack detection/setup on it."""
+    script = HOME / ".claude" / "sync-gsd-context-mode-tool.mjs"
+    if not script.exists():
+        return
+    try:
+        r = subprocess.run(["node", str(script)], capture_output=True, text=True, timeout=10)
+        out = (r.stdout or "").strip()
+        if out:
+            print(out)
+    except Exception:
+        pass
+
+
 # ---------- main ----------
 def main() -> int:
     _force_utf8_stdio()
+    sync_gsd_context_mode_agents()
     args = sys.argv[1:]
 
     if args and args[0] == "--status":

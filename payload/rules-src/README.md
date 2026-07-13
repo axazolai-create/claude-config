@@ -6,10 +6,13 @@ not `rules` — everything under `~/.claude/rules/` is loaded by Claude Code its
 (path-scoped via `paths:` frontmatter, unconditionally without it), and that mechanism has
 no off switch. Delivery works by compilation instead:
 
-- On session start, `hooks/session-init.mjs` compares the snapshot's frontmatter against
-  the current source hash + the project's stack fingerprint
-  (`hooks/lib/stack-rules-check.mjs`); on desync it instructs the session to dispatch a
-  rebuild subagent, otherwise stays silent. Opt out: `CLAUDE_STACK_RULES=0`.
+- On session start, `hooks/session-init.mjs` only checks whether `.claude/stack-rules.md`
+  exists; if not, it suggests running `/init-stack` (see "Building stack-rules" below - the
+  command now owns generation). No automatic staleness/drift detection once a snapshot
+  exists - re-run `/init-stack` or ask for a rebuild explicitly to refresh it. Simplified
+  2026-07-13 from a `sourceHash`/`stackFingerprint` comparison (`hooks/lib/stack-rules-check.mjs`,
+  still used by the compiler subagent to stamp the frontmatter, just no longer auto-compared)
+  that fired a rebuild instruction every session on any drift. Opt out: `CLAUDE_STACK_RULES=0`.
 - The snapshot enters context via an `@stack-rules.md` import line in the project's
   auto-loaded `.claude/CLAUDE.md`.
 - Design/rationale: `docs/superpowers/specs/2026-07-12-stack-rules-design.md`.
@@ -72,8 +75,8 @@ no off switch. Delivery works by compilation instead:
 
 ## Building stack-rules (compiler instructions)
 
-Run this as a subagent when a session-start note says the snapshot is missing or stale, or
-when the user asks for a rebuild:
+Run this as a subagent when `/init-stack` finds `.claude/stack-rules.md` missing, when a
+session-start note flags it missing, or when the user asks for a rebuild:
 
 1. **Detect stacks** from signature files (same marker set as `stack-rules-check.mjs` and
    the quick-fallback table in `~/.claude/CLAUDE.md`). Multiple stacks are normal — a

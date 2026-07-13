@@ -27,17 +27,25 @@
 ## RISK-STACKRULES-002 — Snapshot desync / stale auto-loading copies
 
 - **Status:** Open (accepted)
-- **Context:** two desync paths. (1) `stack-rules-check.mjs` hashes source rules by
-  path+size+mtime — a change that preserves all three (e.g. a restore that keeps mtimes) is
-  invisible, leaving a stale snapshot with no rebuild note. (2) A machine that updates the
-  bundle but never re-runs `setup.mjs` keeps the old auto-loaded `~/.claude/rules/` copies
-  alongside the snapshot — every rule then loads twice.
-- **Mitigation:** (1) any normal edit or `setup.mjs` deploy changes size/mtime; a manual
-  rebuild can always be requested. (2) `setup.mjs` `migrateRulesDir()` deletes bundle-owned
-  files from `~/.claude/rules/` and removes the directory when empty; user-authored files
-  are kept and reported with a move-by-hand note.
-- **Residual:** machines that skip `setup.mjs` after upgrading stay on the old (working)
-  mechanism until they run it. Accepted.
+- **Context:** two desync paths. (1) Simplified 2026-07-13: `session-init.mjs` now only checks
+  whether `.claude/stack-rules.md` exists, not whether it's stale (the prior sourceHash/
+  stackFingerprint comparison via `stack-rules-check.mjs` was removed as too eager — it fired a
+  rebuild instruction every session on any drift). So once a project has a snapshot, it is
+  never auto-flagged again, even if `~/.claude/rules-src/` changes or the project's stack
+  changes (new framework added, etc.) — drift is silent until someone re-runs `/init-stack` or
+  asks for a rebuild. (2) A machine that updates the bundle but never re-runs `setup.mjs` keeps
+  the old auto-loaded `~/.claude/rules/` copies alongside the snapshot — every rule then loads
+  twice.
+- **Mitigation:** (1) `/init-stack` now owns building the snapshot (rules-src/README.md §
+  "Building stack-rules") and can be re-run any time to refresh it; `stack-rules-check.mjs` is
+  kept as a CLI utility so the compiler subagent can still stamp sourceHash/stackFingerprint
+  into the frontmatter, it's just no longer auto-compared. (2) `setup.mjs` `migrateRulesDir()`
+  deletes bundle-owned files from `~/.claude/rules/` and removes the directory when empty;
+  user-authored files are kept and reported with a move-by-hand note.
+- **Residual:** (1) trades auto-freshness for less session-start noise — a project's rules can
+  silently drift from `rules-src/` indefinitely if nobody re-runs `/init-stack`. (2) machines
+  that skip `setup.mjs` after upgrading stay on the old (working) mechanism until they run it.
+  Both accepted.
 
 ## RISK-CLAUDEMD-001 — Legacy `@.claude/CLAUDE.md` imports double-load project context
 
