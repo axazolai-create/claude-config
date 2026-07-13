@@ -21,7 +21,10 @@ export function deepMergeExistingWins(base, add) {
   }
   if (isObj(base) && isObj(add)) {
     const out = { ...base };
-    for (const k of Object.keys(add)) out[k] = k in base ? deepMergeExistingWins(base[k], add[k]) : add[k];
+    for (const k of Object.keys(add)) {
+      if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      out[k] = k in base ? deepMergeExistingWins(base[k], add[k]) : add[k];
+    }
     return out;
   }
   return base;
@@ -30,6 +33,7 @@ export function deepMergeExistingWins(base, add) {
 /** One-level-nested merge: `patch` wins on every key it defines; target's own keys survive. */
 export function mergeReferenceWins(target, patch) {
   for (const [k, v] of Object.entries(patch)) {
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
     if (v && typeof v === "object" && !Array.isArray(v)) {
       if (!target[k] || typeof target[k] !== "object" || Array.isArray(target[k])) target[k] = {};
       Object.assign(target[k], v);

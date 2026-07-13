@@ -586,7 +586,13 @@ async function main() {
       const curCmd = merged.statusLine && merged.statusLine.command;
       const isOurs = typeof curCmd === "string" && curCmd.includes("gsd-context-meter");
       const isGsdCoreDefault = typeof curCmd === "string" && curCmd.includes("gsd-statusline.js");
-      if (!curCmd || isGsdCoreDefault || isOurs) merged.statusLine = partial.statusLine;
+      if (!curCmd || isGsdCoreDefault || isOurs) {
+        // Built from CDIR directly (not the <HOME>-substituted partial.statusLine.command
+        // string) so the written command is byte-identical to gsd-statusline-registration.mjs's
+        // desiredCommand() - quoted + forward-slash, safe if HOME ever contains a space.
+        const scriptPath = join(CDIR, "hooks", "gsd-context-meter.mjs").replace(/\\/g, "/");
+        merged.statusLine = { ...partial.statusLine, command: `node "${scriptPath}"` };
+      }
     }
 
     const curStr = JSON.stringify(cur, null, 2);

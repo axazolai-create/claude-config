@@ -69,6 +69,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node <HOME>/.claude/hooks/gsd-context-meter.mjs"
+    "command": "node \"<HOME>/.claude/hooks/gsd-context-meter.mjs\""
   }
 }
