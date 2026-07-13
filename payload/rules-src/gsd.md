@@ -103,10 +103,9 @@ by the marker, never by the path:
   native per-repo `post-commit` hook installed by `session-init.mjs`.
 - A project's local `graphify-out/` has no auto-refresh of its own, and no prescriptive
   refresh-cadence rule is injected into the project's `CLAUDE.md` — run `graphify update .`
-  manually when you want it current. (A prior `rules-src/templates/graphify.PROJECT.md`
-  template did inject one; removed as a redundant, standing "consult the graph" nudge
-  duplicating graphify's own `graphify claude install` CLAUDE.md section — see the note at
-  the top of this subsection.)
+  manually when you want it current (a standing "consult the graph" nudge here would
+  duplicate graphify's own `graphify claude install` CLAUDE.md section — see the note at
+  the top of this subsection).
 
 ## `.planning/config.json` — default model_profile is auto-patched once per project
 
