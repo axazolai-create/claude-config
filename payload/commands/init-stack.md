@@ -168,3 +168,21 @@ near the patch's expected anchor text (`~/.claude/hooks/lib/gsd-agent-patches.mj
 each patch's target string). Don't guess a new anchor and re-apply automatically - that's a
 judgment call on whether the patch still makes sense against the new content, which needs my
 review.
+
+## 10. Sync personal GSD defaults + statusline override (machine-wide + this project)
+`gsd-defaults.partial.json` is this bundle's curated personal GSD config (model routing,
+workflow toggles) plus the statusline context-meter override. `setup.mjs` already applies
+both once per install; this step catches drift for the entry point you actually run per
+project without necessarily re-running the full installer - same rationale as step 9.
+
+Run:
+```bash
+node ~/.claude/gsd-defaults-sync.mjs
+```
+
+Show me exactly what it printed: whether `~/.gsd/defaults.json` changed (deep-additive -
+your own values always win), whether this project's `.planning/config.json` changed
+(reference wins on overlapping keys, skipped entirely if there's no `.planning/` here), and
+whether the statusLine registration changed (it only takes over from an unset value or from
+gsd-core's own default `gsd-statusline.js` - if it reports a custom value was left
+untouched, that's expected and not an error).
