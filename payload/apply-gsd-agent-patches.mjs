@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// CLI entry point for payload/commands/init-session.md - applies every pending patch from
-// hooks/lib/gsd-agent-patches.mjs to ~/.claude/agents/gsd-*.md. Deliberately NOT wired into
-// setup.mjs or session-init.mjs's auto-apply path (unlike sync-gsd-context-mode-tool.mjs's
-// underlying lib) - these patches inject prose across 30+ files, so they only run when a
-// human explicitly triggers /init-session, after session-init.mjs's read-only check has
-// surfaced that something is pending.
+// CLI entry point for payload/commands/init-stack.md (step 9) and payload/commands/init-session.md
+// (standalone fallback) - applies every pending patch from hooks/lib/gsd-agent-patches.mjs to
+// ~/.claude/agents/gsd-*.md. Deliberately NOT wired into setup.mjs or session-init.mjs's
+// auto-apply path (unlike sync-gsd-context-mode-tool.mjs's underlying lib) - these patches
+// inject prose across 30+ files, so they only run when a human explicitly triggers one of
+// those two commands, after session-init.mjs's read-only check has surfaced that something is
+// pending.
 // Usage: node apply-gsd-agent-patches.mjs [claudeDir]   (default: ~/.claude)
 import { homedir } from "node:os";
 import { join } from "node:path";

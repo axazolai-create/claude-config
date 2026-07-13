@@ -143,3 +143,28 @@ later) - preserve every other key under `code_quality` and elsewhere.
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
 `docs/superpowers/specs/2026-07-10-leanmode-design.md`).
+
+## 9. Apply pending gsd-* agent patches (machine-wide, not project-specific)
+`~/.claude/agents/gsd-*.md` are owned by the separate `gsd-core` tool, not this bundle -
+patching them is best-effort cross-tool maintenance. `session-init.mjs` checks read-only every
+session and flags when something here is pending (context-mode routing guidance,
+gsd-executor.md/gsd-debugger.md hardening fixes); this step is what actually writes, folded
+into `/init-stack` so it happens on an explicit invocation you already control instead of
+requiring a separate command. (`/init-session` still exists standalone for applying patches
+without running the rest of this flow, e.g. right after a gsd-core update mid-milestone.)
+
+Run:
+```bash
+node ~/.claude/apply-gsd-agent-patches.mjs
+```
+
+Show me exactly what it printed: which `file:patchId` pairs were applied, which were skipped
+as curated (`CURATED:NOEDIT`, left untouched on purpose), and which were skipped for a missing
+anchor (target file changed upstream since the patch was written - flag those to me
+explicitly, don't silently treat them as done).
+
+If anything was skipped for a missing anchor, read the affected file and tell me what changed
+near the patch's expected anchor text (`~/.claude/hooks/lib/gsd-agent-patches.mjs` documents
+each patch's target string). Don't guess a new anchor and re-apply automatically - that's a
+judgment call on whether the patch still makes sense against the new content, which needs my
+review.

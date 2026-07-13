@@ -36,10 +36,10 @@ ship. Artifacts live in `.planning/`.
   planning/research/verification roles.
 - `TaskCreate`/`TaskUpdate` have no batch parameter — don't try to batch them.
 - GSD subagents get the same routing rule directly in their own prompt file (a
-  `<context_mode_routing>` block, applied by `hooks/lib/gsd-agent-patches.mjs` /
-  `/init-session`) rather than through this snapshot — subagents never read the
-  project's compiled `stack-rules.md`, so a prose rule living only here would be dead
-  weight for them.
+  `<context_mode_routing>` block, applied by `hooks/lib/gsd-agent-patches.mjs` via
+  `/init-stack` step 9 or standalone `/init-session`) rather than through this snapshot —
+  subagents never read the project's compiled `stack-rules.md`, so a prose rule living only
+  here would be dead weight for them.
 
 ## Superpowers is retained only for gaps GSD does not fill
 

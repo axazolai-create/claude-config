@@ -453,9 +453,10 @@ if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
 
 // ---- gsd-* agents: check (never write) for pending content patches ----
 // Deliberately CHECK-ONLY, unlike the tool-grant sync just above: hooks/lib/gsd-agent-patches.mjs
-// injects prose across 30+ files, so it's review-gated behind an explicit /init-session run
-// instead of silently rewriting every session. Every session, idempotent - cheap (file reads
-// only), stops surfacing on its own once /init-session has been run and nothing is pending.
+// injects prose across 30+ files, so it's review-gated behind an explicit invocation (step 9 of
+// payload/commands/init-stack.md, or standalone via /init-session) instead of silently
+// rewriting every session. Every session, idempotent - cheap (file reads only), stops
+// surfacing on its own once the patches have been applied and nothing is pending.
 // Opt out: CLAUDE_GSD_AGENT_PATCHES_CHECK=0.
 if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
   const claudeDir = join(homedir(), ".claude");
@@ -463,7 +464,8 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
   const files = Object.keys(pending);
   if (files.length)
     notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
-      `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-session to apply.`);
+      `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
+      `(step 9 applies these) or /init-session to apply.`);
 }
 
 // ---- token-usage global log pruning: SessionStart only ----
