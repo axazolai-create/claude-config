@@ -66,5 +66,9 @@
   },
   "permissions": {
     "deny": ["Edit(~/.claude/CLAUDE.md)", "Write(~/.claude/CLAUDE.md)"]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node <HOME>/.claude/hooks/gsd-context-meter.mjs"
   }
 }
