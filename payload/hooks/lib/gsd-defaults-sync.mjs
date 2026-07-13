@@ -52,3 +52,37 @@ export function findProjectRoot(startDir) {
   }
   return resolve(startDir);
 }
+
+const safe = (fn) => { try { return fn(); } catch { return undefined; } };
+const readJSON = (p) => JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, ""));
+
+/** Deep-additive-merges `partial` into ~/.gsd/defaults.json. Existing user values win. */
+export function syncGsdGlobalDefaults({ homeDir, partial }) {
+  const dir = join(homeDir, ".gsd");
+  const path = join(dir, "defaults.json");
+  const cur = existsSync(path) ? (safe(() => readJSON(path)) ?? {}) : {};
+  const merged = deepMergeExistingWins(cur, partial);
+  const curStr = JSON.stringify(cur, null, 2);
+  const mergedStr = JSON.stringify(merged, null, 2);
+  if (curStr === mergedStr) return { path, changed: false };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, mergedStr + "\n");
+  return { path, changed: true };
+}
+
+/** Reference-wins-merges `partial` into <projectRoot>/.planning/config.json, if it exists. */
+export function syncProjectConfig({ projectRoot, partial }) {
+  const planningDir = join(projectRoot, ".planning");
+  if (!existsSync(planningDir)) return { skipped: true, reason: "no .planning directory" };
+  const path = join(planningDir, "config.json");
+  if (!existsSync(path)) return { skipped: true, reason: "no .planning/config.json" };
+  const cur = safe(() => readJSON(path));
+  if (cur === undefined || typeof cur !== "object" || cur === null)
+    return { skipped: true, reason: "config.json unreadable or invalid JSON" };
+  const before = JSON.stringify(cur, null, 2);
+  mergeReferenceWins(cur, partial);
+  const after = JSON.stringify(cur, null, 2);
+  if (before === after) return { path, changed: false };
+  writeFileSync(path, after + "\n");
+  return { path, changed: true };
+}
