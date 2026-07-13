@@ -44,6 +44,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
+import { checkGsdAgentPatches } from "./lib/gsd-agent-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 
 const MARKER = "CURATED:NOEDIT";
@@ -448,6 +449,21 @@ if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
   const r = safe(() => syncGsdAgentsContextMode({ claudeDir }));
   if (r && r.active && r.updated.length)
     actions.push(`added context-mode MCP tool to ${r.updated.length} gsd-* agent(s)`);
+}
+
+// ---- gsd-* agents: check (never write) for pending content patches ----
+// Deliberately CHECK-ONLY, unlike the tool-grant sync just above: hooks/lib/gsd-agent-patches.mjs
+// injects prose across 30+ files, so it's review-gated behind an explicit /init-session run
+// instead of silently rewriting every session. Every session, idempotent - cheap (file reads
+// only), stops surfacing on its own once /init-session has been run and nothing is pending.
+// Opt out: CLAUDE_GSD_AGENT_PATCHES_CHECK=0.
+if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
+  const claudeDir = join(homedir(), ".claude");
+  const pending = safe(() => checkGsdAgentPatches({ claudeDir })) || {};
+  const files = Object.keys(pending);
+  if (files.length)
+    notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
+      `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-session to apply.`);
 }
 
 // ---- token-usage global log pruning: SessionStart only ----

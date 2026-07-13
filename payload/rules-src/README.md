@@ -128,11 +128,6 @@ into the snapshot:
 - `next.AGENTS.md` -> copy to the project root as `AGENTS.md` when the Next stack is
   detected and no `AGENTS.md` exists (Next.js breaking-changes-vs-training-data note; the
   snapshot's `node.next.md` section imports it via `@../AGENTS.md`).
-- `graphify.PROJECT.md` -> insert into the project's root `CLAUDE.md` once that project
-  has a local `graphify-out/`. Subject to the same curated-file rule as step 7: if the
-  root file is curated or missing, surface the suggestion to the user instead of writing.
-  See `gsd.md` § "graphify is two tools" for why this is separate from GSD's own
-  `.planning/graphs/graph.json`.
 
 ## Ambiguous stacks
 

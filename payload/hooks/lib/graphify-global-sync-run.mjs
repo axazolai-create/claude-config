@@ -18,10 +18,10 @@
 // (`gsd/phase-{phase}-{slug}`, `gsd/{milestone}-{slug}`), so a tag is a reliable,
 // git-visible "a phase just closed" signal without parsing gsd-core's own state.
 // Deliberately NOT narrowed to only these three: this worker is a cheap, detached,
-// lock-deduped background extraction - unlike the LOCAL per-project graphify-out/ cadence
-// (rules-src/templates/graphify.PROJECT.md), where narrowing to review/verify gates matters
-// because gsd-core's rebuild is heavier and synchronous-ish. There's no such cost here, so
-// commit stays as a trigger too rather than being replaced by the narrower set.
+// lock-deduped background extraction - unlike GSD's own `/gsd-graphify build` (gsd.md §
+// "graphify is two tools"), which is heavier and synchronous-ish, so narrowing to
+// review/verify gates would matter there. There's no such cost here, so commit stays as a
+// trigger too rather than being replaced by a narrower set.
 // No Superpowers-close-specific trigger: Superpowers' review skills leave no git-visible
 // signal of their own (no tag, no distinct command) - that case is covered incidentally by
 // the commit/push triggers, since finishing a Superpowers branch always ends in one of those.

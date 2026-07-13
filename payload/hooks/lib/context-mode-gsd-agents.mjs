@@ -17,7 +17,7 @@ const MARKER_RE = /^<!--\s*CURATED:NOEDIT\s*-->$/;
 // Deliberately excluded: narrow, single-purpose agents (JSON classifier / read-only profiler)
 // that don't do the kind of large-output research/analysis work context-mode targets - adding
 // the tool would just be unused surface area, not a fix for a gap.
-const EXCLUDED_AGENTS = new Set(["gsd-doc-classifier.md", "gsd-user-profiler.md"]);
+export const EXCLUDED_AGENTS = new Set(["gsd-doc-classifier.md", "gsd-user-profiler.md"]);
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const readJSON = (p) => JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, ""));
