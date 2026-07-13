@@ -35,10 +35,11 @@ ship. Artifacts live in `.planning/`.
 - Keep the orchestrator thread itself on sonnet-5, not opus. Opus stays reserved for
   planning/research/verification roles.
 - `TaskCreate`/`TaskUpdate` have no batch parameter — don't try to batch them.
-- Same routing applies inside GSD subagents: every `gsd-*` agent except
-  `gsd-doc-classifier` and `gsd-user-profiler` has `mcp__plugin_context-mode_context-mode__*`
-  in its `tools:` grant (`~/.claude/agents/<name>.md`). Their own exploratory Bash/Read/Grep 
-  should route through the sandbox the same way as the orchestrator.
+- GSD subagents get the same routing rule directly in their own prompt file (a
+  `<context_mode_routing>` block, applied by `hooks/lib/gsd-agent-patches.mjs` /
+  `/init-session`) rather than through this snapshot — subagents never read the
+  project's compiled `stack-rules.md`, so a prose rule living only here would be dead
+  weight for them.
 
 ## Superpowers is retained only for gaps GSD does not fill
 
