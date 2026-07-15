@@ -54,7 +54,7 @@ INSTALLED_FILE = PLUGINS_DIR / "installed_plugins.json"
 KNOWN_MP_FILE = PLUGINS_DIR / "known_marketplaces.json"
 MARKETPLACES_DIR = PLUGINS_DIR / "marketplaces"
 PRUNE = {".git", "node_modules", ".venv", "venv", "dist", "build",
-         "__pycache__", ".next", "target", ".gradle", ".idea"}
+         "__pycache__", ".next", "target", ".gradle", ".idea", "obj", "bin"}
 
 
 # ---------- io ----------

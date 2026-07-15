@@ -53,6 +53,7 @@ const ROOT_PATTERNS = [
   ["swift", /^Package\.swift$|\.xcodeproj$|\.xcworkspace$/],
   ["dart", /^pubspec\.yaml$/],
   ["go", /^go\.mod$/],
+  ["csharp", /\.(csproj|sln|xaml)$/],
   ["turbo", /^turbo\.json$/],
   ["nx", /^nx\.json$/],
   ["pnpm-ws", /^pnpm-workspace\.yaml$/],

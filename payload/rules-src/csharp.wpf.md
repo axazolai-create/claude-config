@@ -2,6 +2,7 @@
 paths:
   - "**/*.xaml"
   - "**/*.xaml.cs"
+  - "**/*.Designer.cs"
 ---
 
 # WPF / WinForms (desktop direction)
