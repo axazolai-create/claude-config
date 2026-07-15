@@ -1,0 +1,6 @@
+{
+  "stack": "aspnet",
+  "description": "ASP.NET Core web/API projects.",
+  "merge": {},
+  "plugins": []
+}

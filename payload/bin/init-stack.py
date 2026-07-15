@@ -313,6 +313,10 @@ STACK_PATHS: dict[str, str] = {
     "nx": "monorepo/nx.json",
     "telegram-node": "bots/node.json",
     "telegram-python": "bots/python.json",
+    "csharp": "backend/csharp/_base.json",
+    "aspnet": "backend/csharp/aspnet.json",
+    "csharp-cli": "CLI/csharp.json",
+    "wpf": "desktop/wpf.json",
 }
 
 

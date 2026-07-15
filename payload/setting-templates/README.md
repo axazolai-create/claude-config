@@ -14,15 +14,16 @@ setting-templates/
     _base.json                 # the "sql" stack's own settings, and DB/'s vertical base for
                                 # any future sibling (e.g. a postgres- or oracle-specific template)
   CLI/
-    kotlin.json                 # the "kotlin" stack; no CLI/_base.json yet - add one if a
-                                 # second CLI-oriented stack shows up later
+    _base.json                  # empty - no plugin shared between kotlin/csharp CLI tools today
+    kotlin.json                  # the "kotlin" stack
+    csharp.json                  # the "csharp-cli" stack
   frontend/
     _base.json                 # typescript-lsp, frontend-design, playwright, accesslint
     react.json
     next.json
     react-native.json          # extends: ["mobile/_base.json"] (cross-branch)
   backend/
-    _base.json                 # empty - no plugin shared between node/python today
+    _base.json                 # empty - no plugin shared between node/python/csharp today
     node/
       _base.json                # typescript-lsp; also the "node" stack's own leaf (no framework)
       nest.json
@@ -31,6 +32,9 @@ setting-templates/
       django.json
       fastapi.json
       flask.json
+    csharp/
+      _base.json                 # csharp-lsp; also the "csharp" stack's own leaf (no framework)
+      aspnet.json
   mobile/
     _base.json                 # auth0 (opt-in, not auto-enabled)
     android.json                 # kotlin-lsp
@@ -40,6 +44,9 @@ setting-templates/
     _base.json
     turbo.json
     nx.json
+  desktop/
+    _base.json                  # empty - no plugin shared across desktop frameworks today
+    wpf.json                     # the "wpf" stack (WPF/WinForms)
   bots/
     _base.json                 # no dedicated plugin exists for bot dev - docs only
     node.json                    # extends: ["backend/node/_base.json"] (cross-branch)
@@ -48,8 +55,8 @@ setting-templates/
 
 `/init-stack` detects the project's stack(s) (`react`, `next`, `react-native`, `nest`, `node`,
 `django`, `fastapi`, `flask`, `python`, `android`, `swift`, `dart`, `kotlin`, `sql`, `turbo`, `nx`,
-`telegram-node`, `telegram-python`), looks up each one's file via the `STACK_PATHS` table in
-`bin/init-stack.py`,
+`telegram-node`, `telegram-python`, `csharp`, `aspnet`, `csharp-cli`, `wpf`), looks up each one's
+file via the `STACK_PATHS` table in `bin/init-stack.py`,
 resolves its full inheritance chain, checks each declared plugin, and merges the `merge` block
 into the project's `.claude/settings.json`. It also surfaces any `skills[]` a template declares
 (npx-installed Agent Skills) and, in `-i`, offers to `npx skills add` the missing ones - skills are

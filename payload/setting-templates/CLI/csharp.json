@@ -1,0 +1,30 @@
+{
+  "stack": "csharp-cli",
+  "description": "Standalone C# console/CLI applications (no ASP.NET Core or WPF/WinForms signature) - not nested under backend/csharp since a CLI tool isn't a backend service.",
+  "merge": {
+    "enabledPlugins": {
+      "csharp-lsp@claude-plugins-official": true
+    }
+  },
+  "plugins": [
+    {
+      "id": "csharp-lsp@claude-plugins-official",
+      "description": "C# language server for code intelligence.",
+      "check": {
+        "installed_file": "~/.claude/plugins/installed_plugins.json",
+        "cmd": "claude plugin list",
+        "bash": "jq -e '.plugins[\"csharp-lsp@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
+        "slash": "/plugin list"
+      },
+      "install": {
+        "marketplace_add": {
+          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
+          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
+        },
+        "cmd": "claude plugin install csharp-lsp@claude-plugins-official --scope project",
+        "bash": "claude plugin install csharp-lsp@claude-plugins-official --scope project",
+        "slash": "/plugin install csharp-lsp@claude-plugins-official"
+      }
+    }
+  ]
+}

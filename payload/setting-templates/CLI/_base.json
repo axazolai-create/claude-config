@@ -1,0 +1,6 @@
+{
+  "stack": "CLI",
+  "description": "Cross-language CLI-application vertical base - no plugin shared between languages today (Kotlin and C# CLI tools use different LSPs).",
+  "merge": {},
+  "plugins": []
+}

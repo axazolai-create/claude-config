@@ -1,0 +1,6 @@
+{
+  "stack": "desktop",
+  "description": "Cross-framework desktop-application vertical base - no plugin shared across desktop frameworks today.",
+  "merge": {},
+  "plugins": []
+}

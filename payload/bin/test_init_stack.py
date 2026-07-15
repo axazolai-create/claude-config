@@ -56,6 +56,33 @@ class RealTemplatesTests(unittest.TestCase):
         self.assertNotIn("typescript-lsp@claude-plugins-official", ids)
         self.assertNotIn("expo@claude-plugins-official", ids)
 
+    def test_aspnet_inherits_backend_csharp_base(self):
+        entries, _ = init_stack.gather(["aspnet"])
+        ids = {e["id"] for e in entries if e["id"]}
+        self.assertIn("csharp-lsp@claude-plugins-official", ids)  # backend/csharp/_base.json, vertical parent
+        self.assertIn("context7@claude-plugins-official", ids)    # root _base universal
+
+    def test_csharp_bare_stack_reuses_backend_csharp_base(self):
+        entries, _ = init_stack.gather(["csharp"])
+        ids = {e["id"] for e in entries if e["id"]}
+        self.assertIn("csharp-lsp@claude-plugins-official", ids)
+        self.assertIn("context7@claude-plugins-official", ids)
+
+    def test_csharp_cli_is_standalone(self):
+        entries, _ = init_stack.gather(["csharp-cli"])
+        ids = {e["id"] for e in entries if e["id"]}
+        self.assertIn("csharp-lsp@claude-plugins-official", ids)  # its own plugin
+        self.assertIn("context7@claude-plugins-official", ids)    # root _base universal
+        self.assertNotIn("typescript-lsp@claude-plugins-official", ids)
+        self.assertNotIn("kotlin-lsp@claude-plugins-official", ids)
+
+    def test_wpf_is_standalone(self):
+        entries, _ = init_stack.gather(["wpf"])
+        ids = {e["id"] for e in entries if e["id"]}
+        self.assertIn("csharp-lsp@claude-plugins-official", ids)
+        self.assertIn("context7@claude-plugins-official", ids)
+        self.assertNotIn("typescript-lsp@claude-plugins-official", ids)
+
     def test_python_bare_stack_reuses_backend_python_base(self):
         entries, _ = init_stack.gather(["python"])
         ids = {e["id"] for e in entries if e["id"]}
