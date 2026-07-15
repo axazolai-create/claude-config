@@ -451,9 +451,8 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
 - **db-live-access-gate.mjs** (PreToolUse: `Bash|^mcp__.*`). Live connected DBs are read-only
   by default: any query outside SELECT/WITH/SHOW/DESCRIBE/EXPLAIN is blocked (exit 2); a
   recognized read-only query still requires manual confirmation via "ask", even in a
-  bypass-permissions session. Used to be mistakenly registered under `SessionStart` (never
-  fired there, since that event isn't tied to a tool call) — fixed, now lives under
-  `PreToolUse` with the other gates.
+  bypass-permissions session. Lives under `PreToolUse` with the other gates — not under
+  `SessionStart`, that event isn't tied to a tool call and would never fire.
 - **graphify-global-sync.mjs** (PostToolUse: `Bash`) + **hooks/lib/graphify-global-sync-run.mjs**
   (shared worker). After a `git commit` made by Claude via the Bash tool, in the background
   (detached, doesn't block the session), refreshes this project's entry in the cross-project
@@ -532,12 +531,9 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   Empirically (2026-07-11, three real subagent launches, debug-log instrumentation)
   confirmed: in the orchestrator's own thread, `SubagentStart`'s `systemMessage` doesn't show
   up — not on the banner (which the harness draws before hooks run and can't be rewritten
-  regardless), not as a separate line there either. Independently corroborated at the source:
-  the third-party `ponytail` plugin this design was copied from (see above) — its
-  `ponytail-runtime.js` also emits only `additionalContext` for native Claude Code's
-  `SubagentStart`, no `systemMessage`; its own author evidently doesn't rely on that field
-  there either. The level is surfaced to the orchestrator in practice through a separate
-  mechanism — see `session-init.mjs` above. Separate, not yet re-confirmed via debug-log:
+  regardless), not as a separate line there either. The level is surfaced to the orchestrator
+  in practice through a separate mechanism — see `session-init.mjs` above. Separate, not yet
+  re-confirmed via debug-log:
   one observation showed a line `SubagentStart:<type> says: <message>` inside a backgrounded
   subagent's own expanded transcript (`↓ to expand`) — plausibly a different render location
   for `systemMessage` (not the parent thread), not a contradiction of the finding above.
@@ -841,8 +837,7 @@ Auto-init (`session-init.mjs`) uses the same logic (with `--no-create`, i.e. onl
 files). The risk-register step runs **every session** and is idempotent — if the register
 appeared or moved after the project's first init, the entry gets added on the next startup
 automatically. (Root `CLAUDE.md` auto-marking and the per-project exclude are also every
-session and idempotent now, see "Project auto-init" above; they used to be one-time — that
-turned out to be a timing bug, when the file appeared after the first session.)
+session and idempotent, same reason — see "Project auto-init" above.)
 
 Update a specific register directly:
 

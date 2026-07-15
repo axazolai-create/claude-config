@@ -66,8 +66,8 @@ the target provider's setup below. This is what makes the choice reversible on r
   local, no key): I run SearXNG in Docker, then add a SearXNG MCP pointed at it.
 - The exact SearXNG MCP package changes over time - **verify the current one via WebSearch before
   adding** rather than assuming a name; then `claude mcp add search -e SEARXNG_URL="http://localhost:8080" -- npx -y <verified-searxng-mcp-package>`.
-- Do NOT propose Brave: as of 2026 its free tier is gone (metered billing, card required) - not
-  free, not no-cloud. Only mention it if I explicitly ask.
+- Do NOT propose Brave: its free tier requires a card (metered billing) - not free, not no-cloud.
+  Only mention it if I explicitly ask.
 - Verify via `claude mcp list`.
 
 ## 4. Finish

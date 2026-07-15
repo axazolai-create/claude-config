@@ -8,9 +8,8 @@ paths:
 Loads only in repos that have a `.planning/` directory (GSD project). Irrelevant elsewhere —
 do not duplicate this in the global `CLAUDE.md`.
 
-GSD here is the `open-gsd/gsd-core` fork. Claude Code command form is hyphenated: `/gsd-*`
-(the colon form `/gsd:*` is Gemini-only). Pipeline: discuss -> plan -> execute -> verify ->
-ship. Artifacts live in `.planning/`.
+GSD here is the `open-gsd/gsd-core` fork. Claude Code command form is hyphenated: `/gsd-*`.
+Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.planning/`.
 
 ## Precedence: GSD owns the pipeline when `.planning/` exists
 
