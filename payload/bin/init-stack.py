@@ -118,6 +118,16 @@ def _py_requirements() -> str:
     return text.lower()
 
 
+def _csproj_text() -> str:
+    text = ""
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in PRUNE]
+        for fn in filenames:
+            if fn.endswith(".csproj"):
+                text += "\n" + _read_text(Path(dirpath) / fn)
+    return text.lower()
+
+
 def _glob_any(*patterns: str) -> bool:
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in PRUNE]
@@ -196,6 +206,19 @@ def detect() -> list[str]:
     # as "node" above.
     if py and not any(s in found for s in ("django", "fastapi", "flask", "telegram-python")):
         found.append("python")
+    cs = _csproj_text()
+    has_xaml = _glob_any("*.xaml")
+    if cs:
+        if 'sdk="microsoft.net.sdk.web"' in cs or "microsoft.aspnetcore" in cs:
+            found.append("aspnet")
+        if "<usewpf>true" in cs or "<usewindowsforms>true" in cs or has_xaml:
+            found.append("wpf")
+        if "outputtype>exe" in cs and not any(s in found for s in ("aspnet", "wpf")):
+            found.append("csharp-cli")
+        if not any(s in found for s in ("aspnet", "wpf", "csharp-cli")):
+            found.append("csharp")
+    elif has_xaml or _glob_any("*.cs"):
+        found.append("wpf" if has_xaml else "csharp")
     if _glob_any("*.sql"):
         found.append("sql")
     seen: set[str] = set()

@@ -183,5 +183,78 @@ class SyntheticFixtureTests(unittest.TestCase):
         self.assertIn("a.json", labels)
 
 
+class DetectCSharpTests(unittest.TestCase):
+    """Exercise the .csproj-based C# detection heuristics in detect()."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        orig_root = init_stack.ROOT
+        init_stack.ROOT = self.root
+        self.addCleanup(lambda: setattr(init_stack, "ROOT", orig_root))
+
+    def _write(self, rel_path, content):
+        p = self.root / rel_path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+    def test_aspnet_detected_from_web_sdk(self):
+        self._write("Api/Api.csproj",
+                     '<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup>'
+                     '<TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>')
+        found = init_stack.detect()
+        self.assertIn("aspnet", found)
+        self.assertNotIn("wpf", found)
+        self.assertNotIn("csharp-cli", found)
+        self.assertNotIn("csharp", found)
+
+    def test_aspnet_detected_from_aspnetcore_package_reference(self):
+        self._write("Api/Api.csproj",
+                     '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>'
+                     '<PackageReference Include="Microsoft.AspNetCore.App" />'
+                     '</ItemGroup></Project>')
+        self.assertIn("aspnet", init_stack.detect())
+
+    def test_wpf_detected_from_usewpf_flag(self):
+        self._write("App/App.csproj",
+                     '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+                     '<UseWPF>true</UseWPF></PropertyGroup></Project>')
+        found = init_stack.detect()
+        self.assertIn("wpf", found)
+        self.assertNotIn("aspnet", found)
+        self.assertNotIn("csharp-cli", found)
+
+    def test_wpf_detected_from_xaml_file_alone(self):
+        self._write("App/MainWindow.xaml", "<Window/>")
+        found = init_stack.detect()
+        self.assertIn("wpf", found)
+        self.assertNotIn("csharp", found)
+
+    def test_csharp_cli_detected_from_exe_output_type(self):
+        self._write("Tool/Tool.csproj",
+                     '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+                     '<OutputType>Exe</OutputType></PropertyGroup></Project>')
+        found = init_stack.detect()
+        self.assertIn("csharp-cli", found)
+        self.assertNotIn("aspnet", found)
+        self.assertNotIn("wpf", found)
+        self.assertNotIn("csharp", found)
+
+    def test_bare_csharp_fallback_for_plain_library(self):
+        self._write("Lib/Lib.csproj",
+                     '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+                     '<TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>')
+        found = init_stack.detect()
+        self.assertIn("csharp", found)
+        self.assertNotIn("aspnet", found)
+        self.assertNotIn("wpf", found)
+        self.assertNotIn("csharp-cli", found)
+
+    def test_bare_csharp_fallback_when_cs_files_exist_without_csproj(self):
+        self._write("Script.cs", "class Program {}")
+        self.assertIn("csharp", init_stack.detect())
+
+
 if __name__ == "__main__":
     unittest.main()

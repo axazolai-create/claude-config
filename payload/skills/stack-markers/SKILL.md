@@ -14,4 +14,6 @@ build.gradle.kts -> Kotlin | plugin.xml -> IntelliJ/Gateway plugin | *.sql -> SQ
 *.xcodeproj/Info.plist -> iOS (Swift) | pubspec.yaml -> Flutter (Dart) |
 metro.config.js / app.config.* -> React Native | turbo.json -> Turborepo monorepo |
 nx.json -> Nx monorepo | bot.ts/bot.py + telegraf/grammy/aiogram/python-telegram-bot ->
-Telegram bot
+Telegram bot | *.csproj (Sdk="...Web"/AspNetCore ref) -> ASP.NET Core | *.csproj
+(OutputType=Exe) -> C# CLI | *.xaml / UseWPF/UseWindowsForms -> WPF/WinForms desktop |
+*.csproj (no more specific signal) -> C# (bare)
