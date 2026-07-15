@@ -54,6 +54,44 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 - Two worktree creators collide and fail silently outside a git repo. `git init` before any
   phase.
 
+### Parallel worktree waves (Windows): environment contention, not agent confusion
+
+- Stagger `isolation="worktree"` `Agent()` dispatch to one call per turn — concurrent
+  `git worktree add` races on `.git/config.lock`. After merge, `git worktree remove`/
+  `branch -D` may report `.git does not exist` (cosmetic, not data loss): recover with
+  `git worktree prune`, then clear the leftover dir via `robocopy <empty-dir> <dir> /MIR` —
+  `rm -rf`/`Remove-Item` hang or orphan processes on 100K+-file trees on Windows.
+- Build cross-package deps (e.g. a shared internal package) ONCE at the orchestrator level
+  and copy the built output into each worktree; don't let every worktree rebuild it.
+- Never let more than one worktree run `pnpm install` (or anything triggering pnpm's
+  pre-run dependency check) concurrently — Windows can't rename a path another process has
+  open, so concurrent resolution of the same new package against the shared store fails
+  (`EPERM ... rename ..._tmp_N`), and the shared store index also serializes installs to
+  minutes each even without an outright error. If a worktree's dependency set is unchanged
+  from base, copy the base's already-installed `node_modules` via `robocopy <src> <dst>
+  /MIR` (not `Copy-Item`/`cp -r`) instead of reinstalling. If a wave adds a new dependency,
+  resolve it once before dispatching that wave's worktrees.
+- Use `git diff --stat HEAD` for worktree dirty-checks, never `git status` — on a worktree
+  with a 100K+-file `node_modules`, `git status` can hang minutes even with `.gitignore`
+  correctly excluding it (filesystem walk + AV cost, not a git-ignore bug). `git diff --stat
+  HEAD`/`rev-parse`/`log` don't touch the working tree and stay fast. Exclude sibling
+  worktree paths from jest/vitest scanning (`modulePathIgnorePatterns`/
+  `watchPathIgnorePatterns`/`test.exclude`).
+- Real-DB integration tests (don't mock the unit under test — see `testing.md`) from
+  multiple worktrees against one shared dev DB/cache risk write contention and cross-suite
+  leakage. Isolate per worktree (separate schema/temp tables, or a cloned DB container)
+  rather than sharing one instance. If a wave's changes need a real schema change, generate
+  the actual migration as part of that plan's commits — don't leave it as implicit
+  test-only state.
+- Executor subagents: run verification (build/test/lint) in the foreground, synchronously —
+  a backgrounded long check with "wait for notification" can sit reporting "waiting"
+  indefinitely even if the command already finished or is still genuinely running. Scope
+  test invocations to the plan's own files/pattern, not the full suite.
+- Orchestrator: a Bash shell's cwd persists across calls. `cd`-ing into a worktree, then
+  targeting Write/Edit at a different worktree's absolute path, trips a path guard (target
+  git root != shell's git root). `cd` back to the orchestrator's own root after any Bash
+  call that entered a worktree, or prefer `git -C <path> ...` for one-off commands.
+
 ## TDD / debug / code-review: never double-gate
 
 - One enforcer per repo. GSD owns these via `.planning/config.json` (`tdd_mode`, code-review
