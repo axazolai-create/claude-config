@@ -52,6 +52,10 @@ no off switch. Delivery works by compilation instead:
 | `python.flask.md` | app.py, blueprints, views |
 | `python.data.md` | notebooks, pipelines, etl, jobs |
 | `python.cli.md` | cli.py, `__main__.py`, scripts |
+| `csharp.base.md` | all `*.cs`, `*.csproj`, `*.sln` |
+| `csharp.aspnet.md` | `Controllers/**`, `Program.cs` (web), `appsettings*.json` |
+| `csharp.cli.md` | console `Program.cs` (no ASP.NET/WPF signature) |
+| `csharp.wpf.md` | `*.xaml`, `*.xaml.cs` |
 | `kotlin.base.md` | `*.kt/kts`, gradle.kts |
 | `kotlin.intellij-plugin.md` | plugin.xml, `*.form`, META-INF |
 | `kotlin.android.md` | AndroidManifest.xml, `res/**`, `androidTest/**` |
