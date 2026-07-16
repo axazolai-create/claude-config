@@ -57,20 +57,49 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 ### Parallel worktree waves (Windows): environment contention, not agent confusion
 
 - Stagger `isolation="worktree"` `Agent()` dispatch to one call per turn — concurrent
-  `git worktree add` races on `.git/config.lock`. After merge, `git worktree remove`/
-  `branch -D` may report `.git does not exist` (cosmetic, not data loss): recover with
-  `git worktree prune`, then clear the leftover dir via `robocopy <empty-dir> <dir> /MIR` —
-  `rm -rf`/`Remove-Item` hang or orphan processes on 100K+-file trees on Windows.
-- Build cross-package deps (e.g. a shared internal package) ONCE at the orchestrator level
-  and copy the built output into each worktree; don't let every worktree rebuild it.
-- Never let more than one worktree run `pnpm install` (or anything triggering pnpm's
-  pre-run dependency check) concurrently — Windows can't rename a path another process has
-  open, so concurrent resolution of the same new package against the shared store fails
-  (`EPERM ... rename ..._tmp_N`), and the shared store index also serializes installs to
-  minutes each even without an outright error. If a worktree's dependency set is unchanged
-  from base, copy the base's already-installed `node_modules` via `robocopy <src> <dst>
-  /MIR` (not `Copy-Item`/`cp -r`) instead of reinstalling. If a wave adds a new dependency,
-  resolve it once before dispatching that wave's worktrees.
+  `git worktree add` races on `.git/config.lock`.
+- **Worktree merge/cleanup can hang on large `node_modules` trees — this is not a merge
+  conflict.** `git merge` itself is unaffected by a worktree's dependency tree — `node_modules`
+  is gitignored, so it never enters the diff/conflict machinery. The hang happens one step
+  later, at worktree *removal*: on Windows, `git worktree remove` (and any `rm -rf`/
+  `Remove-Item` on the same path) can sit for minutes or falsely report `.git does not exist`
+  against a 100K+-file `node_modules` — cosmetic, not data loss; the merge commit already
+  landed. Never run that removal as a blocking foreground call. Recovery: `git worktree
+  prune` (clears the stale admin entry pointing at the vanished `.git`), then dispatch
+  `robocopy <empty-dir> <target> /MIR` IN THE BACKGROUND to clear the directory contents (not
+  `rm -rf`/`Remove-Item` — same hang risk), then remove the now-empty directory — continue
+  other work while waiting for the robocopy completion notification, don't block on it.
+- **Liveness check every 5-10 minutes while subagents/background shell tasks are running** —
+  verify with hard evidence, never assume: growing/changed `git diff --stat HEAD` output in
+  the worktree (not `git status`/`--porcelain` — same filesystem-walk hang risk noted above),
+  a recently-modified file mtime, or an active OS process tied to the work. Separately detect
+  **looping** — the same action (same tool call/command) repeated more than 3 times with no
+  new outcome is a distinct failure mode from "slow but progressing," and must be flagged on
+  its own. On a suspected stall or loop: **stop and ask the user before acting** — never kill
+  or restart unilaterally. Present the evidence found and offer concrete recovery options:
+  restart preserving partial results (commit/save WIP first), restart inline without worktree
+  isolation, or another option specific to the observed behavior.
+- **Sub-processes update their result artifact incrementally, after each completed step — not
+  once at the end.** A `SUMMARY.md`/`STATE.md`/progress-JSON written only as a single batch at
+  completion gives the liveness check above nothing to observe until the very end, and loses
+  all progress if the process is killed or crashes mid-run. Persist after every step instead —
+  this is what makes the "restart, preserving partial results" recovery option above actually
+  possible.
+- **Dependency provisioning order — copy before install, and avoid installing inside a
+  worktree at all when possible.** Before a subagent builds or tests in its own worktree,
+  copy `node_modules` AND any built cross-package output (e.g. `packages/*/dist`) from the
+  base worktree/branch first (`robocopy <src> <dst> /MIR`, not `Copy-Item`/`cp -r`) — don't
+  let every worktree independently reinstall or rebuild what the orchestrator already has.
+  Only install afterward, and only for genuinely new/changed dependencies not already present
+  in the copied base; resolve those once, before dispatching that wave's worktrees, rather
+  than inside them. Never let more than one worktree run `pnpm install` (or anything
+  triggering pnpm's pre-run dependency check) concurrently even for that residual case —
+  Windows can't rename a path another process has open, so concurrent resolution of the same
+  new package against the shared store fails (`EPERM ... rename ..._tmp_N`), and the shared
+  store index also serializes installs to minutes each even without an outright error. All N
+  worktrees of a wave independently reinstalling/rebuilding an unchanged shared package —
+  instead of the orchestrator provisioning it once and copying it in — is a common root cause
+  of a wave taking hours instead of minutes.
 - Use `git diff --stat HEAD` for worktree dirty-checks, never `git status` — on a worktree
   with a 100K+-file `node_modules`, `git status` can hang minutes even with `.gitignore`
   correctly excluding it (filesystem walk + AV cost, not a git-ignore bug). `git diff --stat
@@ -85,8 +114,26 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   test-only state.
 - Executor subagents: run verification (build/test/lint) in the foreground, synchronously —
   a backgrounded long check with "wait for notification" can sit reporting "waiting"
-  indefinitely even if the command already finished or is still genuinely running. Scope
-  test invocations to the plan's own files/pattern, not the full suite.
+  indefinitely even if the command already finished or is still genuinely running.
+- **Full-suite test runs multiply across parallel worktrees and dominate wave wall-clock.**
+  An executor that finishes a small, scoped change but then runs the entire test suite
+  (instead of only the tests touching its own `files_modified`) has been observed costing
+  tens of minutes per worker — in a wave of N parallel workers that's N× the full suite's
+  cost every wave, not once, and is a bigger driver of hour-plus runs and ballooned context
+  (huge test-output logs) than model reasoning itself. Scope every test invocation to the
+  plan's own files/pattern — the test runner's own filter flag (`--testPathPattern`,
+  `--related`, `-k`/`-m` marker selection, etc.) or, in a Turborepo/pnpm-workspace monorepo,
+  `turbo test --filter=...[<base-ref>]` / `pnpm --filter <affected-pkg> test` to scope to
+  affected packages only. Defer a full-suite run to one place — end-of-phase verification or
+  the CI gate — never repeat it inside every plan's own executor.
+- **Chunk large test runs into batches of ~10 files/specs, run sequentially, when a full
+  suite genuinely must run** (end-of-phase verification, or a suite too large to scope down
+  further). This narrows a hang to the specific batch instead of the whole run — distinct
+  from the scoping rule above, which reduces *which* tests run; this addresses *how* a run
+  that's still large gets executed. A test gate stuck in watch-mode (rather than genuinely
+  taking a long time) is a separate failure mode, already addressed upstream in current
+  gsd-core releases (one-shot + bounded timeout) — chunking is for a real, completing but
+  large run, not a hang.
 - Orchestrator: a Bash shell's cwd persists across calls. `cd`-ing into a worktree, then
   targeting Write/Edit at a different worktree's absolute path, trips a path guard (target
   git root != shell's git root). `cd` back to the orchestrator's own root after any Bash

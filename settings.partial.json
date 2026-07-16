@@ -19,6 +19,12 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/db-live-access-gate.mjs"] }
         ]
+      },
+      {
+        "matcher": "Bash|Read",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/worktree-executor-discipline-advisor.mjs"] }
+        ]
       }
     ],
     "PostToolUse": [

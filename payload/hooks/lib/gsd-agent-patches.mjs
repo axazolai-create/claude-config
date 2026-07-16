@@ -102,14 +102,61 @@ cleanly:
 
 const DEBUGGER_STABILITY_RERUN_BLOCK = `**STABILITY-CONFIRMATION RERUN LIMIT:** The repeated runs above are an investigation technique for surfacing intermittent bugs — the repetition itself is the evidence. Once a stability/regression batch has produced a clean result (e.g., N/N passing, recorded in Evidence), stop. Do not launch another full batch of the same run "to be extra sure" with no new hypothesis or code change since the last batch. One additional batch is acceptable only if the original run count was thin (<20) or the bug is timing/concurrency-sensitive enough that the reasoning_checkpoint's \`blind_spots\` field names a specific reason more evidence is needed — document that reason in Evidence. Beyond that, a green stability run repeated again is not verification, it's inertia.`;
 
-const EXECUTOR_QUERY_HANDLERS_OLD =
-  "After SUMMARY.md, update STATE.md using `gsd-tools query` state handlers (positional args; see `sdk/src/query/QUERY-HANDLERS.md`):";
-const EXECUTOR_QUERY_HANDLERS_NEW =
-`After SUMMARY.md, update STATE.md using \`gsd-tools query\` state handlers (positional args).
-The full handler catalog with calling conventions lives in \`sdk/src/query/QUERY-HANDLERS.md\`
-in the \`open-gsd/gsd-core\` **upstream source repo** — that path is not shipped in your local
-install (see \`<filesystem_search_discipline>\`), so don't search for it locally. The commands
-below cover every handler this step needs:`;
+const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK = `<dependency_provisioning_order>
+If running inside a worktree (\`.git\` is a file — see \`<worktree_metadata_capture>\`), do NOT
+run \`pnpm install\`/\`npm install\`/\`yarn install\` (or anything triggering a fresh dependency
+resolution) as your first move when a build or test step needs \`node_modules\`. First check
+whether the orchestrator already provisioned it from the base checkout — a worktree created
+for this task should already have \`node_modules\` and any built cross-package output (e.g.
+\`packages/*/dist\`) copied in via \`robocopy <src> <dst> /MIR\` before you were spawned. Only
+install for packages genuinely new or changed relative to that copied base, and only after
+confirming the copy didn't already cover them (\`ls node_modules/<pkg>\` / check
+\`package.json\`'s lockfile hash against the base). Every worktree in a wave independently
+reinstalling/rebuilding an unchanged shared dependency — instead of relying on what the
+orchestrator already provisioned — is a common root cause of a wave taking hours instead of
+minutes, and on Windows can outright fail with \`EPERM ... rename ..._tmp_N\` when two
+worktrees resolve the same package against the shared pnpm store concurrently.
+</dependency_provisioning_order>`;
+
+const EXECUTOR_TEST_EXECUTION_DISCIPLINE_BLOCK = `<test_execution_discipline>
+Scope every test invocation to this plan's own \`files_modified\` — the test runner's own
+filter flag (\`--testPathPattern\`, \`--related\`, \`-k\`/\`-m\` marker selection) or, in a
+Turborepo/pnpm-workspace monorepo, \`turbo test --filter=...[<base-ref>]\` /
+\`pnpm --filter <affected-pkg> test\` — never the full suite as a matter of course. A worker
+that finishes a small, scoped change but then runs the entire test suite has been observed
+costing tens of minutes per worker, multiplied across every parallel worktree in a wave;
+defer a full-suite run to end-of-phase verification or the CI gate, not to your own plan's
+verification step.
+
+When a full suite genuinely must run here (no narrower scope applies), chunk it into batches
+of ~10 files/specs and run batches sequentially rather than the whole suite at once — this
+narrows a hang to the specific batch instead of the whole run.
+</test_execution_discipline>`;
+
+const EXECUTOR_INCREMENTAL_PROGRESS_BLOCK = `**5b. Incremental progress signal:** The commit you just made in step 5 IS the incremental
+progress artifact the orchestrator's liveness monitoring relies on — never batch multiple
+tasks' commits together or defer committing until the end of the plan to "save time." Each
+task's commit, made as soon as that task's verification passes, is what lets the orchestrator
+distinguish "still working" from "stalled" without guessing.`;
+
+const EXECUTOR_NO_RECURSIVE_AGENT_SPAWN_BLOCK = `<no_recursive_agent_spawn>
+You do not have the \`Agent\` tool (see your \`tools:\` frontmatter) — this is intentional, not
+an oversight, and must not be worked around (e.g. by shelling out to a CLI that itself
+dispatches Claude Code agents). Recursive/nested sub-agent spawning from a worker like you is
+an active, unresolved source of uncontrolled exponential fan-out and token burn in current
+Claude Code releases — the orchestrator, not you, owns deciding how work gets parallelized.
+If a task seems to genuinely need further decomposition into parallel sub-work, that is an
+architectural question — return a Rule 4 checkpoint instead of attempting it yourself.
+</no_recursive_agent_spawn>`;
+
+const EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK = `<context_mode_read_discipline>
+context-mode's own large-file nudge on \`Read\` fires **at most once per session** and never
+blocks — after the first large file you read, every subsequent large \`Read\` gets zero
+further reminder, silently. Don't rely on that one-time nudge as your ongoing signal: before
+every \`Read\` on a file you expect to be large, ask whether you need the file's exact bytes
+because you're about to \`Edit\` it, or whether you're reading it purely to understand/analyze
+it. For the latter, use \`ctx_execute_file\` instead — every time, not just when reminded.
+</context_mode_read_discipline>`;
 
 /* ---------- patch registry ----------
  * appliesTo(name, claudeDir): whether this patch targets a given agent filename.
@@ -129,19 +176,6 @@ export const PATCHES = [
       && !EXCLUDED_AGENTS.has(name) && isContextModeActive(claudeDir),
     detect: (content) => content.includes("<context_mode_routing>"),
     apply: (content) => insertAfter(content, "</role>", CONTEXT_MODE_ROUTING_BLOCK),
-  },
-  {
-    id: "executor-query-handlers-ref-fix",
-    // sdk/src/query/QUERY-HANDLERS.md ships in the open-gsd/gsd-core UPSTREAM SOURCE repo,
-    // not in the installed package (verified absent from every local gsd-core install and
-    // from this repo, 2026-07-13 - see docs/superpowers/specs/... forensics writeup). The
-    // bare pointer reads as a local path and has caused an agent to `find /` hunting for it,
-    // auto-backgrounding two unbounded whole-disk searches it then forgot to stop.
-    appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes(EXECUTOR_QUERY_HANDLERS_NEW.split("\n")[0]),
-    apply: (content) => content.includes(EXECUTOR_QUERY_HANDLERS_OLD)
-      ? content.replace(EXECUTOR_QUERY_HANDLERS_OLD, EXECUTOR_QUERY_HANDLERS_NEW)
-      : null,
   },
   {
     id: "executor-filesystem-search-discipline",
@@ -177,6 +211,56 @@ export const PATCHES = [
     appliesTo: (name) => name === "gsd-debugger.md",
     detect: (content) => content.includes("STABILITY-CONFIRMATION RERUN LIMIT"),
     apply: (content) => insertAfter(content, "// Run this 1000 times\n```", DEBUGGER_STABILITY_RERUN_BLOCK),
+  },
+  {
+    id: "executor-dependency-provisioning-order",
+    // Windows worktree-parallelism findings (see rules-src/gsd.md "Parallel worktree waves"):
+    // a wave's N worktrees independently reinstalling/rebuilding an unchanged shared
+    // dependency is a common root cause of hours-instead-of-minutes waves, and can outright
+    // fail on Windows with EPERM when two worktrees resolve the same package concurrently.
+    appliesTo: (name) => name === "gsd-executor.md",
+    detect: (content) => content.includes("<dependency_provisioning_order>"),
+    apply: (content) => insertAfter(content, "</worktree_metadata_capture>", EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK),
+  },
+  {
+    id: "executor-test-chunking",
+    // Observed: a worker finishing a small, scoped change but then running the ENTIRE test
+    // suite is a bigger driver of hour-plus runs and ballooned context than model reasoning
+    // itself - reinforces the same scoping rule now in rules-src/gsd.md at the orchestrator
+    // level, directly in the executor's own system prompt.
+    appliesTo: (name) => name === "gsd-executor.md",
+    detect: (content) => content.includes("<test_execution_discipline>"),
+    apply: (content) => insertAfter(content, "</execution_flow>", EXECUTOR_TEST_EXECUTION_DISCIPLINE_BLOCK),
+  },
+  {
+    id: "executor-incremental-progress",
+    // Per-task commits are already the incremental progress signal an orchestrator's
+    // liveness monitoring depends on (git diff --stat HEAD / recent commit) - this patch
+    // makes that explicit so it's never deferred/batched "to save time."
+    appliesTo: (name) => name === "gsd-executor.md",
+    detect: (content) => content.includes("Incremental progress signal"),
+    apply: (content) => insertBefore(content, "**6. Post-commit deletion check:**", EXECUTOR_INCREMENTAL_PROGRESS_BLOCK + "\n\n"),
+  },
+  {
+    id: "executor-no-recursive-agent-spawn",
+    // gsd-executor.md's own `tools:` frontmatter already excludes Agent - this patch
+    // documents that the exclusion is intentional (anthropics/claude-code has an open,
+    // unresolved issue about unbounded recursive sub-agent fan-out from workers that DO have
+    // Agent access) so a future gsd-core update, or a runtime that ignores the tools:
+    // restriction, doesn't silently reintroduce the risk.
+    appliesTo: (name) => name === "gsd-executor.md",
+    detect: (content) => content.includes("<no_recursive_agent_spawn>"),
+    apply: (content) => insertAfter(content, "</role>", EXECUTOR_NO_RECURSIVE_AGENT_SPAWN_BLOCK),
+  },
+  {
+    id: "executor-context-mode-read-discipline",
+    // context-mode's own Read nudge (hooks/core/routing.mjs upstream) fires at most once per
+    // session and never blocks - observed: a worker read a large file directly instead of
+    // ctx_execute_file after that one-shot budget was already spent earlier in the session.
+    // Same gate as context-mode-routing-block (meaningless without the tool grant).
+    appliesTo: (name, claudeDir) => name === "gsd-executor.md" && isContextModeActive(claudeDir),
+    detect: (content) => content.includes("<context_mode_read_discipline>"),
+    apply: (content) => insertAfter(content, "</role>", EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK),
   },
 ];
 
