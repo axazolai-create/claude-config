@@ -1,0 +1,27 @@
+{
+  "issue": 2285,
+  "pr": 2314,
+  "targetVersion": "1.7.0",
+  "files": [
+    {
+      "rel": "bin/lib/claude-orchestration.cjs",
+      "beforeSha256": "55c1957ae81219454cec7c6b2207e80f98d6205b545be981f5a89be1cad392eb",
+      "afterSha256": "06a10deaad5e353e13508f1e776a96eae5c46a71b8efdfd1f2ac23c0dec5911d"
+    },
+    {
+      "rel": "bin/lib/claude-orchestration-command-router.cjs",
+      "beforeSha256": "504753fd2d68702f057cacc786fdf2e216b4caac8752ee219f4bdbaafebf085a",
+      "afterSha256": "89c2f748857e649899f46d48cdf0a8783512ce4199e80e9e97f6ea4eb1c84ed3"
+    },
+    {
+      "rel": "bin/lib/capability-registry.cjs",
+      "beforeSha256": "89d4558941d6435ab931acf38efd3dad3a8f72a520fb21118852c1bba8c44ac6",
+      "afterSha256": "4184aa46d7abce485d5075f2ace2e66e4a82aac931020c321a639c2885f2d692"
+    },
+    {
+      "rel": "workflows/execute-phase.md",
+      "beforeSha256": "c0d52df3254744dbf70d399fbce75b1aba61b7e3a5ca4dc2f6461ea674024ea8",
+      "afterSha256": "aad9beed185108e3e5aced5eb12198adced30e1ceee6f211e127c90424444d1c"
+    }
+  ]
+}

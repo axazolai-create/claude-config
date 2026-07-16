@@ -523,6 +523,53 @@ async function main() {
     }
   }
 
+  /* ---------- gsd-core hand-patches (backports of confirmed upstream fixes) ----------
+   * gsd-core (~/.claude/gsd-core) is a separate tool, not owned by this bundle - it updates
+   * via /gsd-update, not setup.mjs. gsd-core-patches/<name>/ holds hand-applied backports of
+   * a real, confirmed upstream fix that hasn't reached a tagged release yet - see
+   * gsd-core-patches/README.md for the manifest.json schema and how to add a new one. Generic
+   * over every subdirectory found there - adding a new backport needs no change here, just a
+   * new subdirectory. Version-gated per patch (skip silently on any mismatch - not a
+   * per-session nag) and per-file hash-gated (only touches a file whose current hash matches
+   * the known pre-patch baseline; already-patched or diverged files are left alone, never
+   * clobbered). Retire a subdirectory entirely once its fix ships in a real gsd-core release.
+   */
+  if (!DRY) {
+    const gsdCoreDir = join(CDIR, "gsd-core");
+    const patchesRoot = join(REPO_ROOT, "gsd-core-patches");
+    if (existsSync(gsdCoreDir) && existsSync(patchesRoot)) {
+      const patchNames = readdirSync(patchesRoot, { withFileTypes: true })
+        .filter((e) => e.isDirectory()).map((e) => e.name);
+      for (const name of patchNames) {
+        const patchDir = join(patchesRoot, name);
+        const manifest = safe(() => JSON.parse(readFileSync(join(patchDir, "manifest.json"), "utf8")));
+        if (!manifest) continue;
+        const label = manifest.issue ? `#${manifest.issue}` : name;
+        const installedVersion = (read(join(gsdCoreDir, "VERSION")) || "").trim();
+        if (installedVersion !== manifest.targetVersion) {
+          summary.push(`skipped  gsd-core ${label} patch (installed version "${installedVersion || "unknown"}", patch targets "${manifest.targetVersion}")`);
+          continue;
+        }
+        let patched = 0, alreadyDone = 0, diverged = 0;
+        for (const f of manifest.files) {
+          const dst = join(gsdCoreDir, ...f.rel.split("/"));
+          const cur = read(dst);
+          if (cur === undefined) { diverged++; continue; }
+          const curHash = sha(cur);
+          if (curHash === f.afterSha256) { alreadyDone++; continue; }
+          if (curHash !== f.beforeSha256) { diverged++; continue; }
+          const afterContent = read(join(patchDir, "after", ...f.rel.split("/")));
+          if (afterContent === undefined) { diverged++; continue; }
+          write(dst + `.pre-${name}`, cur); // backup original, once, before first overwrite
+          if (write(dst, afterContent)) patched++;
+        }
+        if (patched) summary.push(`patched  gsd-core ${label} (${patched} file(s) in ${gsdCoreDir}; originals saved as *.pre-${name})`);
+        else if (alreadyDone === manifest.files.length) summary.push(`unchanged gsd-core ${label} patch (already applied)`);
+        else if (diverged) summary.push(`skipped  gsd-core ${label} patch (${diverged} file(s) diverge from the known ${manifest.targetVersion} baseline - not touching)`);
+      }
+    }
+  }
+
   /* ---------- settings.json: structured additive merge ---------- */
   // Source of truth for "what hooks/permissions we want" is settings.partial.json itself - NOT a
   // second hardcoded copy in here. That duplication is exactly how this used to drift (a hook
