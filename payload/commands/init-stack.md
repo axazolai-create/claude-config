@@ -196,9 +196,12 @@ node ~/.claude/apply-gsd-agent-patches.mjs
 ```
 
 Show me exactly what it printed: which `file:patchId` pairs were applied, which were skipped
-as curated (`CURATED:NOEDIT`, left untouched on purpose), and which were skipped for a missing
+as curated (`CURATED:NOEDIT`, left untouched on purpose), which were skipped for a missing
 anchor (target file changed upstream since the patch was written - flag those to me
-explicitly, don't silently treat them as done).
+explicitly, don't silently treat them as done), and which retired-patch leftovers were cleaned
+up (text from a patch since dropped from `PATCHES` - see `RETIRED_PATCHES` in
+`~/.claude/hooks/lib/gsd-agent-patches.mjs` - reverted back to a plain, safe form; this never
+happens for a patch still active in `PATCHES`, only ones already removed from it).
 
 If anything was skipped for a missing anchor, read the affected file and tell me what changed
 near the patch's expected anchor text (`~/.claude/hooks/lib/gsd-agent-patches.mjs` documents

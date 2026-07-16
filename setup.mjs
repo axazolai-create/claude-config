@@ -534,8 +534,28 @@ async function main() {
    * the known pre-patch baseline; already-patched or diverged files are left alone, never
    * clobbered). Retire a subdirectory entirely once its fix ships in a real gsd-core release.
    */
+  // `.pre-<name>` backups (written just below, once, before the first overwrite of a given
+  // file) used to accumulate forever - nothing ever removed them once the patch had proven
+  // stable. Removed only once it's safe to say the backup is no longer needed:
+  //   - installedVersion no longer matches manifest.targetVersion: gsd-core moved on (upstream
+  //     fix likely shipped, or the user rolled back) - the backup is orphaned either way, since
+  //     it was paired with a specific pre-patch baseline that no longer describes this install.
+  //   - OR every file is already at afterSha256 AND this run did no new patching (patched === 0):
+  //     the patch survived at least one full run untouched since it was applied, so the backup
+  //     has done its job. Deliberately NOT removed in the same run that just created it
+  //     (patched > 0) - that would defeat the point of having a same-run rollback option.
+  const prunePatchBackups = (name, files) => {
+    let removed = 0;
+    for (const f of files) {
+      const backup = join(gsdCoreDir, ...f.rel.split("/")) + `.pre-${name}`;
+      if (!existsSync(backup)) continue;
+      try { rmSync(backup, { force: true }); removed++; summary.push(`pruned   ${backup} (patch backup no longer needed)`); }
+      catch { summary.push(`prune-failed ${backup}`); }
+    }
+    return removed;
+  };
+  const gsdCoreDir = join(CDIR, "gsd-core");
   if (!DRY) {
-    const gsdCoreDir = join(CDIR, "gsd-core");
     const patchesRoot = join(REPO_ROOT, "gsd-core-patches");
     if (existsSync(gsdCoreDir) && existsSync(patchesRoot)) {
       const patchNames = readdirSync(patchesRoot, { withFileTypes: true })
@@ -548,6 +568,7 @@ async function main() {
         const installedVersion = (read(join(gsdCoreDir, "VERSION")) || "").trim();
         if (installedVersion !== manifest.targetVersion) {
           summary.push(`skipped  gsd-core ${label} patch (installed version "${installedVersion || "unknown"}", patch targets "${manifest.targetVersion}")`);
+          prunePatchBackups(name, manifest.files);
           continue;
         }
         let patched = 0, alreadyDone = 0, diverged = 0;
@@ -564,7 +585,7 @@ async function main() {
           if (write(dst, afterContent)) patched++;
         }
         if (patched) summary.push(`patched  gsd-core ${label} (${patched} file(s) in ${gsdCoreDir}; originals saved as *.pre-${name})`);
-        else if (alreadyDone === manifest.files.length) summary.push(`unchanged gsd-core ${label} patch (already applied)`);
+        else if (alreadyDone === manifest.files.length) { summary.push(`unchanged gsd-core ${label} patch (already applied)`); prunePatchBackups(name, manifest.files); }
         else if (diverged) summary.push(`skipped  gsd-core ${label} patch (${diverged} file(s) diverge from the known ${manifest.targetVersion} baseline - not touching)`);
       }
     }

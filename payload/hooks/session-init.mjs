@@ -44,7 +44,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
-import { checkGsdAgentPatches } from "./lib/gsd-agent-patches.mjs";
+import { checkGsdAgentPatches, checkRetiredGsdAgentPatches } from "./lib/gsd-agent-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 
 const MARKER = "CURATED:NOEDIT";
@@ -466,6 +466,16 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
     notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
       `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
       `(step 9 applies these) or /init-session to apply.`);
+
+  // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
+  // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale
+  // content nothing else ever cleans up, since gsd-* agents aren't rewritten by this bundle.
+  const retiredPending = safe(() => checkRetiredGsdAgentPatches({ claudeDir })) || {};
+  const retiredFiles = Object.keys(retiredPending);
+  if (retiredFiles.length)
+    notes.push(`gsd-* agent file(s) still carry text from ${retiredFiles.length} retired patch ` +
+      `target(s) (${retiredFiles.slice(0, 5).join(", ")}${retiredFiles.length > 5 ? ", ..." : ""}) ` +
+      `- run /init-stack (step 9) or /init-session to clean up.`);
 }
 
 // ---- token-usage global log pruning: SessionStart only ----

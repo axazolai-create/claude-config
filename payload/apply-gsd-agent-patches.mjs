@@ -24,3 +24,7 @@ if (result.skippedCurated.length)
   console.log(`Skipped (curated, left untouched): ${result.skippedCurated.join(", ")}`);
 if (result.skippedNoAnchor.length)
   console.log(`Skipped (anchor text not found - file may have changed upstream): ${result.skippedNoAnchor.join(", ")}`);
+if (result.removedRetired.length) {
+  console.log(`Cleaned up ${result.removedRetired.length} retired-patch leftover(s):`);
+  for (const entry of result.removedRetired) console.log(`  - ${entry}`);
+}

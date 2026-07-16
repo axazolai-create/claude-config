@@ -279,6 +279,42 @@ export const PATCHES = [
   },
 ];
 
+/* ---------- retired patches: best-effort cleanup of content a NOW-REMOVED entry above once
+ * injected ----------
+ * A patch dropped from PATCHES (its problem got solved a different way, usually upstream)
+ * stops being applied to fresh files, but says nothing about a file that already has its text
+ * from a past run - gsd-* agents aren't rewritten by this bundle, only by gsd-core's own
+ * updates, so old injected text can sit there indefinitely otherwise. Each entry here is the
+ * INVERSE of a patch that used to exist in PATCHES: same `appliesTo` gate, `detect` matches the
+ * exact text that patch injected (not a substring that could appear elsewhere), `revert` returns
+ * content with it replaced back to a plain, safe form - never re-introducing whatever problem
+ * the original patch fixed. Reverting is deliberately conservative (exact-string only, never a
+ * heuristic strip) - same "never corrupt the file" bar as PATCHES' own `apply`. Retire an entry
+ * here too (delete it) once nobody could plausibly still have the old text - i.e. after enough
+ * time that every install has picked up a gsd-core update superseding it. */
+const EXECUTOR_QUERY_HANDLERS_NEW =
+`After SUMMARY.md, update STATE.md using \`gsd-tools query\` state handlers (positional args).
+The full handler catalog with calling conventions lives in \`sdk/src/query/QUERY-HANDLERS.md\`
+in the \`open-gsd/gsd-core\` **upstream source repo** — that path is not shipped in your local
+install (see \`<filesystem_search_discipline>\`), so don't search for it locally. The commands
+below cover every handler this step needs:`;
+const EXECUTOR_QUERY_HANDLERS_CLEANED =
+  "After SUMMARY.md, update STATE.md using `gsd-tools query` state handlers (positional args):";
+
+export const RETIRED_PATCHES = [
+  {
+    id: "executor-query-handlers-ref-fix",
+    // Retired 2026-07-16 (5ce7e57): upstream gsd-executor.md stopped shipping the dead
+    // `sdk/src/query/QUERY-HANDLERS.md` reference this patch used to work around, so the fix is
+    // moot for any file gsd-core has since rewritten. A file that predates that rewrite can still
+    // carry our old replacement text (including the now-pointless "don't search for it locally"
+    // caveat) - revert it to the plain one-liner, with no dangling reference either way.
+    appliesTo: (name) => name === "gsd-executor.md",
+    detect: (content) => content.includes(EXECUTOR_QUERY_HANDLERS_NEW),
+    revert: (content) => content.split(EXECUTOR_QUERY_HANDLERS_NEW).join(EXECUTOR_QUERY_HANDLERS_CLEANED),
+  },
+];
+
 /* ---------- shared file listing ---------- */
 function listAgentFiles(claudeDir) {
   const agentsDir = join(claudeDir, "agents");
@@ -300,12 +336,27 @@ export function checkGsdAgentPatches({ claudeDir }) {
   return pending; // {} means fully up to date
 }
 
+/* ---------- read-only: which files still carry text from a RETIRED patch (never writes) ---------- */
+export function checkRetiredGsdAgentPatches({ claudeDir }) {
+  const pending = {}; // { filename: [retiredPatchId, ...] }
+  for (const name of listAgentFiles(claudeDir)) {
+    const applicable = RETIRED_PATCHES.filter((p) => p.appliesTo(name, claudeDir));
+    if (!applicable.length) continue;
+    const content = safe(() => readFileSync(join(claudeDir, "agents", name), "utf8"));
+    if (content === undefined || isCurated(content)) continue;
+    const found = applicable.filter((patch) => patch.detect(content)).map((patch) => patch.id);
+    if (found.length) pending[name] = found;
+  }
+  return pending; // {} means nothing left to clean up
+}
+
 /* ---------- write: apply every pending patch (only called explicitly, see file header) ---------- */
 export function applyGsdAgentPatches({ claudeDir }) {
-  const result = { applied: [], skippedCurated: [], skippedNoAnchor: [] };
+  const result = { applied: [], skippedCurated: [], skippedNoAnchor: [], removedRetired: [] };
   for (const name of listAgentFiles(claudeDir)) {
     const applicable = PATCHES.filter((p) => p.appliesTo(name, claudeDir));
-    if (!applicable.length) continue;
+    const applicableRetired = RETIRED_PATCHES.filter((p) => p.appliesTo(name, claudeDir));
+    if (!applicable.length && !applicableRetired.length) continue;
     const p = join(claudeDir, "agents", name);
     let content = safe(() => readFileSync(p, "utf8"));
     if (content === undefined) continue;
@@ -318,6 +369,12 @@ export function applyGsdAgentPatches({ claudeDir }) {
       content = updated;
       changed = true;
       result.applied.push(`${name}:${patch.id}`);
+    }
+    for (const patch of applicableRetired) {
+      if (!patch.detect(content)) continue; // nothing left to clean up
+      content = patch.revert(content);
+      changed = true;
+      result.removedRetired.push(`${name}:${patch.id}`);
     }
     if (changed) safe(() => writeFileSync(p, content));
   }
