@@ -13,26 +13,28 @@ Run: `python3 ~/.claude/bin/init-stack.py`
 Parse the `STATUS_JSON` block (`stacks`, `plugins[]` with `state`, `present[]` already-enabled) and
 show me the human report (state per plugin, and which are already enabled).
 
-## 2. Stack-rules snapshot (build if missing)
+## 2. Stack-rules snapshot (build if missing or stale)
 `.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
-no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). It has no
-automatic staleness check anymore (`session-init.mjs` only flags it as missing), so building it
-is now this command's job.
+no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). `session-init.mjs`
+only flags it as missing - its own passive, every-session sourceHash/stackFingerprint check was
+deliberately removed (too eager, fired a rebuild note on any drift). This command is where
+staleness actually gets caught and fixed instead: an explicit, review-gated invocation, not a
+background nag.
 
 Check:
 ```bash
-node -e "process.exit(require('fs').existsSync('.claude/stack-rules.md') ? 0 : 1)" && echo "stack-rules.md already exists - skip this step"
+node ~/.claude/hooks/lib/stack-rules-check.mjs
 ```
+Prints `{ status, sourceHash, stackFingerprint, snapshotPath }`. `status` is `"ok"` (source
+rules and stack signature unchanged since the last build), `"stale"` (either drifted since -
+rebuild), or `"missing"` (never built - build).
 
-If it already exists, skip the rest of this step - it stays as-is until an explicit rebuild (no
-drift detection; re-run `/init-stack`, or ask me for a rebuild, any time the rules should be
-regenerated after a `rules-src/` or stack change).
+If `"ok"`: skip the rest of this step.
 
-If missing: dispatch a subagent (general-purpose) to build it, following
+If `"stale"` or `"missing"`: dispatch a subagent (general-purpose) to (re)build it, following
 `~/.claude/rules-src/README.md` § "Building stack-rules" exactly - reuse step 1's `stacks` list
-instead of re-detecting. For the frontmatter hash values, run
-`node ~/.claude/hooks/lib/stack-rules-check.mjs` (prints `sourceHash`/`stackFingerprint` for
-this project) and pass them to the subagent, or let it run that command itself.
+instead of re-detecting. Pass the `sourceHash`/`stackFingerprint` from the check above straight
+through for the subagent's frontmatter stamp - no need to re-run the check inside the subagent.
 
 ## 3. Interactive install + activate (I run this myself, in my terminal) - the main path
 An arrow-key UI cannot be driven through you, so tell me to run it directly:

@@ -163,7 +163,43 @@ it. For the latter, use \`ctx_execute_file\` instead — every time, not just wh
  * detect(content):            true = already applied (no-op).
  * apply(content):              returns patched content, or null if the anchor wasn't found
  *                               (skip safely - never throws, never corrupts the file). */
+// The three `</role>`-anchored entries below (context-mode-routing-block,
+// executor-no-recursive-agent-spawn, executor-context-mode-read-discipline) are grouped and
+// ordered deliberately. `insertAfter` does `content.replace(anchor, anchor + block)`, and a
+// plain-string `.replace` always matches the FIRST (only) occurrence of `</role>` - which never
+// moves - so each later patch's block lands immediately after the tag, ahead of blocks already
+// inserted by earlier ones. Net effect: for patches sharing one insertAfter anchor, the final
+// top-to-bottom reading order is the REVERSE of application order. These three are listed here
+// in reverse of their intended reading order (routing block first, no-recursive-spawn second,
+// context-mode-read-discipline third) specifically so applying them in THIS array order produces
+// that reading order. If you add a fourth patch anchored at `</role>`, place it in this run at
+// the position matching where you want it to read, remembering the reversal - don't just append
+// it at the end, that puts it first.
+// Caveat: this only governs FRESH application. A file that already has all three applied is
+// left untouched (each patch's own `detect()` short-circuits it) - reordering here does not
+// retroactively reorder blocks already written to an existing gsd-executor.md.
 export const PATCHES = [
+  {
+    id: "executor-context-mode-read-discipline",
+    // context-mode's own Read nudge (hooks/core/routing.mjs upstream) fires at most once per
+    // session and never blocks - observed: a worker read a large file directly instead of
+    // ctx_execute_file after that one-shot budget was already spent earlier in the session.
+    // Same gate as context-mode-routing-block (meaningless without the tool grant).
+    appliesTo: (name, claudeDir) => name === "gsd-executor.md" && isContextModeActive(claudeDir),
+    detect: (content) => content.includes("<context_mode_read_discipline>"),
+    apply: (content) => insertAfter(content, "</role>", EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK),
+  },
+  {
+    id: "executor-no-recursive-agent-spawn",
+    // gsd-executor.md's own `tools:` frontmatter already excludes Agent - this patch
+    // documents that the exclusion is intentional (anthropics/claude-code has an open,
+    // unresolved issue about unbounded recursive sub-agent fan-out from workers that DO have
+    // Agent access) so a future gsd-core update, or a runtime that ignores the tools:
+    // restriction, doesn't silently reintroduce the risk.
+    appliesTo: (name) => name === "gsd-executor.md",
+    detect: (content) => content.includes("<no_recursive_agent_spawn>"),
+    apply: (content) => insertAfter(content, "</role>", EXECUTOR_NO_RECURSIVE_AGENT_SPAWN_BLOCK),
+  },
   {
     id: "context-mode-routing-block",
     // Same file set + same exclusion reasoning as context-mode-gsd-agents.mjs's tool grant
@@ -180,9 +216,9 @@ export const PATCHES = [
   {
     id: "executor-filesystem-search-discipline",
     // detect() checks a phrase from the block BODY, not the bare `<filesystem_search_discipline>`
-    // tag - the query-handlers-ref-fix patch's text references that tag by name as a forward
-    // pointer, which would false-positive a substring match on the tag alone before this
-    // patch has actually run.
+    // tag, because gsd-executor.md's own "documentation lookup" prose names that tag by name as
+    // a forward pointer - which would false-positive a substring match on the tag alone before
+    // this patch has actually run.
     appliesTo: (name) => name === "gsd-executor.md",
     detect: (content) => content.includes("Never run `find /`, `find ~`"),
     apply: (content) => insertAfter(content, "</documentation_lookup>", FILESYSTEM_SEARCH_DISCIPLINE_BLOCK),
@@ -240,27 +276,6 @@ export const PATCHES = [
     appliesTo: (name) => name === "gsd-executor.md",
     detect: (content) => content.includes("Incremental progress signal"),
     apply: (content) => insertBefore(content, "**6. Post-commit deletion check:**", EXECUTOR_INCREMENTAL_PROGRESS_BLOCK + "\n\n"),
-  },
-  {
-    id: "executor-no-recursive-agent-spawn",
-    // gsd-executor.md's own `tools:` frontmatter already excludes Agent - this patch
-    // documents that the exclusion is intentional (anthropics/claude-code has an open,
-    // unresolved issue about unbounded recursive sub-agent fan-out from workers that DO have
-    // Agent access) so a future gsd-core update, or a runtime that ignores the tools:
-    // restriction, doesn't silently reintroduce the risk.
-    appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("<no_recursive_agent_spawn>"),
-    apply: (content) => insertAfter(content, "</role>", EXECUTOR_NO_RECURSIVE_AGENT_SPAWN_BLOCK),
-  },
-  {
-    id: "executor-context-mode-read-discipline",
-    // context-mode's own Read nudge (hooks/core/routing.mjs upstream) fires at most once per
-    // session and never blocks - observed: a worker read a large file directly instead of
-    // ctx_execute_file after that one-shot budget was already spent earlier in the session.
-    // Same gate as context-mode-routing-block (meaningless without the tool grant).
-    appliesTo: (name, claudeDir) => name === "gsd-executor.md" && isContextModeActive(claudeDir),
-    detect: (content) => content.includes("<context_mode_read_discipline>"),
-    apply: (content) => insertAfter(content, "</role>", EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK),
   },
 ];
 
