@@ -1,6 +1,6 @@
 ---
-description: Set up / switch / remove per-project MCP servers (git host, Postgres, web search) with consent, auth, and verification
-argument-hint: "[github|gitlab|postgres|search|status]"
+description: Set up / switch / remove per-project MCP servers (git host, Postgres, web search, Serena) with consent, auth, and verification
+argument-hint: "[github|gitlab|postgres|search|serena|status]"
 allowed-tools: Bash(claude *), Bash(git *), Bash(gh *), Bash(glab *), Bash(npx *), Bash(uvx *), Bash(docker *), WebSearch, Read
 ---
 
@@ -14,12 +14,16 @@ Most of these servers talk to a network API or a service I run; only Postgres an
 fully local. Flag the cloud/no-cloud status when you propose each.
 
 ## 0. Read current state (always first, no writes)
-- `claude mcp list` - which servers are already configured (github/gitlab/postgres/search/...).
+- `claude mcp list` - which servers are already configured (github/gitlab/postgres/search/
+  serena/...).
 - `git remote -v` - detect the git host of this repo (github.com / gitlab.* / bitbucket / a
   self-hosted host / none).
-- Show me a short summary: "Current MCP: <list>. Git remote: <host>." Then offer the actions
-  below. If I passed an argument (`github`/`gitlab`/`postgres`/`search`/`status`), jump to it;
-  `status` just prints this summary and stops.
+- Check for `.serena/project.yml` at repo root - if present, Serena is already configured for
+  this project (regardless of whether it also shows in `claude mcp list`).
+- Show me a short summary: "Current MCP: <list>. Git remote: <host>. Serena: <configured|not
+  configured>." Then offer the actions below. If I passed an argument (`github`/`gitlab`/
+  `postgres`/`search`/`serena`/`status`), jump to it; `status` just prints this summary and
+  stops.
 
 ## 1. Git host (GitHub or GitLab) - single active choice, switchable
 Detect from the remote, but let me override (I may want a host that differs from `origin`).
@@ -70,7 +74,43 @@ the target provider's setup below. This is what makes the choice reversible on r
   Only mention it if I explicitly ask.
 - Verify via `claude mcp list`.
 
-## 4. Finish
+## 5. Serena (opt-in, LSP-grounded code navigation/editing MCP)
+Only if I ask - no strong per-project signal exists for this one (unlike git host/DB, it's
+useful on any codebase, so there's nothing to auto-detect a "should I suggest this" nudge on).
+
+**Default path: MCP only, no IDE plugin.** Serena ships its own language servers per
+language - it does not need an IDE running to work.
+- Confirm with me, then register it:
+  `claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project $(pwd)`
+- Needs `uv`/`uvx` present (see `graphify-setup.mjs --bootstrap-uv` if missing - with consent).
+- Project activation is automatic (`--project-from-cwd` walks up to the nearest
+  `.serena/project.yml` or `.git`) - no separate activation step needed for a normal repo.
+- Verify: `claude mcp list` shows `serena` connected; then have it resolve a symbol in this
+  project.
+
+**Optional: JetBrains IDE plugin (WebStorm/PyCharm/etc.) — ask, don't assume.** There is no
+filesystem signal for this (it's a per-IDE plugin install, not per-project state), so this can
+only be resolved by asking me directly: "Do you have the Serena JetBrains plugin installed
+and running (WebStorm, PyCharm, IntelliJ, Android Studio, PhpStorm, RubyMine, GoLand — not
+Rider/CLion)? It's a separate paid plugin (free trial available) from JetBrains Marketplace,
+not something this command installs." If yes, set the language backend to route through it:
+`language_backend: JetBrains` in this project's `.serena/project.yml` (or
+`~/.serena/serena_config.yml` for a global default across all projects) - per-project
+overrides the global default. If no, or unsure, leave the default (Serena's own language
+servers) - it works standalone either way.
+
+- Verify the JetBrains backend specifically (only if enabled): the Serena dashboard should
+  show "Languages: Using JetBrains backend", and JetBrains-specific tools (e.g.
+  `jet_brains_find_symbol`) should appear in the tool list.
+
+**Overlap with existing tools in this bundle:** no conflict with `graphify` (cross-repo
+knowledge graph, architecture/relationship questions) or `context-mode` (tool-output
+filtering, orthogonal layer) - Serena is precise, real-time, single-project LSP navigation
+(go-to-definition, find-references, rename). Rule of thumb if both graphify and Serena end up
+configured: Serena for "where exactly is this symbol defined/used," graphify for "what
+connects to what" / architecture-level questions.
+
+## 6. Finish
 - Summarize what was added / switched / removed.
 - MCP servers added at project scope live in `./.claude/settings.json` (or `.mcp.json`); user
   scope via `--scope user`. Remind me a NEW session picks them up; some clients need a restart.

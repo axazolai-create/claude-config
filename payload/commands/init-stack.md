@@ -104,7 +104,40 @@ with `Edit`, preserving every other key (this is a plain JSON merge, not a full-
 never drop sibling keys under `workflow` or elsewhere). On decline, write nothing; gsd-core's
 own auto-detect remains the effective behavior.
 
-## 7. `fallow` devDependency proposal (GSD + Node only)
+## 7. `claude_orchestration` capability consideration (only if `.planning/config.json` exists)
+Gate is `.planning/config.json` exists — nothing else. No monorepo/stack check: the capability
+is about how `/gsd-execute-phase` dispatches a wave's plans, not about the repo's shape.
+
+Re-entrant, like step 3/`init-mcp`: re-run this step on every `/init-stack` invocation and let
+me change a previous choice, don't skip it just because a value is already set.
+
+**Check the live state first, always:**
+```bash
+node ~/.claude/gsd-core/bin/gsd-tools.cjs claude-orchestration detect-backend --runtime claude --raw
+```
+Report the `reason` field to me honestly regardless of outcome — including a plain "the
+`claude-orchestration` subcommand isn't available in this gsd-core install" if the command
+itself doesn't exist. Read `~/.claude/references/gsd-claude-orchestration-pilot.md` for the full
+reasoning behind the recommendation below before presenting it.
+
+**Then check `.planning/config.json`:**
+- `claude_orchestration.enabled` unset or `false` — offer via `AskUserQuestion` (header
+  "claude_orchestration"): enable it for a pilot? Explain briefly (from the reference doc):
+  it's a BETA capability that fails closed to today's inline dispatch on any gate miss, so
+  enabling it is safe even if the `reason` above shows it won't currently activate. Options:
+  **Enable for a pilot** (sets `enabled: true`, and — since this is a deliberate pilot, not a
+  silent `auto` — also sets `execution_backend: "workflow"` so a gate miss surfaces loudly in
+  the `reason` field on the next check instead of quietly falling back) / **Not now** (write
+  nothing — the default is already the safe, inert state).
+- `claude_orchestration.enabled` already set (`true` or `false`) — show the current value and
+  the live `reason`, then offer to **switch** (toggle `enabled`, same `execution_backend`
+  handling as above) or **keep as is**.
+
+On accept: `Edit` `.planning/config.json`, preserving every other key under the
+`claude_orchestration` object and elsewhere (plain JSON merge, not a full-file rewrite). On
+decline or "keep as is": write nothing.
+
+## 8. `fallow` devDependency proposal (GSD + Node only)
 Only if `.planning/config.json` exists AND step 1 detected a Node stack (`stacks` contains
 any of `react`/`next`/`react-native`/`nest`/`turbo`/`nx`/`telegram-node`, or a plain
 `package.json` exists at repo root).
@@ -139,12 +172,12 @@ On decline: `Edit` `.planning/config.json` to set `code_quality.fallow.enabled: 
 explicitly (don't leave it to silently inherit `true` from the personal default and fail
 later) - preserve every other key under `code_quality` and elsewhere.
 
-## 8. Mark leanmode dial default (always, no gate)
+## 9. Mark leanmode dial default (always, no gate)
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
 `docs/superpowers/specs/2026-07-10-leanmode-design.md`).
 
-## 9. Apply pending gsd-* agent patches (machine-wide, not project-specific)
+## 10. Apply pending gsd-* agent patches (machine-wide, not project-specific)
 `~/.claude/agents/gsd-*.md` are owned by the separate `gsd-core` tool, not this bundle -
 patching them is best-effort cross-tool maintenance. `session-init.mjs` checks read-only every
 session and flags when something here is pending (context-mode routing guidance,
@@ -152,6 +185,8 @@ gsd-executor.md/gsd-debugger.md hardening fixes); this step is what actually wri
 into `/init-stack` so it happens on an explicit invocation you already control instead of
 requiring a separate command. (`/init-session` still exists standalone for applying patches
 without running the rest of this flow, e.g. right after a gsd-core update mid-milestone.)
+This step is unrelated to step 7 above — it patches `~/.claude/agents/gsd-*.md` prose
+(machine-wide), not this project's `.planning/config.json`.
 
 Run:
 ```bash
@@ -169,11 +204,11 @@ each patch's target string). Don't guess a new anchor and re-apply automatically
 judgment call on whether the patch still makes sense against the new content, which needs my
 review.
 
-## 10. Sync personal GSD defaults + statusline override (machine-wide + this project)
+## 11. Sync personal GSD defaults + statusline override (machine-wide + this project)
 `gsd-defaults.partial.json` is this bundle's curated personal GSD config (model routing,
 workflow toggles) plus the statusline context-meter override. `setup.mjs` already applies
 both once per install; this step catches drift for the entry point you actually run per
-project without necessarily re-running the full installer - same rationale as step 9.
+project without necessarily re-running the full installer - same rationale as step 10.
 
 Run:
 ```bash
