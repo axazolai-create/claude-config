@@ -82,6 +82,39 @@
   prose-based) depth-3 cap — see `rules-src/gsd.md`'s "The one sanctioned depth-3 exception"
   section for why the alternative (a prose-conditional single file) was rejected.
 
+## RISK-FALLOW-001 — `fallow.enabled` is set optimistically, not gated on binary presence
+
+- **Status:** Resolved (2026-07-17) — the check-and-decision point already existed at
+  `/init-stack` step 8; the bug was that the nag text pointed at the wrong step number.
+- **Context:** `gsd-config-patch.mjs`'s tier2 default sets `code_quality.fallow.enabled` to
+  `true` whenever the project root has a `package.json` — deliberately without checking
+  whether the `fallow` binary is actually installed (see the comment above
+  `DEFAULT_WORKFLOW_CONFIG` in that file). The declared, still-current rationale: fallow's own
+  error message is loud/actionable (`npm install -D fallow` / `cargo install fallow`), and
+  `/init-stack` step 8 ("`fallow` devDependency proposal") is the actual check-and-decision
+  point — it detects whether the binary is already installed, and if not, asks the user via
+  `AskUserQuestion` to either install it or explicitly set `enabled: false` (closing the gap
+  for good, not a silent decline). `session-init.mjs` and `gsd-config-patch.mjs` tier3 both
+  re-check every session/throttle window and surface a note pointing at this step when
+  `enabled=true` but the binary is missing.
+- **Root cause found:** that nag text (and the code comment above the tier2 default) referenced
+  "`/init-stack` step 6" / "step 5" — stale after `init-stack.md` gained a `claude_orchestration`
+  step and the fallow proposal shifted to step 8, the test/build proposal to step 6. Hit in
+  practice 2026-07-17: manually set `code_quality.fallow.enabled: false` in a project to unblock
+  `code-review`, following a nag that pointed at the wrong (non-existent-for-this-purpose) step.
+- **Fix:** corrected all stale step-number references to the actual current numbering —
+  `gsd-config-patch.mjs` (comment + gap-note text) and `session-init.mjs` (fallow gap note +
+  test/build one-time suggestion) now say step 8 and step 6 respectively. Also strengthened
+  both fallow gap notes so they no longer only point at `/init-stack`: they now embed the
+  concrete install command inline (`pnpm add -D fallow`, or `pnpm add -D fallow -w` when
+  `pnpm-workspace.yaml` exists at root) so the binary can be installed directly, without
+  needing to run the full interactive `/init-stack` flow first.
+- **Residual:** `init-stack.md`'s own step numbers can drift again if a step is inserted/removed
+  in the future without grepping for `"step N"` cross-references in the two hook files. No
+  automated check ties the hook text to the command file's actual heading numbers. The inline
+  install command assumes pnpm (consistent with the rest of this repo's Node tooling
+  conventions) — a project on npm/yarn only would need to adapt the command by hand.
+
 ## RISK-TOKENLOG-001 — Scraped model pricing can silently break
 
 - **Status:** Open (accepted)

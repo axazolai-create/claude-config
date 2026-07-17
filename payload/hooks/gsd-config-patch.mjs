@@ -138,7 +138,7 @@ const DEFAULT_WORKFLOW_CONFIG = {
   // keeps this default from breaking review in Python/Kotlin/Swift/etc. projects. It still
   // doesn't guarantee the binary is actually installed in a given Node repo - that half is
   // handled by `/init-stack`'s fallow devDependency proposal (payload/commands/init-stack.md
-  // step 5). If a Node project's `/gsd-code-review`/`/gsd-ship` hits this before `/init-stack`
+  // step 8). If a Node project's `/gsd-code-review`/`/gsd-ship` hits this before `/init-stack`
   // ever ran, fallow's own error message tells the user exactly how to fix it
   // (`npm install -D fallow` / `cargo install fallow`) - a loud, actionable failure, not silent.
   code_quality: {
@@ -243,9 +243,12 @@ if (tier3Due) {
       ? ["fallow.exe", "fallow.cmd", "fallow.bat"] : ["fallow"];
     const installed = fallowNames.some((n) => existsSync(join(root, "node_modules", ".bin", n)));
     if (!installed) {
+      const installCmd = existsSync(join(root, "pnpm-workspace.yaml"))
+        ? "pnpm add -D fallow -w" : "pnpm add -D fallow";
       gapNote = "GSD settings gap: code_quality.fallow.enabled=true but the `fallow` binary " +
         "isn't installed - the next /gsd-code-review or /gsd-ship will hard-fail, not skip " +
-        "gracefully. Run /init-stack (step 6) to install it, or set " +
+        `gracefully. Install it yourself (\`${installCmd}\`, run at the repo root where ` +
+        ".planning/ lives) or run /init-stack (step 8) to do it interactively, or set " +
         "code_quality.fallow.enabled: false for this project.";
     }
   }

@@ -405,7 +405,7 @@ if (process.env.CLAUDE_LEANMODE !== "0" && resolveDial(root) !== "off") {
 }
 
 // ---- GSD /init-stack settings gap check -> suggest /init-stack ----
-// A HINT only - never installs/edits anything itself. `/init-stack` steps 5-6
+// A HINT only - never installs/edits anything itself. `/init-stack` steps 6 and 8
 // (payload/commands/init-stack.md) propose workflow.test_command/build_command and a
 // `fallow` devDependency install, but those steps only run when the user actually invokes
 // /init-stack - which doesn't reliably happen right after `.planning/` first appears.
@@ -415,7 +415,7 @@ if (process.env.CLAUDE_LEANMODE !== "0" && resolveDial(root) !== "off") {
 // isn't resolvable. Re-checked EVERY session, like the MCP suggestion above - not a one-time
 // flag, because the gap is defined by CURRENT STATE (config says enabled, binary absent),
 // not "did we ever tell the user once". It stops surfacing on its own once fallow is
-// actually installed, or the user declines via step 6 (which writes `fallow.enabled: false`
+// actually installed, or the user declines via step 8 (which writes `fallow.enabled: false`
 // and closes the gap for good - unlike a silent decline, which would leave this nagging
 // forever). gsd-config-patch.mjs runs the SAME check on a throttle for the mid-session case
 // (`.planning/` created after this session already started) - see that file for why both
@@ -430,11 +430,15 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
       const fallowNames = process.platform === "win32"
         ? ["fallow.exe", "fallow.cmd", "fallow.bat"] : ["fallow"];
       const installed = fallowNames.some((n) => existsSync(join(root, "node_modules", ".bin", n)));
-      if (!installed)
+      if (!installed) {
+        const installCmd = existsSync(join(root, "pnpm-workspace.yaml"))
+          ? "pnpm add -D fallow -w" : "pnpm add -D fallow";
         notes.push("GSD settings gap: code_quality.fallow.enabled=true but the `fallow` " +
           "binary isn't installed - the next /gsd-code-review or /gsd-ship will hard-fail, " +
-          "not skip gracefully. Run /init-stack (step 6) to install it, or explicitly set " +
-          "code_quality.fallow.enabled: false for this project.");
+          `not skip gracefully. Install it yourself (\`${installCmd}\`, run at the repo root ` +
+          "where .planning/ lives) or run /init-stack (step 8) to do it interactively, or " +
+          "explicitly set code_quality.fallow.enabled: false for this project.");
+      }
     }
   }
 }
@@ -514,7 +518,7 @@ if (process.env.CLAUDE_TOKEN_USAGE_LOG !== "0") {
 
 // ONE-TIME per project (soft nudge, not urgent like the fallow gap above - gsd-core's own
 // test_command/build_command auto-detect already works fine without an explicit value):
-// suggest /init-stack's step 5 (stack-aware test_command/build_command proposal) once, the
+// suggest /init-stack's step 6 (stack-aware test_command/build_command proposal) once, the
 // first session that sees BOTH a `.planning/` project and a recognizable stack signal with
 // no explicit override yet. One-time (not recurring like the fallow check) because there's
 // no hard-failure risk here to keep chasing - re-suggesting every session for something
@@ -528,7 +532,7 @@ if (firstTime && gsdProject) {
       || existsSync(join(root, "pyproject.toml")) || existsSync(join(root, "build.gradle.kts"));
     if (hasStackSignal && !wf.test_command && !wf.build_command)
       notes.push("workflow.test_command/build_command are unset - gsd-core auto-detects a " +
-        "reasonable default, but /init-stack (step 5) can propose a more specific one from " +
+        "reasonable default, but /init-stack (step 6) can propose a more specific one from " +
         "the detected stack if you want to set it explicitly.");
   }
 }
