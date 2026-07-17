@@ -109,11 +109,26 @@
   concrete install command inline (`pnpm add -D fallow`, or `pnpm add -D fallow -w` when
   `pnpm-workspace.yaml` exists at root) so the binary can be installed directly, without
   needing to run the full interactive `/init-stack` flow first.
-- **Residual:** `init-stack.md`'s own step numbers can drift again if a step is inserted/removed
-  in the future without grepping for `"step N"` cross-references in the two hook files. No
-  automated check ties the hook text to the command file's actual heading numbers. The inline
-  install command assumes pnpm (consistent with the rest of this repo's Node tooling
-  conventions) — a project on npm/yarn only would need to adapt the command by hand.
+- **Follow-up sweep (same session):** the same drift wasn't limited to fallow. Grepped the
+  whole repo for `"step N"`/`"steps N-M"` cross-references into `init-stack.md` and found the
+  identical bug in 9 more places, all stemming from the same `claude_orchestration` step
+  insertion (step 10 "apply pending gsd-* agent patches" and step 11 "sync personal GSD
+  defaults" had shifted from what used to be step 9/10): `session-init.mjs` (4 occurrences),
+  `gsd-agent-patches.mjs`, `gsd-workflow-patches.mjs`, `apply-gsd-agent-patches.mjs`,
+  `gsd-defaults-sync.mjs`, `rules-src/gsd.md`, plus two README lines (`GSD-шагов 5-6` / `GSD
+  steps 5-6` reconfigure-table rows) and two more claiming `mark-initstack-done.mjs` runs as
+  init-stack's "last step" (it's step 9 of 11 — steps 10-11 run after it) in `README.md`,
+  `README.en.md`, `mark-initstack-done.mjs`, and `leanmode-rules.mjs`. All corrected to the
+  current numbering (verified against `init-stack.md`'s actual `## N.` headings). Also fixed
+  a separate, non-numbering bug found in the same sweep: `setup.mjs`'s comment claimed
+  "`/init-stack`'s own step 0" duplicates its update-check offer per-project — no such step
+  exists anywhere in `init-stack.md` (grepped for update/release/background-check content,
+  zero matches); the offer is machine-wide-only in `setup.mjs`, corrected to say so.
+- **Residual:** `init-stack.md`'s own step numbers can drift again if a step is
+  inserted/removed in the future without grepping for `"step N"` cross-references across the
+  repo. No automated check ties any of this text to the command file's actual heading numbers.
+  The inline fallow install command assumes pnpm (consistent with the rest of this repo's Node
+  tooling conventions) — a project on npm/yarn only would need to adapt the command by hand.
 
 ## RISK-TOKENLOG-001 — Scraped model pricing can silently break
 

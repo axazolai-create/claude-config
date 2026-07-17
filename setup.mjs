@@ -692,8 +692,8 @@ async function main() {
   // straight into `env`, exactly like the manual PowerShell-tool opt-in documented in README.md.
   // Once decided either way (yes -> "1", no -> "0") this never asks again on this machine, no
   // matter how many times setup.mjs re-runs - mirrors the `fallow` decline pattern in
-  // init-stack.md: an explicit "no" is recorded, not re-nagged. /init-stack's own step 0 makes
-  // the same offer per-project, but also only while genuinely undecided.
+  // init-stack.md (step 8): an explicit "no" is recorded, not re-nagged. This offer itself is
+  // machine-wide only (setup.mjs) - init-stack.md has no per-project equivalent of it.
   if (!DRY) {
     let curEnvSettings = {};
     try { curEnvSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { curEnvSettings = {}; }

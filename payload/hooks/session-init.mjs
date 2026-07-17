@@ -458,7 +458,7 @@ if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
 
 // ---- gsd-* agents: check (never write) for pending content patches ----
 // Deliberately CHECK-ONLY, unlike the tool-grant sync just above: hooks/lib/gsd-agent-patches.mjs
-// injects prose across 30+ files, so it's review-gated behind an explicit invocation (step 9 of
+// injects prose across 30+ files, so it's review-gated behind an explicit invocation (step 10 of
 // payload/commands/init-stack.md, or standalone via /init-session) instead of silently
 // rewriting every session. Every session, idempotent - cheap (file reads only), stops
 // surfacing on its own once the patches have been applied and nothing is pending.
@@ -470,7 +470,7 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
   if (files.length)
     notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
       `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
-      `(step 9 applies these) or /init-session to apply.`);
+      `(step 10 applies these) or /init-session to apply.`);
 
   // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
   // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale
@@ -480,7 +480,7 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
   if (retiredFiles.length)
     notes.push(`gsd-* agent file(s) still carry text from ${retiredFiles.length} retired patch ` +
       `target(s) (${retiredFiles.slice(0, 5).join(", ")}${retiredFiles.length > 5 ? ", ..." : ""}) ` +
-      `- run /init-stack (step 9) or /init-session to clean up.`);
+      `- run /init-stack (step 10) or /init-session to clean up.`);
 
   // Same check-only/apply-gated split, for gsd-core's own execute-phase.md dispatch template
   // (not an agents/*.md file, so tracked separately - see gsd-workflow-patches.mjs).
@@ -489,7 +489,7 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
   if (wfFiles.length)
     notes.push(`gsd-core workflow patch pending for ${wfFiles.join(", ")} ` +
       `(routes verify_isolated="true" plans to gsd-executor-decomposing) - run /init-stack ` +
-      `(step 9 applies this) or /init-session to apply.`);
+      `(step 10 applies this) or /init-session to apply.`);
 
   // Standing invariant, not a pending patch: an agent granting `Agent` with no anti-recursion
   // guardrail caused refusals/silent stuck states in the 2026-07 recursive-delegation test

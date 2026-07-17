@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // leanmode - stamps state[root].initStackRun so leanmode's project dial can default to "full"
 // once /init-stack has actually run for this project (see resolveDial() in leanmode-rules.mjs).
-// Called as the last step of payload/commands/init-stack.md's own instructions - NOT a
-// registered Claude Code hook, just a plain script run once per /init-stack completion.
+// Called as step 9 of payload/commands/init-stack.md's own instructions - NOT a registered
+// Claude Code hook, just a plain script run once per /init-stack invocation.
 // Idempotent: only writes if the flag isn't already set, matching every other one-time flag in
 // the shared ~/.claude/state/project-init.json file (see session-init.mjs, gsd-config-patch.mjs).
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";

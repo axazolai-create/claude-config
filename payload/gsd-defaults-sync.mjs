@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI entry point for payload/commands/init-stack.md (step 10) and for anyone re-running it
+// CLI entry point for payload/commands/init-stack.md (step 11) and for anyone re-running it
 // standalone after editing gsd-defaults.partial.json. Mirrors apply-gsd-agent-patches.mjs's
 // shape: thin argv-driven wrapper around the lib, prints a plain-text summary.
 // Reads ./gsd-defaults.partial.json - the mirror copy setup.mjs writes into ~/.claude

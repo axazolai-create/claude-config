@@ -121,7 +121,7 @@ cloning the repo, or whenever it first needs plugins).
 | A new version of this repo shipped (hooks/rules/skills updated) | `node setup.mjs` (conflict flags — see above; `--dry-run` to preview without touching anything) | whenever the package updates |
 | `PreToolUse hook error` / broken paths in `~/.claude/settings.json` | `node setup.mjs --doctor`, then `node setup.mjs` | by symptom (see diagnostics below) |
 | The project's stack changed/gained a new one (new framework, monorepo, etc.) | `/init-stack` again — already-enabled plugins are pre-checked + the new stack's auto-set is added | on a stack change |
-| Toggle one specific plugin without a full `/init-stack` run | `python3 ~/.claude/bin/init-stack.py -i` directly (same checklist, but without the report and without `/init-stack`'s GSD steps 5-6) | as needed |
+| Toggle one specific plugin without a full `/init-stack` run | `python3 ~/.claude/bin/init-stack.py -i` directly (same checklist, but without the report and without `/init-stack`'s GSD steps 6 and 8) | as needed |
 | Just check current plugin status, changing nothing | `python3 ~/.claude/bin/init-stack.py` (no args, writes nothing) | as needed |
 
 After ANY of these steps that touched `settings.json` (user-level or project-level) —
@@ -525,7 +525,7 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   `docs/superpowers/specs/2026-07-10-leanmode-design.md`, outside the distribution). The dial
   defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
   flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
-  called as `/init-stack`'s last step — not a registered hook on its own); otherwise `off`.
+  called as `/init-stack`'s step 9 — not a registered hook on its own); otherwise `off`.
   Toggle: `CLAUDE_LEANMODE=0`. The hook also emits `systemMessage: "leanmode: <level>"`
   alongside `additionalContext` — kept in the source in case the harness renders it.
   Empirically (2026-07-11, three real subagent launches, debug-log instrumentation)

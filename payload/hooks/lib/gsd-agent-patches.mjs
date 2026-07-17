@@ -8,7 +8,7 @@
 //                                          to surface a "run /init-stack or /init-session" note
 //                                          when something is pending. Never writes.
 //   - applyGsdAgentPatches(claudeDir)  -> actually patches. Called only by an explicit human
-//                                          invocation - payload/commands/init-stack.md (step 9)
+//                                          invocation - payload/commands/init-stack.md (step 10)
 //                                          or the standalone payload/commands/init-session.md
 //                                          (via apply-gsd-agent-patches.mjs), never
 //                                          automatically/per-session.
