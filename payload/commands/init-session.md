@@ -18,10 +18,13 @@ node ~/.claude/apply-gsd-agent-patches.mjs
 
 ## 2. Report
 
-Show me exactly what it printed: which `file:patchId` pairs were applied, which files were
-skipped as curated (left untouched on purpose - `CURATED:NOEDIT` marker), and which were
-skipped for a missing anchor (means the target file changed upstream since this patch was
-written - flag those to me explicitly, don't silently treat them as done).
+Show me exactly what it printed: which `file:patchId` pairs were freshly applied, which were
+**upgraded** (a patch's content changed since it was last applied - e.g. a `version` bump in
+the registry - and the stale text got replaced with the current version; this is expected and
+not an error), which files were skipped as curated (left untouched on purpose -
+`CURATED:NOEDIT` marker), and which were skipped for a missing anchor (means the target file
+changed upstream since this patch was written - flag those to me explicitly, don't silently
+treat them as done).
 
 ## 3. If anything was skipped for a missing anchor
 

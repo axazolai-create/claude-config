@@ -14,12 +14,15 @@
 //                                          automatically/per-session.
 // Each patch is scoped to the file(s) it targets via `appliesTo` - most gsd-* agents get only
 // the context-mode routing block; gsd-executor.md/gsd-debugger.md get a couple of bespoke
-// additions on top of that, justified per-patch in its own comment below. `detect` makes every
-// patch idempotent (already-applied is a no-op) and self-healing (re-applies if a gsd-core
-// update overwrites the file and drops it). `apply` returns null (skip, never throws) if its
-// anchor text isn't found - a prerequisite for that patch not being met, or an upstream
-// gsd-core rewrite having changed the surrounding text - so one missing anchor never blocks
-// the other patches in the same run.
+// additions on top of that, justified per-patch in its own comment below.
+//
+// "Applied" is CONTENT-aware, not presence-aware: each patch's inserted text carries a version
+// marker (see "version markers" below), so a content edit to a patch's `block` (bump `version`)
+// actually reaches a file that already has an OLDER version applied instead of being silently
+// skipped because a bare tag/phrase was already there. `apply` returns null (skip, never
+// throws) if its anchor text isn't found on a truly fresh insertion - a prerequisite for that
+// patch not being met, or an upstream gsd-core rewrite having changed the surrounding text - so
+// one missing anchor never blocks the other patches in the same run.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { isContextModeActive, EXCLUDED_AGENTS } from "./context-mode-gsd-agents.mjs";
@@ -35,6 +38,69 @@ function insertAfter(content, anchor, block) {
 function insertBefore(content, anchor, block) {
   if (!content.includes(anchor)) return null;
   return content.replace(anchor, `${block}\n\n${anchor}`);
+}
+// Plain-string, single-occurrence splice - deliberately NOT `String.replace(search, repl)`,
+// which interprets `$&`/`$1`-style sequences in `repl` even when `search` is a plain string.
+// Our blocks are prose that could plausibly contain a literal `$` some day; this never does.
+function replaceOnce(content, search, replacement) {
+  const idx = content.indexOf(search);
+  if (idx === -1) return content;
+  return content.slice(0, idx) + replacement + content.slice(idx + search.length);
+}
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+/* ---------- version markers ----------
+ * Every patch's inserted text is wrapped in an invisible HTML-comment pair carrying its version:
+ * `<!-- gsd-patch:ID vN -->...block...<!-- /gsd-patch:ID -->`. This is what makes a content
+ * change to a patch (bump `version` on its registry entry) actually reach a file that already
+ * has an OLDER version applied - `findMarkedSpan` locates the existing span (whatever version)
+ * so `applyOrUpgradePatch` can replace it wholesale instead of a bare-tag/phrase presence check
+ * treating "already there" as "already CURRENT" and skipping forever.
+ *
+ * A file with NO marker at all - applied before this versioning system existed - is handled by
+ * `legacyMatch`: a plain literal-substring search for the patch's current `block` text, plus
+ * any texts listed in `priorBlocks` (the exact body of an earlier version, kept around only for
+ * this migration). Deliberately literal substring, not a `<tagName>...</tagName>` regex span:
+ * two of these blocks' bodies reference ANOTHER patch's tag by name as a forward pointer
+ * (`filesystem-search-discipline` mentions `<background_task_hygiene>`, and vice versa) - a
+ * generic open-tag-to-close-tag regex would latch onto that forward mention as the "open" tag
+ * and consume everything up to the real closing tag much later in the file. A full literal
+ * block match can't be fooled by a short name-drop like that. */
+function markerOpen(id, version) { return `<!-- gsd-patch:${id} v${version} -->`; }
+function markerClose(id) { return `<!-- /gsd-patch:${id} -->`; }
+function wrapBlock(id, version, block) {
+  return `${markerOpen(id, version)}\n${block}\n${markerClose(id)}`;
+}
+function findMarkedSpan(content, id) {
+  const re = new RegExp(`<!-- gsd-patch:${escapeRegExp(id)} v(\\d+) -->[\\s\\S]*?<!-- /gsd-patch:${escapeRegExp(id)} -->`);
+  const m = content.match(re);
+  return m ? { version: Number(m[1]), fullMatch: m[0] } : null;
+}
+function legacyMatch(content, patch) {
+  for (const candidate of [patch.block, ...(patch.priorBlocks || [])]) {
+    if (content.includes(candidate)) return candidate;
+  }
+  return null;
+}
+function isPatchCurrent(content, patch) {
+  const marked = findMarkedSpan(content, patch.id);
+  return !!marked && marked.version === patch.version;
+}
+// Returns { content, kind } where kind is one of:
+//   null        - already current, nothing written
+//   "upgraded"  - a stale marked span OR an unmarked legacy application was replaced in place
+//   "applied"   - freshly inserted at insertAnchor (nothing found at all beforehand)
+//   "noAnchor"  - fresh insertion attempted but insertAnchor wasn't found in the file
+function applyOrUpgradePatch(content, patch) {
+  const marked = findMarkedSpan(content, patch.id);
+  if (marked && marked.version === patch.version) return { content, kind: null };
+  const wrapped = wrapBlock(patch.id, patch.version, patch.block);
+  if (marked) return { content: replaceOnce(content, marked.fullMatch, wrapped), kind: "upgraded" };
+  const legacy = legacyMatch(content, patch);
+  if (legacy) return { content: replaceOnce(content, legacy, wrapped), kind: "upgraded" };
+  const inserter = patch.insertMode === "before" ? insertBefore : insertAfter;
+  const updated = inserter(content, patch.insertAnchor, wrapped);
+  return updated === null ? { content, kind: "noAnchor" } : { content: updated, kind: "applied" };
 }
 
 /* ---------- block bodies ---------- */
@@ -102,7 +168,9 @@ cleanly:
 
 const DEBUGGER_STABILITY_RERUN_BLOCK = `**STABILITY-CONFIRMATION RERUN LIMIT:** The repeated runs above are an investigation technique for surfacing intermittent bugs — the repetition itself is the evidence. Once a stability/regression batch has produced a clean result (e.g., N/N passing, recorded in Evidence), stop. Do not launch another full batch of the same run "to be extra sure" with no new hypothesis or code change since the last batch. One additional batch is acceptable only if the original run count was thin (<20) or the bug is timing/concurrency-sensitive enough that the reasoning_checkpoint's \`blind_spots\` field names a specific reason more evidence is needed — document that reason in Evidence. Beyond that, a green stability run repeated again is not verification, it's inertia.`;
 
-const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK = `<dependency_provisioning_order>
+// v1 (retained only so `legacyMatch` can locate and upgrade an install that already has this
+// exact text, unmarked, from before the junction rewrite) - see "version markers" above.
+const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK_V1 = `<dependency_provisioning_order>
 If running inside a worktree (\`.git\` is a file — see \`<worktree_metadata_capture>\`), do NOT
 run \`pnpm install\`/\`npm install\`/\`yarn install\` (or anything triggering a fresh dependency
 resolution) as your first move when a build or test step needs \`node_modules\`. First check
@@ -115,6 +183,30 @@ confirming the copy didn't already cover them (\`ls node_modules/<pkg>\` / check
 reinstalling/rebuilding an unchanged shared dependency — instead of relying on what the
 orchestrator already provisioned — is a common root cause of a wave taking hours instead of
 minutes, and on Windows can outright fail with \`EPERM ... rename ..._tmp_N\` when two
+worktrees resolve the same package against the shared pnpm store concurrently.
+</dependency_provisioning_order>`;
+
+const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK = `<dependency_provisioning_order>
+If running inside a worktree (\`.git\` is a file — see \`<worktree_metadata_capture>\`), do NOT
+run \`pnpm install\`/\`npm install\`/\`yarn install\` (or anything triggering a fresh dependency
+resolution) as your first move when a build or test step needs \`node_modules\`. First check
+whether the orchestrator already provisioned it from the base checkout — a worktree created
+for this task should already have \`node_modules\` present, either as a JUNCTION (the default —
+check with \`(Get-Item node_modules).LinkType -eq 'Junction'\`) pointing at the base checkout's
+real copy, or — only for a plan explicitly flagged to write into \`node_modules\` — a real,
+isolated copy made via \`robocopy <src> <dst> /MIR /MT:32\`. If it's a junction, treat it as
+READ-ONLY for your entire task, same as the base checkout itself: installing into it, or
+deleting/recreating it, corrupts every other worktree in the wave still linked to it. Never
+remove a junction with \`Remove-Item -Recurse\`/\`-Force\` — on Windows PowerShell that can FOLLOW
+the reparse point and delete the base checkout's real \`node_modules\` instead of just the link;
+if a junction genuinely needs replacing, remove it with \`cmd /c rmdir node_modules\` (no \`/s\`)
+first, then recreate. Only install for packages genuinely new or changed relative to the
+copied/linked base, and only after confirming they aren't already covered (\`ls
+node_modules/<pkg>\` / check \`package.json\`'s lockfile hash against the base) — and only inside
+a worktree holding its OWN real copy, never through a junction. Every worktree in a wave
+independently reinstalling/rebuilding an unchanged shared dependency — instead of relying on
+what the orchestrator already provisioned — is a common root cause of a wave taking hours
+instead of minutes, and on Windows can outright fail with \`EPERM ... rename ..._tmp_N\` when two
 worktrees resolve the same package against the shared pnpm store concurrently.
 </dependency_provisioning_order>`;
 
@@ -160,9 +252,14 @@ it. For the latter, use \`ctx_execute_file\` instead — every time, not just wh
 
 /* ---------- patch registry ----------
  * appliesTo(name, claudeDir): whether this patch targets a given agent filename.
- * detect(content):            true = already applied (no-op).
- * apply(content):              returns patched content, or null if the anchor wasn't found
- *                               (skip safely - never throws, never corrupts the file). */
+ * version:                    bump whenever `block`'s text changes - this is what makes an
+ *                              already-applied file pick up the new content instead of being
+ *                              silently treated as done forever (see "version markers" above).
+ * block:                      the CURRENT text to insert/upgrade to.
+ * priorBlocks:                (optional) exact text of an earlier version, so `legacyMatch` can
+ *                              find and replace an unmarked pre-versioning application. Add one
+ *                              here whenever you bump `version` on an already-shipped patch.
+ * insertAnchor/insertMode:    where a FRESH application (nothing found at all) gets inserted. */
 // The three `</role>`-anchored entries below (context-mode-routing-block,
 // executor-no-recursive-agent-spawn, executor-context-mode-read-discipline) are grouped and
 // ordered deliberately. `insertAfter` does `content.replace(anchor, anchor + block)`, and a
@@ -175,33 +272,35 @@ it. For the latter, use \`ctx_execute_file\` instead — every time, not just wh
 // that reading order. If you add a fourth patch anchored at `</role>`, place it in this run at
 // the position matching where you want it to read, remembering the reversal - don't just append
 // it at the end, that puts it first.
-// Caveat: this only governs FRESH application. A file that already has all three applied is
-// left untouched (each patch's own `detect()` short-circuits it) - reordering here does not
-// retroactively reorder blocks already written to an existing gsd-executor.md.
+// Caveat: this only governs a FRESH insertion. A content upgrade (`legacyMatch`/marked-span
+// replace) rewrites the block IN PLACE at its existing position and never touches ordering.
 export const PATCHES = [
   {
     id: "executor-context-mode-read-discipline",
+    version: 1,
     // context-mode's own Read nudge (hooks/core/routing.mjs upstream) fires at most once per
     // session and never blocks - observed: a worker read a large file directly instead of
     // ctx_execute_file after that one-shot budget was already spent earlier in the session.
     // Same gate as context-mode-routing-block (meaningless without the tool grant).
     appliesTo: (name, claudeDir) => name === "gsd-executor.md" && isContextModeActive(claudeDir),
-    detect: (content) => content.includes("<context_mode_read_discipline>"),
-    apply: (content) => insertAfter(content, "</role>", EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK),
+    block: EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
   },
   {
     id: "executor-no-recursive-agent-spawn",
+    version: 1,
     // gsd-executor.md's own `tools:` frontmatter already excludes Agent - this patch
     // documents that the exclusion is intentional (anthropics/claude-code has an open,
     // unresolved issue about unbounded recursive sub-agent fan-out from workers that DO have
     // Agent access) so a future gsd-core update, or a runtime that ignores the tools:
     // restriction, doesn't silently reintroduce the risk.
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("<no_recursive_agent_spawn>"),
-    apply: (content) => insertAfter(content, "</role>", EXECUTOR_NO_RECURSIVE_AGENT_SPAWN_BLOCK),
+    block: EXECUTOR_NO_RECURSIVE_AGENT_SPAWN_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
   },
   {
     id: "context-mode-routing-block",
+    version: 1,
     // Same file set + same exclusion reasoning as context-mode-gsd-agents.mjs's tool grant
     // (EXCLUDED_AGENTS there: narrow single-purpose agents that don't do large-output
     // research/analysis work) - the routing prose is meaningless without the tool grant, and
@@ -210,72 +309,82 @@ export const PATCHES = [
     // source of truth; this just imports it.
     appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md")
       && !EXCLUDED_AGENTS.has(name) && isContextModeActive(claudeDir),
-    detect: (content) => content.includes("<context_mode_routing>"),
-    apply: (content) => insertAfter(content, "</role>", CONTEXT_MODE_ROUTING_BLOCK),
+    block: CONTEXT_MODE_ROUTING_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
   },
   {
     id: "executor-filesystem-search-discipline",
-    // detect() checks a phrase from the block BODY, not the bare `<filesystem_search_discipline>`
-    // tag, because gsd-executor.md's own "documentation lookup" prose names that tag by name as
-    // a forward pointer - which would false-positive a substring match on the tag alone before
-    // this patch has actually run.
+    version: 1,
+    // Legacy migration matches the full block body literally (see "version markers" above for
+    // why) - a bare `<filesystem_search_discipline>` tag substring would false-positive on this
+    // same file's OWN forward-reference to the tag name inside `<background_task_hygiene>`'s
+    // block, well before this patch's real content.
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("Never run `find /`, `find ~`"),
-    apply: (content) => insertAfter(content, "</documentation_lookup>", FILESYSTEM_SEARCH_DISCIPLINE_BLOCK),
+    block: FILESYSTEM_SEARCH_DISCIPLINE_BLOCK,
+    insertAnchor: "</documentation_lookup>", insertMode: "after",
   },
   {
     id: "executor-background-task-hygiene",
-    // Same reasoning as above: filesystem-search-discipline's block body references
-    // `<background_task_hygiene>` by name, so detect() here can't match on that bare tag.
+    version: 1,
+    // Same reasoning as above, mirrored: filesystem-search-discipline's block body references
+    // `<background_task_hygiene>` by name, so a bare-tag legacy match here would latch onto
+    // THAT mention instead of this patch's own (usually later) real block.
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("either consumed or stopped before you continue"),
-    apply: (content) => insertBefore(content, "<authentication_gates>", BACKGROUND_TASK_HYGIENE_BLOCK),
+    block: BACKGROUND_TASK_HYGIENE_BLOCK,
+    insertAnchor: "<authentication_gates>", insertMode: "before",
   },
   {
     id: "executor-stability-rerun-limit",
+    version: 1,
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("STABILITY-CONFIRMATION RERUN LIMIT"),
-    apply: (content) => insertBefore(content, "**Extended examples and edge case guide:**", EXECUTOR_STABILITY_RERUN_BLOCK),
+    block: EXECUTOR_STABILITY_RERUN_BLOCK,
+    insertAnchor: "**Extended examples and edge case guide:**", insertMode: "before",
   },
   {
     id: "debugger-stability-rerun-limit",
+    version: 1,
     // Only gsd-debugger.md, not the other candidates surveyed alongside it - gsd-verifier.md
     // (already caps its own test run at "at most once"), gsd-integration-checker.md,
     // gsd-code-reviewer.md, gsd-eval-auditor.md (no rerun-prone loop structure at all), and
     // gsd-ui-checker.md/gsd-nyquist-auditor.md (already explicitly bounded) don't have this
     // gap - see the survey findings this patch is drawn from.
     appliesTo: (name) => name === "gsd-debugger.md",
-    detect: (content) => content.includes("STABILITY-CONFIRMATION RERUN LIMIT"),
-    apply: (content) => insertAfter(content, "// Run this 1000 times\n```", DEBUGGER_STABILITY_RERUN_BLOCK),
+    block: DEBUGGER_STABILITY_RERUN_BLOCK,
+    insertAnchor: "// Run this 1000 times\n```", insertMode: "after",
   },
   {
     id: "executor-dependency-provisioning-order",
-    // Windows worktree-parallelism findings (see rules-src/gsd.md "Parallel worktree waves"):
-    // a wave's N worktrees independently reinstalling/rebuilding an unchanged shared
-    // dependency is a common root cause of hours-instead-of-minutes waves, and can outright
-    // fail on Windows with EPERM when two worktrees resolve the same package concurrently.
+    version: 2,
+    // v2 (2026-07-17): junction-by-default rewrite - a plain `robocopy /MIR` of a 100K+-file
+    // node_modules runs minutes-to-tens-of-minutes PER WORKTREE (see rules-src/gsd.md "Parallel
+    // worktree waves"); junction is near-instant. `priorBlocks` is what lets an install that
+    // already has v1 applied (unmarked, from before this versioning system existed) pick up v2
+    // instead of the bare `<dependency_provisioning_order>` tag being mistaken for "current".
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("<dependency_provisioning_order>"),
-    apply: (content) => insertAfter(content, "</worktree_metadata_capture>", EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK),
+    block: EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK,
+    priorBlocks: [EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK_V1],
+    insertAnchor: "</worktree_metadata_capture>", insertMode: "after",
   },
   {
     id: "executor-test-chunking",
+    version: 1,
     // Observed: a worker finishing a small, scoped change but then running the ENTIRE test
     // suite is a bigger driver of hour-plus runs and ballooned context than model reasoning
     // itself - reinforces the same scoping rule now in rules-src/gsd.md at the orchestrator
     // level, directly in the executor's own system prompt.
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("<test_execution_discipline>"),
-    apply: (content) => insertAfter(content, "</execution_flow>", EXECUTOR_TEST_EXECUTION_DISCIPLINE_BLOCK),
+    block: EXECUTOR_TEST_EXECUTION_DISCIPLINE_BLOCK,
+    insertAnchor: "</execution_flow>", insertMode: "after",
   },
   {
     id: "executor-incremental-progress",
+    version: 1,
     // Per-task commits are already the incremental progress signal an orchestrator's
     // liveness monitoring depends on (git diff --stat HEAD / recent commit) - this patch
     // makes that explicit so it's never deferred/batched "to save time."
     appliesTo: (name) => name === "gsd-executor.md",
-    detect: (content) => content.includes("Incremental progress signal"),
-    apply: (content) => insertBefore(content, "**6. Post-commit deletion check:**", EXECUTOR_INCREMENTAL_PROGRESS_BLOCK + "\n\n"),
+    block: EXECUTOR_INCREMENTAL_PROGRESS_BLOCK + "\n",
+    insertAnchor: "**6. Post-commit deletion check:**", insertMode: "before",
   },
 ];
 
@@ -330,7 +439,7 @@ export function checkGsdAgentPatches({ claudeDir }) {
     if (!applicable.length) continue;
     const content = safe(() => readFileSync(join(claudeDir, "agents", name), "utf8"));
     if (content === undefined || isCurated(content)) continue;
-    const missing = applicable.filter((patch) => !patch.detect(content)).map((patch) => patch.id);
+    const missing = applicable.filter((patch) => !isPatchCurrent(content, patch)).map((patch) => patch.id);
     if (missing.length) pending[name] = missing;
   }
   return pending; // {} means fully up to date
@@ -352,7 +461,7 @@ export function checkRetiredGsdAgentPatches({ claudeDir }) {
 
 /* ---------- write: apply every pending patch (only called explicitly, see file header) ---------- */
 export function applyGsdAgentPatches({ claudeDir }) {
-  const result = { applied: [], skippedCurated: [], skippedNoAnchor: [], removedRetired: [] };
+  const result = { applied: [], upgraded: [], skippedCurated: [], skippedNoAnchor: [], removedRetired: [] };
   for (const name of listAgentFiles(claudeDir)) {
     const applicable = PATCHES.filter((p) => p.appliesTo(name, claudeDir));
     const applicableRetired = RETIRED_PATCHES.filter((p) => p.appliesTo(name, claudeDir));
@@ -363,12 +472,12 @@ export function applyGsdAgentPatches({ claudeDir }) {
     if (isCurated(content)) { result.skippedCurated.push(name); continue; }
     let changed = false;
     for (const patch of applicable) {
-      if (patch.detect(content)) continue; // already applied
-      const updated = patch.apply(content);
-      if (updated === null) { result.skippedNoAnchor.push(`${name}:${patch.id}`); continue; }
+      const { content: updated, kind } = applyOrUpgradePatch(content, patch);
+      if (kind === null) continue; // already current
+      if (kind === "noAnchor") { result.skippedNoAnchor.push(`${name}:${patch.id}`); continue; }
       content = updated;
       changed = true;
-      result.applied.push(`${name}:${patch.id}`);
+      (kind === "upgraded" ? result.upgraded : result.applied).push(`${name}:${patch.id}`);
     }
     for (const patch of applicableRetired) {
       if (!patch.detect(content)) continue; // nothing left to clean up

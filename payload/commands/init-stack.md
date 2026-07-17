@@ -8,6 +8,25 @@ Set up stack-specific Claude Code plugins for THIS project. Never run installs, 
 changes, or removals without my explicit OK. In the interactive flow (step 3) my on-screen
 confirmation IS that OK - the tool installs exactly the plugins I check, nothing else.
 
+## Content check, not just existence (applies to every step below)
+Any step that touches a config file (`.planning/config.json`, `.claude/settings.json`) or a
+generated rules/instruction snapshot (`.claude/stack-rules.md`, `~/.claude/agents/gsd-*.md`)
+treats "the file exists" as necessary, never sufficient:
+- **Settings/config files**: check the specific field(s) the step cares about, not just the
+  file's presence. Missing field -> add it (a plain additive merge, preserving every sibling
+  key - never a full-file rewrite). Present but stale value -> offer to update it, same as
+  missing (see step 6's `test_command`/`build_command` unset-check, step 7's re-entrant
+  `enabled` check, step 8's already-installed check).
+- **Rules/instruction snapshot files**: check content freshness (a hash/fingerprint check, or
+  a documented staleness signal), not mere presence - rebuild/reapply when stale, same as when
+  missing (see step 2's `stack-rules-check.mjs` status, step 10's patch-anchor matching, step
+  11's deep-additive defaults sync).
+
+When reporting which steps will act, phrase it in content terms ("field X is unset, will
+propose a value" / "snapshot is stale, will rebuild") - never collapse this into "the file
+exists, so the step applies": existence only tells you a step CAN run, not that it has
+anything to do.
+
 ## 1. Detect + classify (you run this)
 Run: `python3 ~/.claude/bin/init-stack.py`
 Parse the `STATUS_JSON` block (`stacks`, `plugins[]` with `state`, `present[]` already-enabled) and
@@ -195,13 +214,17 @@ Run:
 node ~/.claude/apply-gsd-agent-patches.mjs
 ```
 
-Show me exactly what it printed: which `file:patchId` pairs were applied, which were skipped
-as curated (`CURATED:NOEDIT`, left untouched on purpose), which were skipped for a missing
-anchor (target file changed upstream since the patch was written - flag those to me
-explicitly, don't silently treat them as done), and which retired-patch leftovers were cleaned
-up (text from a patch since dropped from `PATCHES` - see `RETIRED_PATCHES` in
-`~/.claude/hooks/lib/gsd-agent-patches.mjs` - reverted back to a plain, safe form; this never
-happens for a patch still active in `PATCHES`, only ones already removed from it).
+Show me exactly what it printed: which `file:patchId` pairs were freshly applied, which were
+**upgraded** (an already-applied patch's content changed - a `version` bump in the registry -
+and the stale text got replaced with the current version; expected, not an error, and it's
+what lets a content fix like a block's prose changing actually reach an install that already
+had the old version), which were skipped as curated (`CURATED:NOEDIT`, left untouched on
+purpose), which were skipped for a missing anchor (target file changed upstream since the
+patch was written - flag those to me explicitly, don't silently treat them as done), and which
+retired-patch leftovers were cleaned up (text from a patch since dropped from `PATCHES` - see
+`RETIRED_PATCHES` in `~/.claude/hooks/lib/gsd-agent-patches.mjs` - reverted back to a plain,
+safe form; this never happens for a patch still active in `PATCHES`, only ones already removed
+from it).
 
 If anything was skipped for a missing anchor, read the affected file and tell me what changed
 near the patch's expected anchor text (`~/.claude/hooks/lib/gsd-agent-patches.mjs` documents

@@ -17,7 +17,12 @@ const result = applyGsdAgentPatches({ claudeDir });
 if (result.applied.length) {
   console.log(`Applied ${result.applied.length} patch(es):`);
   for (const entry of result.applied) console.log(`  - ${entry}`);
-} else {
+}
+if (result.upgraded.length) {
+  console.log(`Upgraded ${result.upgraded.length} stale patch(es) to their current content:`);
+  for (const entry of result.upgraded) console.log(`  - ${entry}`);
+}
+if (!result.applied.length && !result.upgraded.length) {
   console.log("gsd-* agents: no pending patches (already up to date, or context-mode inactive).");
 }
 if (result.skippedCurated.length)
