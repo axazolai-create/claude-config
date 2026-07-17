@@ -4,6 +4,21 @@ This doc is what `/init-stack` (step 7) points at before asking whether to enabl
 `claude_orchestration.enabled` in a project's `.planning/config.json`. It exists so the
 command doesn't have to inline a full decision framework into its own prose.
 
+## Why `Workflow`, not a recursive `Agent` call
+
+This isn't only a cost/resumability optimization — it's the answer to "can a GSD wave ever
+decompose more than one level deep." A controlled test series (2026-07, see
+`gsd.md`'s "Depth boundary" section for the full finding) tried to get a third dispatch level
+out of the `Agent` tool itself, three independent ways: a dedicated coordinator agent, the
+orchestrator recursing into itself, and a freshly-written role with no anti-recursion text at
+all. Every attempt either hit a principled refusal (any worker whose prompt carried a guardrail
+against recursive spawning) or a silent stuck state (async/background dispatch a headless run
+can never wake back up from). None of the three produced a working third level. `Workflow`'s
+`parallel()`/`pipeline()` sidesteps the whole failure class because branching is fixed by a
+generated script the tool executes, not a decision an agent makes about itself at inference
+time — it is, as far as this test series established, the only reliable path to dispatch depth
+beyond 2, not merely a nicer-to-have alternative to one that already works.
+
 ## What actually changes
 
 When enabled, `/gsd-execute-phase` resolves a dispatch-backend decision before each wave:

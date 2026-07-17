@@ -44,7 +44,8 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
-import { checkGsdAgentPatches, checkRetiredGsdAgentPatches } from "./lib/gsd-agent-patches.mjs";
+import { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./lib/gsd-agent-patches.mjs";
+import { checkGsdWorkflowPatches } from "./lib/gsd-workflow-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 
 const MARKER = "CURATED:NOEDIT";
@@ -476,6 +477,24 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
     notes.push(`gsd-* agent file(s) still carry text from ${retiredFiles.length} retired patch ` +
       `target(s) (${retiredFiles.slice(0, 5).join(", ")}${retiredFiles.length > 5 ? ", ..." : ""}) ` +
       `- run /init-stack (step 9) or /init-session to clean up.`);
+
+  // Same check-only/apply-gated split, for gsd-core's own execute-phase.md dispatch template
+  // (not an agents/*.md file, so tracked separately - see gsd-workflow-patches.mjs).
+  const wfPending = safe(() => checkGsdWorkflowPatches({ claudeDir })) || {};
+  const wfFiles = Object.keys(wfPending);
+  if (wfFiles.length)
+    notes.push(`gsd-core workflow patch pending for ${wfFiles.join(", ")} ` +
+      `(routes verify_isolated="true" plans to gsd-executor-decomposing) - run /init-stack ` +
+      `(step 9 applies this) or /init-session to apply.`);
+
+  // Standing invariant, not a pending patch: an agent granting `Agent` with no anti-recursion
+  // guardrail caused refusals/silent stuck states in the 2026-07 recursive-delegation test
+  // series (see gsd.md's "Depth boundary" section). No auto-fix - flag for human review.
+  const unguarded = safe(() => checkRecursiveAgentSpawnGuardrail({ claudeDir })) || [];
+  if (unguarded.length)
+    notes.push(`WARNING: ${unguarded.length} gsd-* agent(s) grant the Agent tool with no ` +
+      `anti-recursion guardrail (${unguarded.slice(0, 5).join(", ")}${unguarded.length > 5 ? ", ..." : ""}) ` +
+      `- review by hand before shipping; this combination is a known refusal/stuck-state trigger.`);
 }
 
 // ---- token-usage global log pruning: SessionStart only ----

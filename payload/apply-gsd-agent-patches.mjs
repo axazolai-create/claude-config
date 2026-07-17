@@ -9,10 +9,12 @@
 // Usage: node apply-gsd-agent-patches.mjs [claudeDir]   (default: ~/.claude)
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { applyGsdAgentPatches } from "./hooks/lib/gsd-agent-patches.mjs";
+import { applyGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./hooks/lib/gsd-agent-patches.mjs";
+import { applyGsdWorkflowPatches } from "./hooks/lib/gsd-workflow-patches.mjs";
 
 const claudeDir = process.argv[2] || join(homedir(), ".claude");
 const result = applyGsdAgentPatches({ claudeDir });
+const wfResult = applyGsdWorkflowPatches({ claudeDir });
 
 if (result.applied.length) {
   console.log(`Applied ${result.applied.length} patch(es):`);
@@ -32,4 +34,26 @@ if (result.skippedNoAnchor.length)
 if (result.removedRetired.length) {
   console.log(`Cleaned up ${result.removedRetired.length} retired-patch leftover(s):`);
   for (const entry of result.removedRetired) console.log(`  - ${entry}`);
+}
+
+if (wfResult.applied.length) {
+  console.log(`Applied ${wfResult.applied.length} workflow patch(es):`);
+  for (const entry of wfResult.applied) console.log(`  - ${entry}`);
+}
+if (wfResult.upgraded.length) {
+  console.log(`Upgraded ${wfResult.upgraded.length} stale workflow patch(es):`);
+  for (const entry of wfResult.upgraded) console.log(`  - ${entry}`);
+}
+if (wfResult.skippedCurated.length)
+  console.log(`Skipped (curated): ${wfResult.skippedCurated.join(", ")}`);
+if (wfResult.skippedNoAnchor.length)
+  console.log(`Skipped (anchor not found - gsd-core execute-phase.md may have changed upstream): ${wfResult.skippedNoAnchor.join(", ")}`);
+
+const unguarded = checkRecursiveAgentSpawnGuardrail({ claudeDir });
+if (unguarded.length) {
+  console.log(`\nWARNING: ${unguarded.length} agent(s) grant the Agent tool with no anti-recursion guardrail found:`);
+  for (const name of unguarded) console.log(`  - ${name}`);
+  console.log(`  This combination (Agent + no guardrail) caused refusals or silent stuck states in`);
+  console.log(`  the 2026-07 recursive-delegation test series - see gsd.md's "Depth boundary" section.`);
+  console.log(`  Review each file by hand before shipping it; there is no auto-fix for this.`);
 }

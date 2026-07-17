@@ -59,6 +59,29 @@
   touching an affected project's root `CLAUDE.md`.
 - **Residual:** duplicated context in affected projects until manually cleaned. Accepted.
 
+## RISK-GSDEXEC-001 — `gsd-executor-decomposing.md` is a full fork with no inheritance, will drift
+
+- **Status:** Open (accepted)
+- **Context:** `payload/agents/gsd-executor-decomposing.md` duplicates the entirety of
+  `gsd-executor.md`'s execution machinery (commit protocol, deviation rules 1-4, TDD flow,
+  checkpoint protocol, worktree safety assertions) because Claude Code agent files have no
+  inheritance/include mechanism for another agent's full body — only prose `@`-references to
+  shared reference docs, which `gsd-executor.md` doesn't itself use for these sections. Every
+  future upstream `gsd-core` fix to `gsd-executor.md` (numbered fixes like #2924/#3097/#3542/
+  #3678 already baked into the copy as of 2026-07-17) will NOT automatically reach the fork.
+- **Mitigation:** `gsd-executor-decomposing.md`'s frontmatter `description` points at
+  `docs/superpowers/specs/2026-07-17-executor-task-decomposition-design.md`'s sync procedure —
+  when `apply-gsd-agent-patches.mjs`/`gsd-agent-patches.mjs`'s `PATCHES` registry gains a new or
+  upgraded entry for `gsd-executor.md`, the same patch must be manually re-applied (or the
+  equivalent prose change hand-ported) to `gsd-executor-decomposing.md`, skipping only the two
+  delta sections (`tools:`/`description` frontmatter and the `<task_stage_decomposition>` block
+  that replaces `<no_recursive_agent_spawn>`). No automated drift check exists yet.
+- **Residual:** silent drift between the two files is possible until a human notices (e.g. a
+  `verify_isolated="true"` plan hits a bug already fixed in plain `gsd-executor`). Accepted as
+  the cost of the only mechanism that gives a genuinely structural (tools-grant-based, not
+  prose-based) depth-3 cap — see `rules-src/gsd.md`'s "The one sanctioned depth-3 exception"
+  section for why the alternative (a prose-conditional single file) was rejected.
+
 ## RISK-TOKENLOG-001 — Scraped model pricing can silently break
 
 - **Status:** Open (accepted)

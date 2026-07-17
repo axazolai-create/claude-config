@@ -250,6 +250,34 @@ because you're about to \`Edit\` it, or whether you're reading it purely to unde
 it. For the latter, use \`ctx_execute_file\` instead — every time, not just when reminded.
 </context_mode_read_discipline>`;
 
+const PLANNER_VERIFY_ISOLATED_BLOCK = `**Task-level isolated verification** (alternative to \`tdd="true"\`, never combined with it on
+the same task): a behavior-adding task that would otherwise get \`tdd="true"\` instead gets
+\`verify_isolated="true"\` when EITHER applies:
+- The plan's \`<threat_model>\` STRIDE register assigns \`critical\` or \`high\` severity with a
+  \`mitigate\` disposition to a component this task's \`<files>\` touches.
+- CONTEXT.md explicitly requests isolated verification for this task or its area (a
+  \`/gsd-discuss-phase\` decision). This is ADDITIVE to the threat-model criterion above, never a
+  replacement for it — CONTEXT.md can only ADD tasks to \`verify_isolated="true"\`, never remove
+  ones the threat-model criterion already selected.
+
+\`verify_isolated="true"\` tasks are executed by \`gsd-executor-decomposing\` instead of plain
+\`gsd-executor\` (dispatched automatically per-plan by execute-phase.md) — see \`rules-src/gsd.md\`'s
+"The one sanctioned depth-3 exception" section for why this exists and how it's bounded. Same
+\`<behavior>\`/\`<verification>\` shape as a \`tdd="true"\` task:
+
+\`\`\`xml
+<task type="auto" verify_isolated="true">
+  <name>Task: [name]</name>
+  <files>src/feature.ts, src/feature.test.ts</files>
+  <behavior>
+    - Test 1: [expected behavior]
+  </behavior>
+  <action>[Specific implementation]</action>
+  <verification>[Command or check]</verification>
+  <done>[Acceptance criteria]</done>
+</task>
+\`\`\``;
+
 /* ---------- patch registry ----------
  * appliesTo(name, claudeDir): whether this patch targets a given agent filename.
  * version:                    bump whenever `block`'s text changes - this is what makes an
@@ -386,6 +414,19 @@ export const PATCHES = [
     block: EXECUTOR_INCREMENTAL_PROGRESS_BLOCK + "\n",
     insertAnchor: "**6. Post-commit deletion check:**", insertMode: "before",
   },
+  {
+    id: "planner-verify-isolated-detection",
+    version: 1,
+    // Companion to gsd-executor-decomposing.md's <task_stage_decomposition>: without this,
+    // verify_isolated="true" could only ever be set by a human hand-editing PLAN.md after
+    // generation - the mechanism had a consumer (execute-phase.md's dispatch check,
+    // gsd-executor-decomposing) but no producer. Reuses the plan's OWN already-computed
+    // threat_model severity as the risk signal instead of inventing a new complexity heuristic.
+    appliesTo: (name) => name === "gsd-planner.md",
+    block: PLANNER_VERIFY_ISOLATED_BLOCK,
+    insertAnchor: "Exceptions where `tdd=\"true\"` is not needed: `type=\"checkpoint:*\"` tasks, configuration-only files, documentation, migration scripts, glue code wiring existing tested components, styling-only changes.",
+    insertMode: "after",
+  },
 ];
 
 /* ---------- retired patches: best-effort cleanup of content a NOW-REMOVED entry above once
@@ -423,6 +464,48 @@ export const RETIRED_PATCHES = [
     revert: (content) => content.split(EXECUTOR_QUERY_HANDLERS_NEW).join(EXECUTOR_QUERY_HANDLERS_CLEANED),
   },
 ];
+
+/* ---------- read-only: agents granted `Agent` without an anti-recursion guardrail (never writes) ----------
+ * Codifies an empirical finding (2026-07 recursive-delegation test series, see gsd.md's "Depth
+ * boundary" section and .test/CONCLUSION-rlm-architecture.md at the time this was written):
+ * granting the `Agent` tool to a gsd-* worker whose system prompt has NO anti-recursion
+ * guardrail is not neutral - across repeated tests it caused either a principled refusal
+ * (contradictory role: an inherited `<no_recursive_agent_spawn>`-style block "overridden" by a
+ * later instruction) or a silent stuck state (async/background dispatch a headless run can
+ * never wake back up from). A worker meant to recurse safely needs an explicit, non-
+ * contradictory depth cap and merge-in-code discipline written into its role from scratch -
+ * never `Agent` bolted onto a role that assumed it would never have that tool. This check only
+ * flags the ABSENCE of any guardrail marker; it can't judge whether a present one is adequate,
+ * and it deliberately does not auto-fix anything (unlike the PATCHES above, there is no single
+ * correct guardrail text to inject for an arbitrary future agent - this needs a human).
+ */
+const RECURSIVE_SPAWN_GUARDRAIL_MARKERS = [
+  "<no_recursive_agent_spawn>",
+  "gsd-patch:executor-no-recursive-agent-spawn",
+  // gsd-executor-decomposing.md's deliberate, reviewed exception (payload/agents/): grants
+  // `Agent` for exactly one documented, depth-capped use (dispatching gsd-task-verifier, which
+  // itself has no `Agent`). This marker signals "reviewed and bounded," not "forbidden" - the
+  // opposite intent of the marker above, but equally not an accidental/undocumented grant.
+  "<task_stage_decomposition>",
+];
+function toolsListFromFrontmatter(content) {
+  const m = content.match(/^tools:\s*(.+)$/m);
+  return m ? m[1] : "";
+}
+function grantsAgentTool(toolsLine) {
+  return toolsLine.split(",").map((t) => t.trim()).includes("Agent");
+}
+export function checkRecursiveAgentSpawnGuardrail({ claudeDir }) {
+  const missing = []; // [filename, ...] - Agent granted, no guardrail marker found
+  for (const name of listAgentFiles(claudeDir)) {
+    const content = safe(() => readFileSync(join(claudeDir, "agents", name), "utf8"));
+    if (content === undefined || isCurated(content)) continue;
+    if (!grantsAgentTool(toolsListFromFrontmatter(content))) continue;
+    const guarded = RECURSIVE_SPAWN_GUARDRAIL_MARKERS.some((marker) => content.includes(marker));
+    if (!guarded) missing.push(name);
+  }
+  return missing; // [] means every Agent-granted worker carries a guardrail marker
+}
 
 /* ---------- shared file listing ---------- */
 function listAgentFiles(claudeDir) {

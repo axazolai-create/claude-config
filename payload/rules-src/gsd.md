@@ -54,6 +54,70 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 - Two worktree creators collide and fail silently outside a git repo. `git init` before any
   phase.
 
+### Depth boundary: waves stay at depth 2, on purpose
+
+- **Exactly one `Agent`-capable context dispatches every leaf worker directly — no chain of
+  coordinator agents.** For "N stages x M parallel workers," the orchestrator issues M `Agent`
+  calls per stage as parallel tool-use blocks in one message, itself; it never spawns an
+  intermediate agent whose own job is to fan out the M workers. Merging M results back into one
+  stage outcome is the orchestrator's own reasoning over the returned `tool_result`s, not a
+  separate "merge agent" call. Both together keep the dispatch tree at depth 2 (orchestrator ->
+  leaf worker), which is the only configuration that has run cleanly in repeated testing.
+- **This is an empirically confirmed failure pattern, not a style preference.** A controlled test
+  series (2026-07) tried three independent ways to legitimize a third level - a dedicated
+  coordinator agent, the orchestrator recursing into itself, and a freshly-authored
+  non-contradictory role - each granted the `Agent` tool and asked to fan out a parallel wave one
+  level below itself. Every worker whose system prompt carries an anti-recursion guardrail (see
+  `<no_recursive_agent_spawn>` below) refused outright, every time, citing the contradiction
+  between the guardrail and the instruction overriding it. The one variant with NO guardrail text
+  at all didn't refuse, but didn't work either - it fell into `ScheduleWakeup`/background-dispatch
+  mechanics that a headless, one-shot invocation can never wake back up from, an unrelated
+  mechanical dead end. Neither failure mode is worth re-discovering by hand; treat "one
+  `Agent`-capable orchestrator, leaf workers only" as a hard constraint on plan/agent design.
+- **Never grant `Agent` to a worker whose role text was written assuming it would never have it.**
+  The contradiction above (a guardrail plus a later override "cancelling" it) was the single most
+  reliable trigger for refusal across every retry. A role meant to recurse safely has to be
+  written from scratch with an explicit depth cap and merge-in-code discipline baked in from the
+  start - never produced by cloning `gsd-executor.md` and stripping or overriding its
+  `<no_recursive_agent_spawn>` block.
+- **Genuinely need depth beyond 2, or branching decided by something other than a human-written
+  plan?** That decision belongs in deterministic code, not a model's runtime judgment call inside
+  a prompt. See `claude_orchestration` (`references/gsd-claude-orchestration-pilot.md`) - it maps
+  GSD's own wave/plan model onto the `Workflow` tool's `parallel()`/`pipeline()` primitives, with
+  branching fixed by a generated script instead of an agent deciding to spawn further agents at
+  inference time.
+
+### The one sanctioned depth-3 exception: `gsd-executor-decomposing` + `gsd-task-verifier`
+
+- **What it is:** a fork of `gsd-executor` (`payload/agents/gsd-executor-decomposing.md`) that
+  grants `Agent` for exactly one documented use - dispatching `gsd-task-verifier`
+  (`payload/agents/gsd-task-verifier.md`) to verify a single task's behavior in its own clean
+  context instead of writing/running the test inline. `execute-phase.md` (patched via
+  `gsd-workflow-patches.mjs`) dispatches this variant instead of plain `gsd-executor` only for a
+  plan containing at least one task with `verify_isolated="true"` in its `<task>` attributes;
+  every other plan still gets plain `gsd-executor`, unchanged.
+- **Why this doesn't repeat the depth-boundary failure above:** the depth cap here is structural,
+  not textual. `gsd-task-verifier` simply has no `Agent` in its `tools:` frontmatter - it cannot
+  recurse regardless of what its prompt says, and `checkRecursiveAgentSpawnGuardrail` (in
+  `gsd-agent-patches.mjs`) flags any future gsd-* agent that grants `Agent` without a recognized
+  guardrail marker, catching an accidental widening of this exception. `gsd-executor-decomposing`
+  itself was written with zero competing anti-recursion text (no inherited, "overridden"
+  `<no_recursive_agent_spawn>` block) - its `<task_stage_decomposition>` block is the ONLY word on
+  the subject, avoiding the exact contradiction pattern that caused refusals.
+- **Why `Agent`, not `Workflow`, for this one case:** verified empirically (2026-07-17, live
+  session, not headless `-p`) - the `Workflow` tool is not available to a spawned subagent at all
+  (confirmed via `ToolSearch` returning no match from inside one); it only works from the true
+  top-level orchestrating session. A synchronous `Agent` call from `gsd-executor-decomposing` to
+  a leaf with no further `Agent` access is the only mechanism available at this level, and testing
+  confirmed it completes cleanly in a live/long-running session (no `ScheduleWakeup`/async-stuck
+  dead end - that dead end was specific to a one-shot headless process, not nested dispatch
+  itself).
+- **Maintenance cost, stated plainly:** `gsd-executor-decomposing.md` duplicates the entirety of
+  `gsd-executor.md`'s execution machinery (commit protocol, deviation rules, TDD flow, checkpoint
+  handling) because Claude Code agent files have no inheritance mechanism - a future upstream
+  change to `gsd-executor.md` does not automatically reach this fork. See RISK-GSDEXEC-001 in
+  `RISK_REGISTER.md` for the drift-detection procedure.
+
 ### Parallel worktree waves (Windows): environment contention, not agent confusion
 
 - Stagger `isolation="worktree"` `Agent()` dispatch to one call per turn — concurrent
