@@ -163,8 +163,16 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   default to LINKING `node_modules` (and any built cross-package output, e.g.
   `packages/*/dist`) from the base worktree/branch instead of copying it:
   `cmd /c mklink /J <worktree>\node_modules <base>\node_modules` — a same-volume junction is a
-  single reparse-point entry, near-instant regardless of file count, zero extra disk. This is
-  safe under the same precondition the copy-based approach already required: `node_modules`
+  single reparse-point entry, near-instant regardless of file count, zero extra disk. **Verify
+  the junction actually landed before treating the worktree as provisioned** — `cmd /c mklink
+  /J` can report success (exit 0, no error text) while leaving a real, empty directory instead
+  of a reparse point; the first `pnpm`/build invocation inside that worktree then silently
+  triggers a full `pnpm install` into that worktree's own isolated `node_modules` (minutes, not
+  the near-instant junction case), with nothing pointing at the real cause. Check
+  `(Get-Item <worktree>\node_modules).LinkType -eq 'Junction'` (or `fsutil reparsepoint query
+  <worktree>\node_modules`) immediately after creation; on failure, remove the empty directory
+  (plain `rmdir`, it has no contents yet) and retry the `mklink /J` rather than proceeding. This
+  is safe under the same precondition the copy-based approach already required: `node_modules`
   stays read-only for the whole wave once dispatched (resolve genuinely new/changed
   dependencies once, before dispatching, never inside a worktree — unchanged from before). Only
   when a specific plan is known in advance to write into `node_modules` itself (rare — an
