@@ -2,6 +2,7 @@
 // PreToolUse guard (matcher: Bash). Cross-platform (Node).
 // On `git commit`, scans STAGED changes for secrets. Block = exit 2.
 // Zero-dependency regex baseline always runs; gitleaks used additionally if installed.
+// Obvious placeholders (your_token, <password>, ghp_xxxx..., YOUR_API_KEY) are allowlisted.
 // Fires only on commits made through Claude's Bash tool, not your manual terminal commits.
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -28,17 +29,38 @@ if (diff.error || diff.status !== 0) process.exit(0);
 const added = (diff.stdout || "").split("\n").filter(l => l.startsWith("+") && !l.startsWith("+++"));
 if (added.length === 0) process.exit(0);
 
-const text = added.join("\n");
 const envRe = /process\.env|os\.environ|getenv|import\.meta\.env|\$\{?[A-Z_]+|secrets?\.|vault/i;
-const noenvNoQuotes = added.filter(l => !envRe.test(l)).join("\n").replace(/["'`]/g, "");
+
+// Obvious placeholders / dummy values — skip so example config & docs don't false-positive.
+// Word markers apply to every rule; they're too distinctive to collide with high-entropy tokens.
+const placeholderRe = /your[_-]?|example|sample|placeholder|change[_-]?(me|this)|redacted|\bdummy\b|\btodo\b|replace[_-]?me|<[^>]+>|x{4,}|\*{3,}|\.{3,}|\bfoo(bar)?\b|\bbar\b|\bfake\b|test[_-]?(secret|token|key|pass|api)|not[_-]?real|_?here\b/i;
+// Trivial dummy values — anchored to the START of the value so they can't match as a
+// substring inside a real structured token. Applied ONLY to user-chosen values (grp > 0).
+const weakPlaceholderRe = /^(?:0+|1+|1234|abcd|abc123|qwerty|letmein|password|secret|changeit)/i;
+
+// [label, regex, valueGroup (0 = whole match), skipEnvLines]
+const RULES = [
+  ["AWS access key id",                 /AKIA[0-9A-Z]{16}/,                                   0, false],
+  ["private key block",                 /-----BEGIN [A-Z ]*PRIVATE KEY-----/,                 0, false],
+  ["Slack token",                       /xox[baprs]-[0-9A-Za-z-]{10,}/,                       0, false],
+  ["GitHub token",                      /gh[pousr]_[0-9A-Za-z]{20,}/,                         0, false],
+  ["credentials in connection string",  /[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^:@/\s]+:([^@/\s]+)@/,  1, false],
+  ["hardcoded secret assignment",       /(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*['"`]?([A-Za-z0-9/+_.-]{12,})/i, 1, true],
+];
 
 const hits = [];
-if (/AKIA[0-9A-Z]{16}/.test(text)) hits.push("AWS access key id");
-if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text)) hits.push("private key block");
-if (/xox[baprs]-[0-9A-Za-z-]{10,}/.test(text)) hits.push("Slack token");
-if (/gh[pousr]_[0-9A-Za-z]{20,}/.test(text)) hits.push("GitHub token");
-if (/[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^:@/\s]+:[^@/\s]+@/.test(text)) hits.push("credentials in connection string");
-if (/(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[A-Za-z0-9/+_.-]{12,}/i.test(noenvNoQuotes)) hits.push("hardcoded secret assignment");
+for (const [label, re, grp, skipEnv] of RULES) {
+  for (const line of added) {
+    if (skipEnv && envRe.test(line)) continue;
+    const m = line.match(re);
+    if (!m) continue;
+    const val = grp ? m[grp] : m[0];
+    if (placeholderRe.test(val)) continue;            // word marker anywhere in value
+    if (grp && weakPlaceholderRe.test(val)) continue; // trivial dummy for user-chosen values
+    hits.push(label);
+    break;
+  }
+}
 
 // gitleaks (authoritative, additive) if present
 const gl = spawnSync("gitleaks", ["protect", "--staged", "--no-banner"], { cwd, encoding: "utf8" });
