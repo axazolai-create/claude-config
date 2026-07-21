@@ -220,8 +220,8 @@ For every declared plugin the detector reports one state:
   id) → refresh + install shown.
 - `placeholder` / `no_template` — fill the template / create one.
 
-`/init-stack -i` shows the detected stack's plugins (installed vs needs-install) plus every other
-known plugin (opt-in, with description) as one checklist; on confirm it installs the checked
-plugins that are missing (`claude plugin install`, adding the marketplace when needed) and enables
-them in the project's `.claude/settings.json`. The non-interactive `--enable`/`--apply-all` path
-activates only (no install). Restart Claude Code afterwards (`enabledPlugins` resolves at startup).
+`/init-stack -i` presents these states as one checklist (detected stack's plugins plus opt-in
+others); on confirm it installs the checked-but-missing plugins (`claude plugin install`, adding
+the marketplace when needed) and enables them in `.claude/settings.json`. The non-interactive
+`--enable`/`--apply-all` path activates only (no install). Restart Claude Code afterwards
+(`enabledPlugins` resolves at startup).

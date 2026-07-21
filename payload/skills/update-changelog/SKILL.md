@@ -61,9 +61,8 @@ dozens of real commits).
 ## 3. Editorial pass — the actual work
 
 Process commits **oldest to newest**. For each one, decide: skip it, or turn it into one
-changelog entry (one patch version bump). This step is why this is a skill and not a script —
-judging "is this meaningful to a shop-floor operator" and rewriting it in natural Russian
-needs reading comprehension, not pattern matching.
+changelog entry (one patch version bump). This needs judgment, not pattern matching — deciding
+"is this meaningful to a shop-floor operator" and rewriting it in natural Russian.
 
 ### 3.1 The meaningfulness test
 

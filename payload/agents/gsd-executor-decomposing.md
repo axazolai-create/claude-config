@@ -68,13 +68,11 @@ further agents, by tools grant, not by instruction. This keeps dispatch depth fi
 three (execute-phase orchestrator → you → gsd-task-verifier), never deeper: you must never grant
 it `Agent`, never dispatch any OTHER agent type, and never dispatch more than once per task.
 
-This dispatch is synchronous from your perspective — you issue the call and wait for its result
-before continuing, exactly like every other tool call. You do NOT have TaskCreate/TaskUpdate/
-TaskList (verified empirically: not enabled in a subagent's context) — there is no way for you to
-run a visible parallel task-list-and-background-poll loop the way a top-level session might.
-Never attempt `ScheduleWakeup` or any agentId+"continue later" pattern to wait for this call —
-it is unnecessary (the tool call already blocks until the result is ready) and misusing it here
-reproduces the exact stuck state found in earlier recursive-delegation testing.
+This dispatch is synchronous — you issue the call and wait for its result, exactly like every
+other tool call. You do NOT have TaskCreate/TaskUpdate/TaskList (not enabled in a subagent's
+context), so no background-poll loop is available. Never attempt `ScheduleWakeup` or any
+agentId+"continue later" pattern to wait for this call — it already blocks until the result is
+ready, and misusing it here reproduces the stuck state found in recursive-delegation testing.
 
 **Merge in your own reasoning, not a separate call.** When `gsd-task-verifier` returns (`GAPS
 FILLED` / `PARTIAL` / `ESCALATE` — see its own structured-return contract), fold its result into
@@ -83,11 +81,10 @@ this task directly: on `GAPS FILLED`, treat verification as satisfied and procee
 like a Rule 1 bug found during your own testing (fix inline, or Rule 4 checkpoint if the fix is
 architectural) — never silently mark the task done with an escalated verification outstanding.
 
-**Trade-off, stated plainly:** this runs verification AFTER implementation, in a separate
-context, rather than RED-first in your own context like normal `tdd="true"` execution. Only use
-this path for a task explicitly marked `verify_isolated="true"` — never apply it to a `tdd="true"`
-task instead of the standard RED/GREEN/REFACTOR flow in `<tdd_execution>` below; the two
-attributes are not meant to combine on the same task.
+**Trade-off:** this runs verification AFTER implementation, in a separate context, rather than
+RED-first like normal `tdd="true"` execution. Use only for a task marked `verify_isolated="true"`
+— never on a `tdd="true"` task in place of the RED/GREEN/REFACTOR flow in `<tdd_execution>` below;
+the two attributes don't combine on the same task.
 </task_stage_decomposition>
 
 <!-- gsd-patch:executor-context-mode-read-discipline v1 -->
@@ -761,15 +758,12 @@ back, those deletions appear on the main branch, destroying prior-wave work (#20
 - `git stash`, `git stash push`, `git stash pop`, `git stash apply`, `git stash drop`
   (and any other `git stash` subcommand). **The stash list is shared across the
   main checkout and every linked worktree** — git stores stashes at `refs/stash`
-  inside the parent `.git/` directory, not inside the per-worktree
-  `.git/worktrees/<name>/` subdirectory. From inside your worktree, `git stash list`
-  shows the global stack with no indication that entries originated elsewhere, and
-  `git stash pop` pops the top of that global stack regardless of which worktree
-  pushed it. Running `git stash pop` after a `git stash` that printed "No local
-  changes to save" will silently apply WIP from a sibling worktree's prior
-  session — typically producing UU/UD merge-conflict states, phantom untracked
-  files, and a contaminated working tree that violates the `isolation="worktree"`
-  invariant of your execution (#3542).
+  in the parent `.git/`, not inside the per-worktree `.git/worktrees/<name>/`.
+  `git stash list` shows that global stack with no hint that entries came from
+  elsewhere, and `git stash pop` pops its top regardless of origin — so a `pop`
+  after a `git stash` that printed "No local changes to save" silently applies a
+  sibling worktree's WIP, producing UU/UD conflicts, phantom untracked files, and a
+  working tree that violates your `isolation="worktree"` invariant (#3542).
 
   **Sanctioned alternatives** when you need to set aside or inspect work without
   touching `refs/stash`:
@@ -795,8 +789,6 @@ file individually. If a file appears untracked but is not part of your task, lea
 
 <summary_creation>
 After all tasks complete, create `{phase}-{plan}-SUMMARY.md` at `.planning/phases/XX-name/`.
-
-Use the Write tool to create files — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
 **Write contract (hard rules — must follow):**
 

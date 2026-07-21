@@ -63,29 +63,24 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   stage outcome is the orchestrator's own reasoning over the returned `tool_result`s, not a
   separate "merge agent" call. Both together keep the dispatch tree at depth 2 (orchestrator ->
   leaf worker), which is the only configuration that has run cleanly in repeated testing.
-- **This is an empirically confirmed failure pattern, not a style preference.** A controlled test
-  series (2026-07) tried three independent ways to legitimize a third level - a dedicated
-  coordinator agent, the orchestrator recursing into itself, and a freshly-authored
-  non-contradictory role - each granted the `Agent` tool and asked to fan out a parallel wave one
-  level below itself. Every worker whose system prompt carries an anti-recursion guardrail (see
-  `<no_recursive_agent_spawn>` below) refused outright, every time, citing the contradiction
-  between the guardrail and the instruction overriding it. The one variant with NO guardrail text
-  at all didn't refuse, but didn't work either - it fell into `ScheduleWakeup`/background-dispatch
-  mechanics that a headless, one-shot invocation can never wake back up from, an unrelated
-  mechanical dead end. Neither failure mode is worth re-discovering by hand; treat "one
-  `Agent`-capable orchestrator, leaf workers only" as a hard constraint on plan/agent design.
-- **Never grant `Agent` to a worker whose role text was written assuming it would never have it.**
-  The contradiction above (a guardrail plus a later override "cancelling" it) was the single most
-  reliable trigger for refusal across every retry. A role meant to recurse safely has to be
-  written from scratch with an explicit depth cap and merge-in-code discipline baked in from the
-  start - never produced by cloning `gsd-executor.md` and stripping or overriding its
+- **This is an empirically confirmed failure pattern, not a style preference.** A 2026-07 test
+  series tried three independent ways to add a third level — a dedicated coordinator agent, the
+  orchestrator recursing into itself, and a freshly-authored role — each granted `Agent` and asked
+  to fan out a wave one level below itself. Any worker carrying an anti-recursion guardrail (see
+  `<no_recursive_agent_spawn>` below) refused every time, citing the guardrail-vs-override
+  contradiction; the one variant with no guardrail didn't refuse but fell into
+  `ScheduleWakeup`/background-dispatch mechanics a headless one-shot invocation can never wake from.
+  Treat "one `Agent`-capable orchestrator, leaf workers only" as a hard constraint.
+- **Never grant `Agent` to a worker whose role text assumed it would never have it** — that
+  guardrail-plus-override contradiction was the single most reliable refusal trigger. A role meant
+  to recurse safely must be written from scratch with an explicit depth cap and merge-in-code
+  discipline, never produced by cloning `gsd-executor.md` and stripping or overriding its
   `<no_recursive_agent_spawn>` block.
-- **Genuinely need depth beyond 2, or branching decided by something other than a human-written
-  plan?** That decision belongs in deterministic code, not a model's runtime judgment call inside
-  a prompt. See `claude_orchestration` (`~/.claude/references/gsd-claude-orchestration-pilot.md`) - it maps
-  GSD's own wave/plan model onto the `Workflow` tool's `parallel()`/`pipeline()` primitives, with
-  branching fixed by a generated script instead of an agent deciding to spawn further agents at
-  inference time.
+- **Need depth beyond 2, or branching decided by something other than a human-written plan?** That
+  decision belongs in deterministic code, not a model's runtime judgment inside a prompt. See
+  `claude_orchestration` (`~/.claude/references/gsd-claude-orchestration-pilot.md`) — it maps GSD's
+  own wave/plan model onto the `Workflow` tool's `parallel()`/`pipeline()` primitives, with branching
+  fixed by a generated script instead of an agent spawning further agents at inference time.
 
 ### The one sanctioned depth-3 exception: `gsd-executor-decomposing` + `gsd-task-verifier`
 
@@ -97,26 +92,23 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   plan containing at least one task with `verify_isolated="true"` in its `<task>` attributes;
   every other plan still gets plain `gsd-executor`, unchanged.
 - **Why this doesn't repeat the depth-boundary failure above:** the depth cap here is structural,
-  not textual. `gsd-task-verifier` simply has no `Agent` in its `tools:` frontmatter - it cannot
-  recurse regardless of what its prompt says, and `checkRecursiveAgentSpawnGuardrail` (in
-  `gsd-agent-patches.mjs`) flags any future gsd-* agent that grants `Agent` without a recognized
-  guardrail marker, catching an accidental widening of this exception. `gsd-executor-decomposing`
-  itself was written with zero competing anti-recursion text (no inherited, "overridden"
-  `<no_recursive_agent_spawn>` block) - its `<task_stage_decomposition>` block is the ONLY word on
-  the subject, avoiding the exact contradiction pattern that caused refusals.
+  not textual. `gsd-task-verifier` has no `Agent` in its `tools:` frontmatter — it cannot recurse
+  whatever its prompt says — and `checkRecursiveAgentSpawnGuardrail` (in `gsd-agent-patches.mjs`)
+  flags any future gsd-* agent that grants `Agent` without a recognized guardrail marker, catching
+  an accidental widening. `gsd-executor-decomposing` itself carries zero competing anti-recursion
+  text (its `<task_stage_decomposition>` block is the only word on the subject), so there's no
+  contradiction to trigger a refusal.
 - **Why `Agent`, not `Workflow`, for this one case:** verified empirically (2026-07-17, live
-  session, not headless `-p`) - the `Workflow` tool is not available to a spawned subagent at all
-  (confirmed via `ToolSearch` returning no match from inside one); it only works from the true
-  top-level orchestrating session. A synchronous `Agent` call from `gsd-executor-decomposing` to
-  a leaf with no further `Agent` access is the only mechanism available at this level, and testing
-  confirmed it completes cleanly in a live/long-running session (no `ScheduleWakeup`/async-stuck
-  dead end - that dead end was specific to a one-shot headless process, not nested dispatch
-  itself).
-- **Maintenance cost, stated plainly:** `gsd-executor-decomposing.md` duplicates the entirety of
-  `gsd-executor.md`'s execution machinery (commit protocol, deviation rules, TDD flow, checkpoint
-  handling) because Claude Code agent files have no inheritance mechanism - a future upstream
-  change to `gsd-executor.md` does not automatically reach this fork. See RISK-GSDEXEC-001 in
-  `RISK_REGISTER.md` for the drift-detection procedure.
+  session, not headless `-p`) — `Workflow` is not available to a spawned subagent at all (`ToolSearch`
+  returns no match from inside one); it only works from the top-level orchestrating session. A
+  synchronous `Agent` call to a leaf with no further `Agent` access is the only mechanism at this
+  level, and completes cleanly in a live/long-running session (the `ScheduleWakeup`/async-stuck dead
+  end was specific to one-shot headless, not nested dispatch itself).
+- **Maintenance cost:** `gsd-executor-decomposing.md` duplicates the entirety of `gsd-executor.md`'s
+  execution machinery (commit protocol, deviation rules, TDD flow, checkpoint handling) because
+  Claude Code agent files have no inheritance mechanism — an upstream change to `gsd-executor.md`
+  does not reach this fork. See RISK-GSDEXEC-001 in `RISK_REGISTER.md` for the drift-detection
+  procedure.
 
 ### Parallel worktree waves (Windows): environment contention, not agent confusion
 
@@ -124,21 +116,18 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   `git worktree add` races on `.git/config.lock`.
 - **Never remove or force-clear a worktree (or anything inside its `node_modules`) with
   `Remove-Item -Recurse -Force` or `rm -rf` on Windows.** pnpm links dependencies via NTFS
-  junctions/reparse points internally (per-package, pnpm-managed — not something this
-  workflow creates or touches directly) — both PowerShell and Git-Bash/MSYS recursive delete
-  FOLLOW a reparse point into its real target instead of removing just the link. This is not
-  theoretical: it caused two real-world incidents in Feb 2026 where an entire Windows user
-  profile was deleted, one triggered by Claude Code CLI itself running exactly this command
-  against a worktree (pnpm/pnpm#10707). Normal cleanup: `git worktree remove <path>` — `git
-  merge` itself never touches `node_modules` (gitignored, never enters diff/conflict
-  machinery), so a slow or failed removal is never a lost merge; the commit already landed.
-  If removal is refused or reports `.git does not exist` (stale admin entry), `git worktree
-  prune` first, then clear any leftover directory with Node's reparse-point-safe primitive,
-  never a shell recursive delete: `node -e
-  "require('fs').rmSync(process.argv[1],{recursive:true,force:true})" <path>` — `fs.rmSync`
-  unlinks a symlink/junction it encounters instead of descending into its target. Never run
-  either removal path as a blocking foreground call on a large tree; background it and keep
-  working while waiting for the completion notification.
+  junctions/reparse points, and both PowerShell and Git-Bash/MSYS recursive delete FOLLOW a reparse
+  point into its real target instead of removing just the link. This caused two real Feb 2026
+  incidents where an entire Windows user profile was deleted — one triggered by Claude Code CLI
+  running exactly this command against a worktree (pnpm/pnpm#10707). Normal cleanup: `git worktree
+  remove <path>`; `git merge` never touches `node_modules` (gitignored, never enters diff/conflict
+  machinery), so a slow or failed removal is never a lost merge — the commit already landed. If
+  removal is refused or reports `.git does not exist` (stale admin entry), `git worktree prune`
+  first, then clear any leftover directory with Node's reparse-safe primitive, never a shell
+  recursive delete: `node -e
+  "require('fs').rmSync(process.argv[1],{recursive:true,force:true})" <path>` (`fs.rmSync` unlinks a
+  junction instead of descending into its target). Never run either removal path as a blocking
+  foreground call on a large tree — background it and keep working.
 - **Liveness check every 5-10 minutes while subagents/background shell tasks are running** —
   verify with hard evidence, never assume: growing/changed `git diff --stat HEAD` output in
   the worktree (not `git status`/`--porcelain` — same filesystem-walk hang risk noted above),
@@ -155,31 +144,24 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   all progress if the process is killed or crashes mid-run. Persist after every step instead —
   this is what makes the "restart, preserving partial results" recovery option above actually
   possible.
-- **Dependency provisioning — pnpm's own global virtual store, not a hand-rolled junction.**
-  A plain `robocopy /MIR` (or a fresh `pnpm install`) of a 100K+-file `node_modules` into
-  every worktree runs minutes to tens of minutes PER WORKTREE. A single hand-made junction
-  over the whole tree from the base checkout looks like the fix but isn't: it makes
-  `node_modules` one shared, mutable resource across every worktree in the wave, so anything
-  a worktree installs or writes there at runtime — Turborepo's own lazily-fetched platform
-  binary (`node_modules/turbo-<platform>/bin/`), `.bin` shims, anything else — lands in the
-  shared base copy instead of that worktree's own tree, and can vanish or clash across
-  worktrees under concurrent use. The actual fix: for a pnpm monorepo, ensure
-  `enableGlobalVirtualStore: true` is set in the project's `pnpm-workspace.yaml` (one line,
-  one time — add it if missing; see https://pnpm.io/git-worktrees, pnpm's own documented
-  setup for exactly this multi-worktree case). With it on, every worktree gets its own real,
-  independent `node_modules` whose per-package entries are pnpm-managed links into one shared
-  content-addressable store — no cross-worktree sharing above the package level, so a plain
-  `pnpm install` run inside each worktree is "nearly instant" once the first install has
-  populated the store. Resolve genuinely new/changed dependencies once — on the base branch,
-  before dispatching the wave — so every worktree's install reads purely from an
-  already-populated store instead of hitting the registry. Windows still can't rename a path
-  another process has open, so two worktrees resolving against the same store at the same
-  moment can hit `EPERM ... rename ..._tmp_N` or serialize to minutes each even without an
-  outright error — stagger the first `pnpm install` per worktree the same way as `git
-  worktree add` (one call per turn), never run it concurrently in more than one worktree at
-  once. Outside a pnpm workspace (npm/yarn, or a pnpm repo whose workspace config can't be
-  changed), there's no equivalent shared-store fast path — budget wave time for a plain
-  independent install per worktree, or drop worktree isolation for that wave.
+- **Dependency provisioning — use pnpm's own global virtual store, not a hand-rolled junction.**
+  `robocopy /MIR` or a fresh `pnpm install` of a 100K+-file `node_modules` into every worktree runs
+  minutes to tens of minutes PER WORKTREE. A single hand-made junction over the whole tree looks like
+  the fix but makes `node_modules` one shared, mutable resource across the wave: anything a worktree
+  writes there at runtime — Turborepo's lazily-fetched platform binary
+  (`node_modules/turbo-<platform>/bin/`), `.bin` shims — lands in the shared base copy and can vanish
+  or clash across worktrees under concurrent use. The fix: for a pnpm monorepo, set
+  `enableGlobalVirtualStore: true` in `pnpm-workspace.yaml` (one line, add if missing; see
+  https://pnpm.io/git-worktrees). Then every worktree gets its own real `node_modules` whose entries
+  are pnpm-managed links into one shared content-addressable store, so a plain `pnpm install` per
+  worktree is nearly instant once the first has populated the store. Resolve new/changed dependencies
+  once on the base branch before dispatching the wave, so every worktree's install reads from an
+  already-populated store instead of the registry. Windows can't rename a path another process has
+  open, so two worktrees resolving against the store at once can hit `EPERM ... rename ..._tmp_N` or
+  serialize to minutes each — stagger the first `pnpm install` per worktree like `git worktree add`
+  (one call per turn), never concurrently. Outside a pnpm workspace (npm/yarn, or a pnpm repo whose
+  workspace config can't change), there's no shared-store fast path — budget for a plain independent
+  install per worktree, or drop worktree isolation for that wave.
 - Use `git diff --stat HEAD` for worktree dirty-checks, never `git status` — on a worktree
   with a large `node_modules` tree, `git status` can hang minutes even with `.gitignore`
   correctly excluding it (filesystem walk + AV cost, not a git-ignore bug). `git diff --stat

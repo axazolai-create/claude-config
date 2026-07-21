@@ -22,10 +22,9 @@ treats "the file exists" as necessary, never sufficient:
   missing (see step 2's `stack-rules-check.mjs` status, step 10's patch-anchor matching, step
   11's deep-additive defaults sync).
 
-When reporting which steps will act, phrase it in content terms ("field X is unset, will
-propose a value" / "snapshot is stale, will rebuild") - never collapse this into "the file
-exists, so the step applies": existence only tells you a step CAN run, not that it has
-anything to do.
+When reporting which steps will act, phrase it in content terms ("field X is unset, will propose
+a value" / "snapshot is stale, will rebuild"), never "the file exists, so the step applies" -
+existence only tells you a step CAN run, not that it has anything to do.
 
 ## 1. Detect + classify (you run this)
 Run: `python3 ~/.claude/bin/init-stack.py`
@@ -35,10 +34,9 @@ show me the human report (state per plugin, and which are already enabled).
 ## 2. Stack-rules snapshot (build if missing or stale)
 `.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
 no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). `session-init.mjs`
-only flags it as missing - its own passive, every-session sourceHash/stackFingerprint check was
-deliberately removed (too eager, fired a rebuild note on any drift). This command is where
-staleness actually gets caught and fixed instead: an explicit, review-gated invocation, not a
-background nag.
+only flags it as missing; its passive every-session sourceHash/stackFingerprint check was removed
+(too eager, fired on any drift). Staleness gets caught and fixed here instead - an explicit,
+review-gated invocation, not a background nag.
 
 Check:
 ```bash
@@ -201,13 +199,11 @@ project dial default to `full` for this project instead of staying `off` (ration
 ## 10. Apply pending gsd-* agent patches (machine-wide, not project-specific)
 `~/.claude/agents/gsd-*.md` are owned by the separate `gsd-core` tool, not this bundle -
 patching them is best-effort cross-tool maintenance. `session-init.mjs` checks read-only every
-session and flags when something here is pending (context-mode routing guidance,
-gsd-executor.md/gsd-debugger.md hardening fixes); this step is what actually writes, folded
-into `/init-stack` so it happens on an explicit invocation you already control instead of
-requiring a separate command. (`/init-session` still exists standalone for applying patches
-without running the rest of this flow, e.g. right after a gsd-core update mid-milestone.)
-This step is unrelated to step 7 above — it patches `~/.claude/agents/gsd-*.md` prose
-(machine-wide), not this project's `.planning/config.json`.
+session and flags when something is pending (context-mode routing guidance,
+gsd-executor.md/gsd-debugger.md hardening fixes); this step is what actually writes it, on an
+explicit invocation you already control. (`/init-session` still applies patches standalone, e.g.
+right after a gsd-core update mid-milestone.) Unrelated to step 7 — this patches
+`~/.claude/agents/gsd-*.md` prose (machine-wide), not this project's `.planning/config.json`.
 
 Run:
 ```bash
