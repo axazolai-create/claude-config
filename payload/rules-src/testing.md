@@ -49,3 +49,31 @@ paths:
 - Avoid: testing private/internal implementation details, over-mocking that ends up
   asserting the mock instead of the behavior, flaky tests tolerated with retries instead of
   fixed, one giant test asserting many unrelated things.
+
+## Parallel test isolation — never share one mutable DB across workers
+- Jest (and vitest / pytest-xdist) parallelize at the test-FILE level — one worker per file. If
+  every worker hits the SAME database, workers race: one file's truncate/seed clobbers another's
+  reads → flaky, order-dependent passes. This is the same failure class as any mutable resource
+  shared across a parallel wave; retries only mask it (and are banned above). Isolate DB state PER
+  WORKER, keyed off the worker index (Jest `JEST_WORKER_ID` = 1..N; vitest `VITEST_POOL_ID`;
+  pytest-xdist `PYTEST_XDIST_WORKER`). Create the namespace once in global/setup, drop it in
+  teardown:
+  - **PostgreSQL** — schema-per-worker: give each worker its own schema and
+    `SET search_path TO test_w${JEST_WORKER_ID}` on its connections; migrate each schema once.
+    Cheaper than a database per worker, full isolation. (DB-per-worker also works, heavier.)
+  - **MySQL / MariaDB** — database-per-worker (a MySQL "schema" IS a database):
+    `test_${JEST_WORKER_ID}`, migrate each once, `USE` it per connection.
+  - **SQLite** — file-per-worker (`./.tmp/test_${JEST_WORKER_ID}.db`) or an in-memory DB per
+    worker; isolation is free — often the best fit for unit-level DB tests.
+  - **MongoDB** — database-per-worker (`test_${JEST_WORKER_ID}`) or, if lighter, a per-worker
+    collection prefix; drop the DB in teardown.
+- Faster alternative WITHIN a worker: wrap each test in a transaction and ROLLBACK in `afterEach`
+  (no residue, fast). Caveat: breaks if the code under test opens/commits its own transactions or
+  the test asserts commit behavior, and the pool must pin a single connection for the test.
+- Testcontainers — an ephemeral DB container keyed by the worker index gives the strongest
+  isolation at higher cost; reach for it when a shared server can't be namespaced cleanly.
+- Last resort only: serialize DB-touching suites (`--runInBand` / `maxWorkers=1`, or split them
+  into a separate Jest project run serially while unit tests stay parallel). Sacrifices speed —
+  prefer per-worker isolation first.
+- Every per-worker DB/schema/file MUST be torn down (drop schema/DB, delete file), or CI
+  accumulates orphaned namespaces run after run.
