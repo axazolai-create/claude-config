@@ -201,6 +201,18 @@ This adds a PostToolUse hook (runs after Claude-invoked `pnpm install`/`add`) an
 `postinstall` (covers my own terminal), both idempotent and additive-only. For a non-pnpm
 project, skip entirely.
 
+### Turbopack × global-virtual-store check (only if Next + pnpm)
+Only if this project uses Next.js/Turbopack AND pnpm. An out-of-tree virtual store
+(`enableGlobalVirtualStore`, or an external `virtual-store-dir`) is structurally incompatible
+with Turbopack — it resolves/serves only under its `root`, so chunks `404` after a hard reload.
+This is a different failure class than phantom deps (file location, not undeclared imports), so
+the phantom guard does NOT cover it. Detect and print the fix recipe (read-only, edits nothing):
+`node ~/.claude/bin/turbopack-gvs-check.mjs --root <project root>`
+On a CONFLICT it prints Strategy B — move the virtual store to a sibling folder
+(`virtual-store-dir`) and widen `turbopack.root` + `outputFileTracingRoot` to the common parent
+(format-aware next.config snippet). Applying it (editing `.npmrc` + `next.config`, then
+`pnpm install`) is consent-gated and mine to run. See `RISK-PNPM-004`.
+
 ## 9. Mark leanmode dial default (always, no gate)
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
