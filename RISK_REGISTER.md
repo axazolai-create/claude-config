@@ -258,7 +258,7 @@
 
 ## RISK-PNPM-004 — enableGlobalVirtualStore structurally incompatible with Turbopack
 
-- **Status:** Open (documented; guard not yet built)
+- **Status:** Mitigated (detector built; auto-apply intentionally not done)
 - **Context:** `enableGlobalVirtualStore: true` relocates pnpm's virtual store (`node_modules/.pnpm`,
   the real package directories) OUT of the project tree. Turbopack (Next.js) by design only
   resolves/serves files under its `root`. So `next` and other packages living out-of-tree cannot
@@ -272,8 +272,15 @@
   virtual store in a sibling folder under a common parent (`virtual-store-dir=<abs adjacent path>`)
   and widen Turbopack's boundary (`turbopack.root` + `outputFileTracingRoot`) to that parent —
   preserves dedup, less-trodden, may hit Turbopack edge cases.
-- **Residual:** no automated detection yet; a future init-stack guard should flag
-  Turbopack/Next + effective gVS=true and recommend/apply the fix. Until then it is manual.
+- **Detection:** `payload/bin/turbopack-gvs-check.mjs` (wired into init-stack, Next+pnpm only)
+  flags Turbopack/Next + effective out-of-tree store (gVS flag OR a junctioned `.pnpm` OR an
+  external `virtual-store-dir`) and prints the tailored Strategy-B recipe with a format-aware
+  (CJS/ESM) next.config snippet. Strategy B chosen (sibling store + widened root) over disabling
+  gVS, to preserve cross-worktree dedup.
+- **Residual:** the detector WARNS with a recipe but does not auto-edit `.npmrc`/`next.config`
+  (project-specific paths + arbitrary config formats make auto-writing unsafe) — applying it is a
+  consent-gated manual step. Strategy B is the less-trodden path and may hit Turbopack edge cases;
+  the fallback (disable gVS, store in-tree) is noted in the recipe. Accepted.
 
 ## RISK-SUP-001 — Hang supervision depends on the model wrapping the job
 
