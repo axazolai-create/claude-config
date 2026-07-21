@@ -31,6 +31,10 @@ Run: `python3 ~/.claude/bin/init-stack.py`
 Parse the `STATUS_JSON` block (`stacks`, `plugins[]` with `state`, `present[]` already-enabled) and
 show me the human report (state per plugin, and which are already enabled).
 
+- Check graphify freshness (best-effort, non-blocking): run
+  `node ~/.claude/bin/graphify-freshness.mjs`. If it prints an update line, tell me the
+  upgrade command; never upgrade automatically.
+
 ## 2. Stack-rules snapshot (build if missing or stale)
 `.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
 no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). `session-init.mjs`

@@ -818,6 +818,12 @@ async function main() {
     : "see settings.partial.json";
   log(`Verify with /hooks (expect: ${hookCounts}).`);
 
+  // Best-effort graphify staleness nudge (never blocks; exits 0 on any error/offline).
+  if (!DRY) {
+    const fresh = join(CDIR, "bin", "graphify-freshness.mjs");
+    if (existsSync(fresh)) spawnSync(process.execPath, [fresh], { stdio: "inherit" });
+  }
+
   log("\n=== Project setup: what to run, and when ===");
   log("");
   log("Step 1 - RESTART Claude Code now. Machine-level setup (hooks, rules, skills,");
