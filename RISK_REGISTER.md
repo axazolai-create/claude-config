@@ -223,3 +223,24 @@
   pooling could classify per-`.csproj` instead of on concatenated text.
 - **Residual:** rare mis-selection in mixed .NET solutions; content-only framework switches need a
   manual `/init-stack` rebuild. Low impact while the active project set is Node-centric.
+
+## RISK-SECRETS-001 — Placeholder allowlist in `secrets-gate.mjs` can mask a real secret
+
+- **Status:** Open (accepted / deliberate weakening to cut false positives on example configs)
+- **Context:** `payload/hooks/secrets-gate.mjs` now skips values that look like placeholders so
+  docs/example configs stop false-positiving. Two tiers: `placeholderRe` (word markers — `your_`,
+  `example`, `<...>`, `xxxx`, `changeme`, `test_secret`, `_here`, …) is tested against the matched
+  value of EVERY rule; `weakPlaceholderRe` (anchored trivial values — `1234…`, `abc123`, `qwerty`,
+  `password`, `changeit`, …) applies only to user-chosen value groups (assignment / connection
+  string, `grp > 0`). A real secret that happens to embed a word marker (e.g. a genuine password
+  literally containing `example`, or a token with `xxxx` in it) will pass the regex baseline
+  silently. The word-marker test is substring-based, so it is the widest exposure.
+- **Mitigation:** markers are distinctive words unlikely to appear in high-entropy tokens; the
+  numeric/`weakPlaceholderRe` tier is `^`-anchored so it can't match a substring inside a structured
+  token (the earlier un-anchored `123456`/`abc123` leaked real `AKIA…`/`xoxb…` tokens and was fixed);
+  structured-format rules (AWS/Slack/GitHub/private-key) never get the weak tier; gitleaks, when
+  installed, runs additively with its own allowlist and is unaffected by this regex layer. Regression
+  fixtures live in the change (20 cases: 11 placeholders pass, 7 real secrets block, 2 env refs pass).
+- **Residual:** the zero-dependency regex baseline can miss a real secret that embeds a word marker;
+  on machines without gitleaks this is the only automated gate. Accepted as the cost of usable
+  example configs; escalate to a per-value entropy check if a real leak slips through.
