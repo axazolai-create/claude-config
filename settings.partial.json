@@ -25,6 +25,12 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/worktree-executor-discipline-advisor.mjs"] }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/bg-supervision-nudge.mjs"] }
+        ]
       }
     ],
     "PostToolUse": [
@@ -38,6 +44,26 @@
         "matcher": "Write|Edit|MultiEdit|Bash",
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/gsd-config-patch.mjs"] }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/ci-watch-nudge.mjs"] }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/task-lifecycle-probe.mjs"] }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/task-lifecycle-probe.mjs"] }
         ]
       }
     ],

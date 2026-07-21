@@ -255,3 +255,56 @@
   unit tests.
 - **Residual:** an unusual hand-authored `pnpm-workspace.yaml` shape falls back to manual entry
   rather than an automated fix. Accepted — safety over convenience.
+
+## RISK-PNPM-004 — enableGlobalVirtualStore structurally incompatible with Turbopack
+
+- **Status:** Open (documented; guard not yet built)
+- **Context:** `enableGlobalVirtualStore: true` relocates pnpm's virtual store (`node_modules/.pnpm`,
+  the real package directories) OUT of the project tree. Turbopack (Next.js) by design only
+  resolves/serves files under its `root`. So `next` and other packages living out-of-tree cannot
+  have their chunks served: the dev server starts, then after a hard reload (ctrl+F5) the client
+  requests freshly-resolved chunk URLs that map outside root → `404 / ChunkLoadError`. This is a
+  DIFFERENT failure class than phantom deps — `packageExtensions` (RISK-PNPM-001..003) cannot fix
+  it because it does not move files inside root.
+- **Mitigation:** for Turbopack/Next projects, either (A) disable gVS project-scoped
+  (`.npmrc: enable-global-virtual-store=false`, then `rm -rf node_modules && pnpm install`) — the
+  virtual store returns in-tree; guaranteed to work, loses cross-worktree dedup; or (B) place the
+  virtual store in a sibling folder under a common parent (`virtual-store-dir=<abs adjacent path>`)
+  and widen Turbopack's boundary (`turbopack.root` + `outputFileTracingRoot`) to that parent —
+  preserves dedup, less-trodden, may hit Turbopack edge cases.
+- **Residual:** no automated detection yet; a future init-stack guard should flag
+  Turbopack/Next + effective gVS=true and recommend/apply the fix. Until then it is manual.
+
+## RISK-SUP-001 — Hang supervision depends on the model wrapping the job
+
+- **Status:** Open (accepted)
+- **Context:** the hard hang guarantee comes only from jobs launched through `supervise-bg.mjs`
+  (or a self-bounded watcher like `gh run watch --exit-status`). A raw `run_in_background` job that
+  hangs still emits no event. Hooks cannot force the wrapper or arm a timer, so the launch-time
+  nudge is advisory, not enforced.
+- **Mitigation:** the PreToolUse `bg-supervision-nudge` fires deterministically at every
+  unsupervised bounded background launch, making the reminder reliable even if memory/prose is
+  ignored. The wrapper itself is the guarantee once used.
+- **Residual:** a model that ignores the nudge and launches a raw job can still hang invisibly.
+  Accepted — this is the ceiling of what hooks can enforce.
+
+## RISK-SUP-002 — Task* hook events unverified in this harness build
+
+- **Status:** Open (verification pending)
+- **Context:** `TaskCreated`/`TaskCompleted` are documented hook events but not confirmed wired in
+  the running build. They are registered pointing at a probe, not at behaviour-changing logic.
+- **Mitigation:** `task-lifecycle-probe.mjs` only logs firings + payload schema; if the events do
+  not exist, the entries are inert (unknown events are ignored). Real handling is wired only after
+  the probe log confirms they fire and reveals their schema (post-restart).
+- **Residual:** the cleaner TaskCreated launch surface stays unused until verified. Accepted.
+
+## RISK-SUP-003 — supervise-bg could kill a legitimately long or quiet job
+
+- **Status:** Open (accepted / low)
+- **Context:** the wrapper's wall-clock timeout and output-staleness watchdog could terminate a
+  job that is genuinely long-running or intentionally quiet (a slow build, a silent long task).
+- **Mitigation:** defaults are generous (30 min wall / 5 min staleness) and both are tunable per
+  launch (`--timeout`, `--stale`); `--timeout 0` / `--stale 0` disable a check. The launch nudge
+  skips obvious long-lived servers entirely, so those are not wrapped in the first place.
+- **Residual:** a mis-tuned bound on an atypical job could kill it early; the `HANG` marker and
+  exit code 124 make that diagnosable. Accepted.
