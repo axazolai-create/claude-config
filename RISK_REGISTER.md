@@ -146,3 +146,70 @@
   token counts only).
 - **Residual:** `cost_usd` is always a **best-effort local estimate**, never billing-grade — same
   disclaimer Claude Code's own `/usage` command carries for its dollar figure. Accepted.
+
+## RISK-NEO4J-001 — Multi-source staleness when several PCs push the global graph to one Neo4j
+
+- **Status:** Open (mitigated by design)
+- **Context:** each PC has its own `~/.graphify/global-graph.json` (aggregate of that PC's repos).
+  Multiple PCs push into one shared Neo4j on the NAS. graphify's `MERGE` never deletes, so nodes
+  for files deleted in a repo persist. A naive "rebuild = wipe the whole graph then re-push" would
+  destroy the repos contributed by *other* PCs (they are not in the wiping PC's global graph).
+- **Mitigation:** per-repo scoped refresh, never a global wipe. Every global-graph node carries a
+  `repo` property (= repo_tag; `prefix_graph_for_global` in graphify `build.py`). Before the MERGE
+  push, the wrapper deletes only the repos present in *this* PC's global graph:
+  `MATCH (n {repo: $tag}) DETACH DELETE n`. Repos known only to other PCs are never matched.
+- **Residual:** shared external-library nodes (deduped by label) are owned by whichever repo added
+  them first and can be briefly orphaned on that repo's refresh; MERGE re-adds them on next push.
+  See RISK-NEO4J-005 for the same-repo-two-PCs case. Accepted.
+
+## RISK-NEO4J-002 — NAS/Neo4j unavailable at push time
+
+- **Status:** Open (mitigated by design)
+- **Context:** the push runs after a graph rebuild and may be chained onto `graphify-sync-all` or a
+  commit-time flow. If the NAS is down/asleep or the bolt port is unreachable, a hard failure would
+  block the sync (or a commit, if ever wired there).
+- **Mitigation:** the wrapper does a short TCP reachability probe on the bolt host:port first and is
+  **fail-soft** — on unreachable it warns and exits 0, leaving the JSON source of truth intact. The
+  push is never a prerequisite for any commit/sync step.
+- **Residual:** Neo4j can lag the JSON until the next successful push. Acceptable — JSON is the
+  source of truth graphify reads; Neo4j is an eventually-consistent mirror. Accepted.
+
+## RISK-NEO4J-003 — Neo4j credentials leaking into the repo or argv
+
+- **Status:** Open (accepted)
+- **Context:** the write path and the MCP both need a Neo4j password. Committing it, or passing it
+  as `--password` on argv (visible in `ps`/shell history), would leak it.
+- **Mitigation:** password lives only in `~/.graphify/neo4j.env` (user home, chmod 600, outside every
+  repo) for the write path and in the user's private `~/.claude` MCP config for the read path. The
+  wrapper loads that env file and relies on graphify's `NEO4J_PASSWORD` env support (never `--password`
+  on argv). No connection string or password is ever written into this repo; the secrets-gate hook
+  remains the backstop.
+- **Residual:** a user could still hand-paste creds into a committed file; the gate catches common
+  shapes but not all. Accepted.
+
+## RISK-NEO4J-004 — graphify upgrade breaks the write path or the agent patch
+
+- **Status:** Open (accepted / low)
+- **Context:** the integration depends on graphify's `export neo4j` CLI and on the `repo`/id-prefix
+  node schema, and the Cypher agent guidance is injected as a prose patch into gsd-* agent files.
+  An upstream graphify change could move any of these (the 0.9.13 refactor already relocated modules).
+- **Mitigation:** the write path uses only the public, stable `graphify export neo4j` CLI and the
+  documented `NEO4J_PASSWORD` env, not internals (verified intact through 0.9.22). The agent patch
+  uses the existing versioned, anchor-based patch infra (`gsd-agent-patches.mjs`), which skips
+  cleanly (`skippedNoAnchor`) if an anchor moves rather than corrupting a file, and re-applies
+  idempotently on upgrade.
+- **Residual:** a CLI-level breaking change in graphify would need a wrapper update; surfaced by the
+  quality-check queries failing. Accepted.
+
+## RISK-NEO4J-005 — Same repo cloned on two PCs flip-flops in Neo4j
+
+- **Status:** Open (accepted)
+- **Context:** if the identical repo is present on two PCs at different states and both sync+push
+  frequently, the per-repo refresh (RISK-NEO4J-001) makes them alternately overwrite that repo's
+  nodes — last push wins, so the graph oscillates.
+- **Mitigation:** default is last-writer-wins, which yields the latest-pushed state and is usually
+  fine (same repo → same code). Optional hardening if it becomes a problem: designate one PC as
+  authoritative for the shared repo, or namespace repo_tag with the hostname so the two clones are
+  distinct nodes.
+- **Residual:** transient oscillation for a genuinely divergent shared repo under frequent dual
+  sync. Accepted; revisit only if observed.
