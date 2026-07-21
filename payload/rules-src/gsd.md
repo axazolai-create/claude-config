@@ -82,7 +82,7 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   `<no_recursive_agent_spawn>` block.
 - **Genuinely need depth beyond 2, or branching decided by something other than a human-written
   plan?** That decision belongs in deterministic code, not a model's runtime judgment call inside
-  a prompt. See `claude_orchestration` (`references/gsd-claude-orchestration-pilot.md`) - it maps
+  a prompt. See `claude_orchestration` (`~/.claude/references/gsd-claude-orchestration-pilot.md`) - it maps
   GSD's own wave/plan model onto the `Workflow` tool's `parallel()`/`pipeline()` primitives, with
   branching fixed by a generated script instead of an agent deciding to spawn further agents at
   inference time.
@@ -122,24 +122,23 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 
 - Stagger `isolation="worktree"` `Agent()` dispatch to one call per turn — concurrent
   `git worktree add` races on `.git/config.lock`.
-- **Worktree merge/cleanup can hang on large `node_modules` trees — this is not a merge
-  conflict.** `git merge` itself is unaffected by a worktree's dependency tree — `node_modules`
-  is gitignored, so it never enters the diff/conflict machinery. The hang happens one step
-  later, at worktree *removal*: on Windows, `git worktree remove` (and any `rm -rf`/
-  `Remove-Item` on the same path) can sit for minutes or falsely report `.git does not exist`
-  against a 100K+-file `node_modules` — cosmetic, not data loss; the merge commit already
-  landed. Never run that removal as a blocking foreground call. Recovery: `git worktree
-  prune` (clears the stale admin entry pointing at the vanished `.git`), then dispatch
-  `robocopy <empty-dir> <target> /MIR` IN THE BACKGROUND to clear the directory contents (not
-  `rm -rf`/`Remove-Item` — same hang risk), then remove the now-empty directory — continue
-  other work while waiting for the robocopy completion notification, don't block on it. This
-  applies to a worktree holding a REAL `node_modules` copy (the write-flagged case below) — a
-  junction-linked worktree's `node_modules` isn't actually a 100K-file tree from the OS's point
-  of view, just one reparse-point entry, so removal is normally fast. Whether `git worktree
-  remove` walks into a junction on this host isn't something to assume either way without
-  seeing it once — watch the first junction-based removal in a real wave before trusting it
-  unattended; the failure mode if a tool DOES follow the reparse point is worse than a hang
-  (see below).
+- **Never remove or force-clear a worktree (or anything inside its `node_modules`) with
+  `Remove-Item -Recurse -Force` or `rm -rf` on Windows.** pnpm links dependencies via NTFS
+  junctions/reparse points internally (per-package, pnpm-managed — not something this
+  workflow creates or touches directly) — both PowerShell and Git-Bash/MSYS recursive delete
+  FOLLOW a reparse point into its real target instead of removing just the link. This is not
+  theoretical: it caused two real-world incidents in Feb 2026 where an entire Windows user
+  profile was deleted, one triggered by Claude Code CLI itself running exactly this command
+  against a worktree (pnpm/pnpm#10707). Normal cleanup: `git worktree remove <path>` — `git
+  merge` itself never touches `node_modules` (gitignored, never enters diff/conflict
+  machinery), so a slow or failed removal is never a lost merge; the commit already landed.
+  If removal is refused or reports `.git does not exist` (stale admin entry), `git worktree
+  prune` first, then clear any leftover directory with Node's reparse-point-safe primitive,
+  never a shell recursive delete: `node -e
+  "require('fs').rmSync(process.argv[1],{recursive:true,force:true})" <path>` — `fs.rmSync`
+  unlinks a symlink/junction it encounters instead of descending into its target. Never run
+  either removal path as a blocking foreground call on a large tree; background it and keep
+  working while waiting for the completion notification.
 - **Liveness check every 5-10 minutes while subagents/background shell tasks are running** —
   verify with hard evidence, never assume: growing/changed `git diff --stat HEAD` output in
   the worktree (not `git status`/`--porcelain` — same filesystem-walk hang risk noted above),
@@ -156,51 +155,33 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   all progress if the process is killed or crashes mid-run. Persist after every step instead —
   this is what makes the "restart, preserving partial results" recovery option above actually
   possible.
-- **Dependency provisioning — junction by default, real copy only for a plan flagged to write
-  into `node_modules`.** A plain `robocopy /MIR` of a 100K+-file `node_modules` into every
-  worktree runs minutes to tens of minutes PER WORKTREE — on a wave of several worktrees that
-  alone can dwarf the actual work. Before a subagent builds or tests in its own worktree,
-  default to LINKING `node_modules` (and any built cross-package output, e.g.
-  `packages/*/dist`) from the base worktree/branch instead of copying it:
-  `cmd /c mklink /J <worktree>\node_modules <base>\node_modules` — a same-volume junction is a
-  single reparse-point entry, near-instant regardless of file count, zero extra disk. **Verify
-  the junction actually landed before treating the worktree as provisioned** — `cmd /c mklink
-  /J` can report success (exit 0, no error text) while leaving a real, empty directory instead
-  of a reparse point; the first `pnpm`/build invocation inside that worktree then silently
-  triggers a full `pnpm install` into that worktree's own isolated `node_modules` (minutes, not
-  the near-instant junction case), with nothing pointing at the real cause. Check
-  `(Get-Item <worktree>\node_modules).LinkType -eq 'Junction'` (or `fsutil reparsepoint query
-  <worktree>\node_modules`) immediately after creation; on failure, remove the empty directory
-  (plain `rmdir`, it has no contents yet) and retry the `mklink /J` rather than proceeding. This
-  is safe under the same precondition the copy-based approach already required: `node_modules`
-  stays read-only for the whole wave once dispatched (resolve genuinely new/changed
-  dependencies once, before dispatching, never inside a worktree — unchanged from before). Only
-  when a specific plan is known in advance to write into `node_modules` itself (rare — an
-  installer/codegen step the plan explicitly calls for) give that ONE worktree a real, isolated
-  copy instead of a junction: `robocopy <src> <dst> /MIR /MT:32` (`/MT` multi-threads the copy —
-  several times faster than a bare `/MIR` on a many-small-file tree, though still not free at
-  100K+ files, so reserve it for the worktrees that actually need real isolation). Never mix the
-  two for one worktree — it either fully junctions `node_modules` or fully owns a real copy.
-  Never let more than one worktree run `pnpm install` (or anything triggering pnpm's pre-run
-  dependency check) concurrently, and never inside a junction-linked worktree at all — Windows
-  can't rename a path another process has open, so concurrent resolution of the same new
-  package against the shared store fails (`EPERM ... rename ..._tmp_N`), and the shared store
-  index also serializes installs to minutes each even without an outright error. All N
-  worktrees of a wave independently reinstalling/rebuilding an unchanged shared package —
-  instead of the orchestrator provisioning it once — is a common root cause of a wave taking
-  hours instead of minutes.
-- **Deleting a junction wrong doesn't just hang — it can destroy the base checkout other
-  worktrees still depend on.** A junction is one reparse-point directory entry, not a real
-  tree — removing it correctly (`cmd /c rmdir <path>`, no `/s`) deletes only the link,
-  instantly, target untouched. On Windows PowerShell, `Remove-Item -Recurse -Force` on a
-  junction is a known, long-standing trap: `-Recurse` can FOLLOW the reparse point and delete
-  the TARGET's real contents instead of just the link — i.e. it can wipe the base checkout's
-  `node_modules` that every other worktree in the wave is still linked to, not merely the one
-  worktree being cleaned up. Never `-Recurse`/`-Force` a path that is or contains a junction;
-  when unsure whether a path is a junction, check first (`(Get-Item <path>).LinkType -eq
-  'Junction'`) and always prefer `cmd /c rmdir <path>` for the actual removal.
+- **Dependency provisioning — pnpm's own global virtual store, not a hand-rolled junction.**
+  A plain `robocopy /MIR` (or a fresh `pnpm install`) of a 100K+-file `node_modules` into
+  every worktree runs minutes to tens of minutes PER WORKTREE. A single hand-made junction
+  over the whole tree from the base checkout looks like the fix but isn't: it makes
+  `node_modules` one shared, mutable resource across every worktree in the wave, so anything
+  a worktree installs or writes there at runtime — Turborepo's own lazily-fetched platform
+  binary (`node_modules/turbo-<platform>/bin/`), `.bin` shims, anything else — lands in the
+  shared base copy instead of that worktree's own tree, and can vanish or clash across
+  worktrees under concurrent use. The actual fix: for a pnpm monorepo, ensure
+  `enableGlobalVirtualStore: true` is set in the project's `pnpm-workspace.yaml` (one line,
+  one time — add it if missing; see https://pnpm.io/git-worktrees, pnpm's own documented
+  setup for exactly this multi-worktree case). With it on, every worktree gets its own real,
+  independent `node_modules` whose per-package entries are pnpm-managed links into one shared
+  content-addressable store — no cross-worktree sharing above the package level, so a plain
+  `pnpm install` run inside each worktree is "nearly instant" once the first install has
+  populated the store. Resolve genuinely new/changed dependencies once — on the base branch,
+  before dispatching the wave — so every worktree's install reads purely from an
+  already-populated store instead of hitting the registry. Windows still can't rename a path
+  another process has open, so two worktrees resolving against the same store at the same
+  moment can hit `EPERM ... rename ..._tmp_N` or serialize to minutes each even without an
+  outright error — stagger the first `pnpm install` per worktree the same way as `git
+  worktree add` (one call per turn), never run it concurrently in more than one worktree at
+  once. Outside a pnpm workspace (npm/yarn, or a pnpm repo whose workspace config can't be
+  changed), there's no equivalent shared-store fast path — budget wave time for a plain
+  independent install per worktree, or drop worktree isolation for that wave.
 - Use `git diff --stat HEAD` for worktree dirty-checks, never `git status` — on a worktree
-  with a 100K+-file `node_modules`, `git status` can hang minutes even with `.gitignore`
+  with a large `node_modules` tree, `git status` can hang minutes even with `.gitignore`
   correctly excluding it (filesystem walk + AV cost, not a git-ignore bug). `git diff --stat
   HEAD`/`rev-parse`/`log` don't touch the working tree and stay fast. Exclude sibling
   worktree paths from jest/vitest scanning (`modulePathIgnorePatterns`/

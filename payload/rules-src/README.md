@@ -123,6 +123,11 @@ generatedAt: <ISO timestamp>
 3. State what to AVOID as well as what to use — contradictory rules are worse than none.
 4. No extra deploy step beyond `setup.mjs`: the source hash changes, so every project
    rebuilds its snapshot on its next session start.
+5. Cross-references to files outside `.claude/` (e.g. `payload/references/*.md`, which
+   deploys to `~/.claude/references/`) must use the full `~/.claude/...` path, never a bare
+   relative one like `references/foo.md`. The compiled snapshot lands in some other
+   project's `.claude/`, not in `~/.claude/rules-src/`, so a relative path that only
+   resolves from the source tree breaks for every reader once compiled.
 
 ## templates/
 

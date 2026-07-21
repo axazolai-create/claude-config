@@ -9,13 +9,13 @@
 //      agent worktree: `.claude/worktrees/agent-*`) - see rules-src/gsd.md "Parallel worktree
 //      waves" and the gsd-executor.md prose patches (gsd-agent-patches.mjs) this hook backs
 //      up with a harness-level nudge instead of relying on prose alone:
-//        - a pnpm/npm/yarn install command (every worktree in a wave reinstalling an
-//          unchanged shared dependency is a common root cause of hours-instead-of-minutes
-//          waves, and can outright fail on Windows with EPERM under concurrency)
+//        - a pnpm/npm/yarn install command (pnpm without enableGlobalVirtualStore, or any
+//          npm/yarn install, still pays the full per-worktree cost; even with the shared
+//          store on, Windows can serialize/fail with EPERM under concurrent installs)
 //        - a test-runner invocation with no visible scoping flag (running the full suite
 //          per plan, multiplied across every parallel worktree, has been observed costing
 //          tens of minutes per worker)
-//        - a bare `git status` (hangs minutes on a 100K+-file node_modules even with
+//        - a bare `git status` (hangs minutes on a large node_modules tree even with
 //          .gitignore correctly excluding it - use `git diff --stat HEAD` instead)
 //
 //   2. context-mode Read backstop (Read only, no worktree gate - applies to any session).
@@ -57,12 +57,20 @@ if (toolName === "Bash" && inAgentWorktree) {
 
   const INSTALL_RE = /(^|[;&|]\s*)(pnpm|npm|yarn)(\.cmd)?\s+(install|i|ci|add)(\s|$)/i;
   if (INSTALL_RE.test(cmd)) {
+    const isPnpm = /(^|[;&|]\s*)pnpm(\.cmd)?\s/i.test(cmd);
     advise(
-      "worktree-discipline: this looks like a dependency install running inside a parallel-wave worktree. " +
-      "Check whether the orchestrator already provisioned node_modules/dist from the base checkout " +
-      "(robocopy <src> <dst> /MIR) before installing - every worktree in a wave independently reinstalling " +
-      "an unchanged shared dependency is a common root cause of hours-instead-of-minutes waves (see " +
-      "rules-src/gsd.md 'Parallel worktree waves')."
+      isPnpm
+        ? "worktree-discipline: pnpm install inside a parallel-wave worktree is expected and should be " +
+          "fast (seconds) IF the project's pnpm-workspace.yaml has enableGlobalVirtualStore: true and the " +
+          "orchestrator already resolved dependencies on the base branch before dispatch. If this install " +
+          "is running minutes, that prerequisite is probably missing - see rules-src/gsd.md 'Parallel " +
+          "worktree waves'. Never force-clear node_modules with Remove-Item -Recurse -Force/rm -rf on " +
+          "Windows regardless - pnpm's internal reparse-point links make that unsafe."
+        : "worktree-discipline: this is an npm/yarn install running inside a parallel-wave worktree - " +
+          "there's no shared-store fast path for these like pnpm's enableGlobalVirtualStore, so every " +
+          "worktree in a wave pays the full install cost independently (see rules-src/gsd.md 'Parallel " +
+          "worktree waves'). Budget wave time for it, or consider whether this task needs worktree " +
+          "isolation at all."
     );
   }
 

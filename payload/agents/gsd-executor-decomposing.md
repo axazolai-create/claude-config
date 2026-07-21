@@ -229,29 +229,24 @@ fi
 ```
 </worktree_metadata_capture>
 
-<!-- gsd-patch:executor-dependency-provisioning-order v2 -->
+<!-- gsd-patch:executor-dependency-provisioning-order v3 -->
 <dependency_provisioning_order>
 If running inside a worktree (`.git` is a file — see `<worktree_metadata_capture>`), do NOT
-run `pnpm install`/`npm install`/`yarn install` (or anything triggering a fresh dependency
-resolution) as your first move when a build or test step needs `node_modules`. First check
-whether the orchestrator already provisioned it from the base checkout — a worktree created
-for this task should already have `node_modules` present, either as a JUNCTION (the default —
-check with `(Get-Item node_modules).LinkType -eq 'Junction'`) pointing at the base checkout's
-real copy, or — only for a plan explicitly flagged to write into `node_modules` — a real,
-isolated copy made via `robocopy <src> <dst> /MIR /MT:32`. If it's a junction, treat it as
-READ-ONLY for your entire task, same as the base checkout itself: installing into it, or
-deleting/recreating it, corrupts every other worktree in the wave still linked to it. Never
-remove a junction with `Remove-Item -Recurse`/`-Force` — on Windows PowerShell that can FOLLOW
-the reparse point and delete the base checkout's real `node_modules` instead of just the link;
-if a junction genuinely needs replacing, remove it with `cmd /c rmdir node_modules` (no `/s`)
-first, then recreate. Only install for packages genuinely new or changed relative to the
-copied/linked base, and only after confirming they aren't already covered (`ls
-node_modules/<pkg>` / check `package.json`'s lockfile hash against the base) — and only inside
-a worktree holding its OWN real copy, never through a junction. Every worktree in a wave
-independently reinstalling/rebuilding an unchanged shared dependency — instead of relying on
-what the orchestrator already provisioned — is a common root cause of a wave taking hours
-instead of minutes, and on Windows can outright fail with `EPERM ... rename ..._tmp_N` when two
-worktrees resolve the same package against the shared pnpm store concurrently.
+treat `node_modules` as pre-provisioned/read-only by default anymore — that was the old
+junction-based setup. In a pnpm monorepo with `enableGlobalVirtualStore: true` set (see
+`rules-src/gsd.md` "Parallel worktree waves" for why), your worktree owns a real, independent
+`node_modules`; a plain `pnpm install` here is expected and fast (seconds, not minutes) once
+the orchestrator has resolved dependencies on the base branch before dispatch — run it like
+any single checkout. Skip it only when `node_modules` is already present and neither
+`package.json` nor the lockfile changed for this task. If two worktrees install against the
+shared store at the same moment you may see `EPERM ... rename ..._tmp_N` or a slow, serialized
+install on Windows — that's contention with another worktree's install, not a real failure;
+retry rather than debugging it as one. Never remove or force-clear `node_modules` with
+`Remove-Item -Recurse -Force`/`rm -rf` on Windows — pnpm links packages via reparse points
+internally, and both commands can follow one into a real target outside your worktree; this
+has caused real data loss (see `rules-src/gsd.md`). If a plan instead hands you a pre-linked
+JUNCTION or a real orchestrator-provisioned copy (older/non-pnpm setup), follow whatever the
+dispatch instructions say for it — junction stays read-only, a flagged real copy is yours.
 </dependency_provisioning_order>
 <!-- /gsd-patch:executor-dependency-provisioning-order -->
 
@@ -594,7 +589,7 @@ If RED or GREEN gate commits are missing, add a warning to SUMMARY.md under a `#
 **Halt-and-report protocol:**
 
 1. Stop. Do not run the task's implementation step.
-2. Emit the structured halt report defined in `references/execute-mvp-tdd.md` (header line, reason code, expected behavior, required next step).
+2. Emit the structured halt report defined in `$HOME/.claude/gsd-core/references/execute-mvp-tdd.md` (header line, reason code, expected behavior, required next step).
 3. Update `STATE.md` with `last_gate_trip: {plan_id}/{task_id}`.
 4. Exit the current execution wave cleanly. Prior commits in the same wave stay — do not roll back.
 
@@ -604,7 +599,7 @@ If RED or GREEN gate commits are missing, add a warning to SUMMARY.md under a `#
 IS_BEHAVIOR_ADDING=$(gsd_run query task.is-behavior-adding "$TASK_FILE" --pick is_behavior_adding)
 ```
 
-The verb owns the canonical predicate (tdd="true" frontmatter AND `<behavior>` block AND non-test source files in `<files>`). Pure doc-only / config-only / test-only tasks return `false` and are exempt. Full result also exposes per-check breakdown (`checks.tdd_true`, `checks.has_behavior_block`, `checks.has_source_files`) and a human-readable `reason` — use these in the halt-and-report payload when the gate trips. See `references/execute-mvp-tdd.md` for halt protocol.
+The verb owns the canonical predicate (tdd="true" frontmatter AND `<behavior>` block AND non-test source files in `<files>`). Pure doc-only / config-only / test-only tasks return `false` and are exempt. Full result also exposes per-check breakdown (`checks.tdd_true`, `checks.has_behavior_block`, `checks.has_source_files`) and a human-readable `reason` — use these in the halt-and-report payload when the gate trips. See `$HOME/.claude/gsd-core/references/execute-mvp-tdd.md` for halt protocol.
 
 **Mode is all-or-nothing per phase** (PRD decision Q1, inherited from Phase 1). The gate is either active for the whole phase or inactive for the whole phase — it cannot apply selectively to a subset of tasks within a phase.
 

@@ -186,7 +186,9 @@ minutes, and on Windows can outright fail with \`EPERM ... rename ..._tmp_N\` wh
 worktrees resolve the same package against the shared pnpm store concurrently.
 </dependency_provisioning_order>`;
 
-const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK = `<dependency_provisioning_order>
+// v2 (2026-07-17): junction-by-default rewrite. Retained only so `legacyMatch` can upgrade an
+// install that already has v2 applied to v3 below - see "version markers" above.
+const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK_V2 = `<dependency_provisioning_order>
 If running inside a worktree (\`.git\` is a file — see \`<worktree_metadata_capture>\`), do NOT
 run \`pnpm install\`/\`npm install\`/\`yarn install\` (or anything triggering a fresh dependency
 resolution) as your first move when a build or test step needs \`node_modules\`. First check
@@ -208,6 +210,25 @@ independently reinstalling/rebuilding an unchanged shared dependency — instead
 what the orchestrator already provisioned — is a common root cause of a wave taking hours
 instead of minutes, and on Windows can outright fail with \`EPERM ... rename ..._tmp_N\` when two
 worktrees resolve the same package against the shared pnpm store concurrently.
+</dependency_provisioning_order>`;
+
+const EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK = `<dependency_provisioning_order>
+If running inside a worktree (\`.git\` is a file — see \`<worktree_metadata_capture>\`), do NOT
+treat \`node_modules\` as pre-provisioned/read-only by default anymore — that was the old
+junction-based setup. In a pnpm monorepo with \`enableGlobalVirtualStore: true\` set (see
+\`rules-src/gsd.md\` "Parallel worktree waves" for why), your worktree owns a real, independent
+\`node_modules\`; a plain \`pnpm install\` here is expected and fast (seconds, not minutes) once
+the orchestrator has resolved dependencies on the base branch before dispatch — run it like
+any single checkout. Skip it only when \`node_modules\` is already present and neither
+\`package.json\` nor the lockfile changed for this task. If two worktrees install against the
+shared store at the same moment you may see \`EPERM ... rename ..._tmp_N\` or a slow, serialized
+install on Windows — that's contention with another worktree's install, not a real failure;
+retry rather than debugging it as one. Never remove or force-clear \`node_modules\` with
+\`Remove-Item -Recurse -Force\`/\`rm -rf\` on Windows — pnpm links packages via reparse points
+internally, and both commands can follow one into a real target outside your worktree; this
+has caused real data loss (see \`rules-src/gsd.md\`). If a plan instead hands you a pre-linked
+JUNCTION or a real orchestrator-provisioned copy (older/non-pnpm setup), follow whatever the
+dispatch instructions say for it — junction stays read-only, a flagged real copy is yours.
 </dependency_provisioning_order>`;
 
 const EXECUTOR_TEST_EXECUTION_DISCIPLINE_BLOCK = `<test_execution_discipline>
@@ -382,15 +403,15 @@ export const PATCHES = [
   },
   {
     id: "executor-dependency-provisioning-order",
-    version: 2,
-    // v2 (2026-07-17): junction-by-default rewrite - a plain `robocopy /MIR` of a 100K+-file
-    // node_modules runs minutes-to-tens-of-minutes PER WORKTREE (see rules-src/gsd.md "Parallel
-    // worktree waves"); junction is near-instant. `priorBlocks` is what lets an install that
-    // already has v1 applied (unmarked, from before this versioning system existed) pick up v2
-    // instead of the bare `<dependency_provisioning_order>` tag being mistaken for "current".
+    version: 3,
+    // v3 (2026-07-21): drop the hand-rolled junction entirely in favor of pnpm's own
+    // `enableGlobalVirtualStore` (see rules-src/gsd.md "Parallel worktree waves") - a single
+    // whole-tree junction shared `node_modules` mutably across every worktree in the wave,
+    // which is what caused Turborepo's lazily-fetched platform binary and other runtime writes
+    // to land in the wrong worktree. `priorBlocks` upgrades an install already on v1 or v2.
     appliesTo: (name) => name === "gsd-executor.md",
     block: EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK,
-    priorBlocks: [EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK_V1],
+    priorBlocks: [EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK_V1, EXECUTOR_DEPENDENCY_PROVISIONING_BLOCK_V2],
     insertAnchor: "</worktree_metadata_capture>", insertMode: "after",
   },
   {
