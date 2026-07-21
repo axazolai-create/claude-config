@@ -32,6 +32,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 def _force_utf8_stdio() -> None:
@@ -118,14 +119,17 @@ def _py_requirements() -> str:
     return text.lower()
 
 
-def _csproj_text() -> str:
-    text = ""
+def _csproj_texts() -> list[str]:
+    # One lowered text per .csproj - classified INDEPENDENTLY (RISK-DETECT-001). Pooling all
+    # csproj text into one string let a single web/desktop project suppress a genuine console
+    # app's csharp-cli tag, and made separate projects indistinguishable.
+    texts: list[str] = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in PRUNE]
         for fn in filenames:
             if fn.endswith(".csproj"):
-                text += "\n" + _read_text(Path(dirpath) / fn)
-    return text.lower()
+                texts.append(_read_text(Path(dirpath) / fn).lower())
+    return texts
 
 
 def _glob_any(*patterns: str) -> bool:
@@ -206,17 +210,24 @@ def detect() -> list[str]:
     # as "node" above.
     if py and not any(s in found for s in ("django", "fastapi", "flask", "telegram-python")):
         found.append("python")
-    cs = _csproj_text()
+    cs_texts = _csproj_texts()
     has_xaml = _glob_any("*.xaml")
-    if cs:
-        if 'sdk="microsoft.net.sdk.web"' in cs or "microsoft.aspnetcore" in cs:
-            found.append("aspnet")
-        if "<usewpf>true" in cs or "<usewindowsforms>true" in cs or has_xaml:
+    if cs_texts:
+        # Classify each project on its OWN csproj text, then union (dedup happens at return).
+        for cs in cs_texts:
+            is_web = 'sdk="microsoft.net.sdk.web"' in cs or "microsoft.aspnetcore" in cs
+            is_desktop = "<usewpf>true" in cs or "<usewindowsforms>true" in cs
+            is_exe = "outputtype>exe" in cs
+            if is_web:
+                found.append("aspnet")
+            if is_desktop:
+                found.append("wpf")
+            if is_exe and not is_web and not is_desktop:
+                found.append("csharp-cli")
+            if not (is_web or is_desktop or is_exe):
+                found.append("csharp")
+        if has_xaml and "wpf" not in found:  # repo-level XAML implies WPF even w/o a UseWPF flag
             found.append("wpf")
-        if "outputtype>exe" in cs and not any(s in found for s in ("aspnet", "wpf")):
-            found.append("csharp-cli")
-        if not any(s in found for s in ("aspnet", "wpf", "csharp-cli")):
-            found.append("csharp")
     elif has_xaml or _glob_any("*.cs"):
         found.append("wpf" if has_xaml else "csharp")
     if _glob_any("*.sql"):
@@ -310,9 +321,72 @@ def deep_merge(dst: dict, src: dict) -> dict:
     for k, v in src.items():
         if isinstance(v, dict) and isinstance(dst.get(k), dict):
             deep_merge(dst[k], v)
+        elif isinstance(v, list) and isinstance(dst.get(k), list):
+            # Union, order-preserving, deduped (RISK-SETTINGS-001): a template array (e.g.
+            # permissions.allow) must ADD to a user-set array, not replace it wholesale.
+            merged = list(dst[k])
+            seen = {json.dumps(x, sort_keys=True) for x in merged}
+            for x in v:
+                key = json.dumps(x, sort_keys=True)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(x)
+            dst[k] = merged
         else:
             dst[k] = v
     return dst
+
+
+# ---- RISK-SETTINGS-001: cross-process lock + atomic write for the shared settings.json the
+# Node hooks also mutate. Same `<target>.lock` filename convention as hooks/lib/atomic-json.mjs
+# so this Python command and the JS hooks mutually exclude. ----
+_LOCK_STALE_S = 15.0
+_LOCK_MAX_WAIT_S = 5.0
+
+
+def _acquire_lock(target: Path):
+    lock = target.with_name(target.name + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + _LOCK_MAX_WAIT_S
+    while True:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, str(os.getpid()).encode())
+            finally:
+                os.close(fd)
+            return lock
+        except FileExistsError:
+            try:
+                stale = (time.time() - lock.stat().st_mtime) > _LOCK_STALE_S
+            except OSError:
+                stale = True
+            if stale:
+                try:
+                    lock.unlink()
+                except OSError:
+                    pass
+                continue
+            if time.time() > deadline:
+                return None  # proceed unlocked rather than fail the command
+            time.sleep(0.05)
+        except OSError:
+            return None  # can't create the lock (perms) - proceed unlocked
+
+
+def _release_lock(lock) -> None:
+    if lock is not None:
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+
+
+def _write_atomic(target: Path, content: str) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(f"{target.name}.tmp-{os.getpid()}")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(str(tmp), str(target))  # atomic; replaces an existing target on Windows too
 
 
 # ---------- detector-id -> template path (paths no longer mirror the id 1:1 - see
@@ -595,25 +669,29 @@ def print_skills(skills: list[dict]) -> None:
 # ---------- apply ----------
 def apply(enable_ids: list[str], remove_ids: list[str], stacks: list[str]) -> int:
     _, nonplugin = gather(stacks)
-    settings = load_json(SETTINGS)
-    ep = settings.get("enabledPlugins")
-    if not isinstance(ep, dict):
-        ep = {}
-    settings["enabledPlugins"] = ep
-    deep_merge(settings, nonplugin)  # stack settings (non-plugin keys)
-    enabled, removed = [], []
-    for pid in enable_ids:
-        if pid and not is_placeholder(pid):
-            ep[pid] = True
-            enabled.append(pid)
-    for pid in remove_ids:
-        if pid in ep:
-            del ep[pid]
-            removed.append(pid)
-    settings.setdefault("enabledPlugins", {})
-    SETTINGS.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n",
-                        encoding="utf-8")
+    # RISK-SETTINGS-001: load + merge + write under a lock so a concurrent session-init.mjs
+    # write to the same settings.json isn't lost, and the file is never left half-written.
+    lock = _acquire_lock(SETTINGS)
+    try:
+        settings = load_json(SETTINGS)  # re-read INSIDE the lock
+        ep = settings.get("enabledPlugins")
+        if not isinstance(ep, dict):
+            ep = {}
+        settings["enabledPlugins"] = ep
+        deep_merge(settings, nonplugin)  # stack settings (non-plugin keys)
+        enabled, removed = [], []
+        for pid in enable_ids:
+            if pid and not is_placeholder(pid):
+                ep[pid] = True
+                enabled.append(pid)
+        for pid in remove_ids:
+            if pid in ep:
+                del ep[pid]
+                removed.append(pid)
+        settings.setdefault("enabledPlugins", {})
+        _write_atomic(SETTINGS, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    finally:
+        _release_lock(lock)
     print("Enabled:", ", ".join(enabled) if enabled else "(none)")
     print("Removed:", ", ".join(removed) if removed else "(none)")
     print(f"Wrote {SETTINGS}")
