@@ -115,11 +115,17 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 - Stagger `isolation="worktree"` `Agent()` dispatch to one call per turn — concurrent
   `git worktree add` races on `.git/config.lock`.
 - **Never remove or force-clear a worktree (or anything inside its `node_modules`) with
-  `Remove-Item -Recurse -Force` or `rm -rf` on Windows.** pnpm links dependencies via NTFS
-  junctions/reparse points, and both PowerShell and Git-Bash/MSYS recursive delete FOLLOW a reparse
-  point into its real target instead of removing just the link. This caused two real Feb 2026
-  incidents where an entire Windows user profile was deleted — one triggered by Claude Code CLI
-  running exactly this command against a worktree (pnpm/pnpm#10707). Normal cleanup: `git worktree
+  `Remove-Item -Recurse -Force`, `rm -rf`, or `robocopy /MIR` on Windows.** pnpm links dependencies
+  via NTFS junctions/reparse points, and PowerShell recursive delete, Git-Bash/MSYS `rm -rf`, AND
+  `robocopy /MIR` (mirror-delete of the destination) all FOLLOW a reparse point into its real target
+  instead of removing just the link. This caused two real Feb 2026 incidents where an entire Windows
+  user profile was deleted — one triggered by Claude Code CLI running exactly this command against a
+  worktree (pnpm/pnpm#10707). Separately, a `robocopy /MIR` cleanup on the pre-global-virtual-store
+  version emptied the MAIN checkout's `node_modules`: the worktree's `apps/*/node_modules` were
+  junctions pointing back at it, and mirror-delete followed them into the real target. In a monorepo
+  EVERY nested `node_modules` (repo root AND each `apps/*/`, `packages/*/`) can be a separate junction
+  — spot-checking one package is not sufficient; verify them all, or sidestep the question entirely.
+  Normal cleanup: `git worktree
   remove <path>`; `git merge` never touches `node_modules` (gitignored, never enters diff/conflict
   machinery), so a slow or failed removal is never a lost merge — the commit already landed. If
   removal is refused or reports `.git does not exist` (stale admin entry), `git worktree prune`
@@ -144,23 +150,52 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   all progress if the process is killed or crashes mid-run. Persist after every step instead —
   this is what makes the "restart, preserving partial results" recovery option above actually
   possible.
-- **Dependency provisioning — use pnpm's own global virtual store, not a hand-rolled junction.**
-  `robocopy /MIR` or a fresh `pnpm install` of a 100K+-file `node_modules` into every worktree runs
-  minutes to tens of minutes PER WORKTREE. A single hand-made junction over the whole tree looks like
-  the fix but makes `node_modules` one shared, mutable resource across the wave: anything a worktree
-  writes there at runtime — Turborepo's lazily-fetched platform binary
-  (`node_modules/turbo-<platform>/bin/`), `.bin` shims — lands in the shared base copy and can vanish
-  or clash across worktrees under concurrent use. The fix: for a pnpm monorepo, set
-  `enableGlobalVirtualStore: true` in `pnpm-workspace.yaml` (one line, add if missing; see
-  https://pnpm.io/git-worktrees). Then every worktree gets its own real `node_modules` whose entries
-  are pnpm-managed links into one shared content-addressable store, so a plain `pnpm install` per
-  worktree is nearly instant once the first has populated the store. Resolve new/changed dependencies
-  once on the base branch before dispatching the wave, so every worktree's install reads from an
-  already-populated store instead of the registry. Windows can't rename a path another process has
-  open, so two worktrees resolving against the store at once can hit `EPERM ... rename ..._tmp_N` or
-  serialize to minutes each — stagger the first `pnpm install` per worktree like `git worktree add`
-  (one call per turn), never concurrently. Outside a pnpm workspace (npm/yarn, or a pnpm repo whose
-  workspace config can't change), there's no shared-store fast path — budget for a plain independent
+- **Dependency provisioning across worktrees — rely on the toolchain's own global store, never a
+  hand-rolled junction.** The language-independent question is: *does the toolchain keep dependencies
+  in a shared, content-addressable store so that a fresh per-worktree install is both cheap and
+  isolated?* A junction/symlink over a dependency or build tree is always the wrong fix — it collapses
+  the wave onto one shared, mutable resource: anything a worktree writes at runtime (a lazily-fetched
+  platform binary like `node_modules/turbo-<platform>/bin/`, `.bin` shims, compiled output) lands in
+  the shared copy and can vanish or clash under concurrent use, and on Windows it is also a deletion
+  hazard (see the reparse-point rule above). A hand-made junction or a `robocopy /MIR` / fresh full
+  install of a 100K+-file tree into every worktree also runs minutes-to-tens-of-minutes PER WORKTREE.
+  Per stack:
+  - **Node (pnpm)** — has a shared store once `enableGlobalVirtualStore: true` is set in
+    `pnpm-workspace.yaml` (one line, add if missing; https://pnpm.io/git-worktrees). Every worktree
+    then gets its own real `node_modules` whose entries are pnpm-managed links into one shared
+    content-addressable store, so a plain `pnpm install` per worktree is near-instant once the first
+    has populated the store.
+  - **Node (npm / yarn-classic)** — no shared store: deps are copied into each `node_modules`. Budget
+    a real independent install per worktree, or drop worktree isolation for that wave.
+  - **Go** — shared store already, nothing to do: `$GOMODCACHE` (`~/go/pkg/mod`) and `$GOCACHE` are
+    global and concurrent-safe by design. Do not vendor.
+  - **Rust / Cargo** — deps are shared already (`~/.cargo/registry` + git deps, immutable). The
+    per-worktree cost is `target/` (compiled output), NOT deps — do NOT collapse it via one shared
+    `CARGO_TARGET_DIR` (same shared-mutable-resource + Windows-rename hazard); use **sccache** for a
+    concurrency-safe compile cache instead.
+  - **Python** — shared store only with **uv** (global content-addressable cache, hardlinks into each
+    `.venv`), so per-worktree `uv venv && uv sync` is cheap. pip / poetry copy into `site-packages` —
+    budget a real per-worktree install, or migrate to uv. NEVER symlink/junction a `.venv` between
+    worktrees: venvs hardcode absolute paths and break, and on Windows a `.venv` contains reparse
+    points, so the deletion rule above applies to it exactly as to `node_modules`.
+  - **Java / Kotlin (Gradle / Maven)** — deps are shared already (`~/.gradle/caches`,
+    `~/.m2/repository`, file-lock safe). Per-worktree cost is `build/` / `.gradle/`; share compile
+    output only via the purpose-built `--build-cache` (concurrent-read safe), never a hand-shared
+    output dir.
+  - **.NET** — shared already (`~/.nuget/packages` global); only `obj/` + `bin/` are per-worktree.
+  - **Ruby** — shared with the default `GEM_HOME`; do NOT set `bundle install --path vendor/bundle`
+    (that copies per project and defeats it).
+  - **PHP / Composer** — no shared store: `vendor/` is copied per project. Budget a real per-worktree
+    `composer install`, or drop worktree isolation for that wave.
+  Two operational rules apply wherever a shared store exists. (1) **Warm the store on the base branch
+  first** — resolve new/changed dependencies once before dispatching the wave, so each worktree's
+  install reads from an already-populated store instead of the registry. (2) **Stagger the first
+  populating install per worktree** — Windows can't rename a path another process holds open, so two
+  worktrees resolving into the store at once can hit `EPERM ... rename ..._tmp_N` or serialize to
+  minutes each; run the first install one-per-turn like `git worktree add`, never concurrently. For
+  compiled stacks, prefer a concurrency-safe compile cache (sccache / ccache / Gradle `--build-cache`)
+  over any hand-shared output directory. A stack with no shared store (npm/yarn, pip/poetry, Composer,
+  or a pnpm repo whose workspace config can't change) has no fast path — budget a plain independent
   install per worktree, or drop worktree isolation for that wave.
 - Use `git diff --stat HEAD` for worktree dirty-checks, never `git status` — on a worktree
   with a large `node_modules` tree, `git status` can hang minutes even with `.gitignore`
