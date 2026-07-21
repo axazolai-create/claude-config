@@ -47,6 +47,7 @@ import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
 import { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./lib/gsd-agent-patches.mjs";
 import { checkGsdWorkflowPatches } from "./lib/gsd-workflow-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
+import { updateJsonFile } from "./lib/atomic-json.mjs";
 
 const MARKER = "CURATED:NOEDIT";
 // Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
@@ -198,16 +199,19 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && process.env.CLAUDE_GRAPHIFY_
 const planningClaude = join(root, ".planning", "CLAUDE.md");
 if (existsSync(planningClaude) && !isMarked(planningClaude)) {
   const sp = join(root, ".claude", "settings.json");
-  const s = existsSync(sp) ? safe(() => JSON.parse(readFileSync(sp, "utf8"))) : {};
-  if (s) {
-    const ex = new Set(s.claudeMdExcludes || []); const before = ex.size;
+  const freshSettings = !existsSync(sp);
+  const wrote = updateJsonFile(sp, (s) => {
+    // RISK-SETTINGS-002: when we CREATE settings.json, keep an enabledPlugins key (even {}),
+    // or entries in settings.local.json are silently dropped on the next startup merge (see
+    // PLUGINS in ~/.claude/CLAUDE.md). init-stack.py always emits it; this hook path bypasses
+    // init-stack, so it must too.
+    if (freshSettings && s.enabledPlugins === undefined) s.enabledPlugins = {};
+    const ex = new Set(s.claudeMdExcludes || []);
     ex.add("**/.planning/CLAUDE.md");
-    if (ex.size !== before) {
-      s.claudeMdExcludes = [...ex];
-      if (writeFile(sp, JSON.stringify(s, null, 2) + "\n"))
-        actions.push("excluded GSD .planning/CLAUDE.md from auto-load");
-    }
-  }
+    s.claudeMdExcludes = [...ex];
+  });
+  if (wrote && freshSettings) actions.push("created .claude/settings.json (enabledPlugins + GSD exclude)");
+  else if (wrote) actions.push("excluded GSD .planning/CLAUDE.md from auto-load");
 }
 
 // 2) root CLAUDE.md: auto-mark unless it looks GSD-generated
@@ -540,7 +544,12 @@ if (firstTime && gsdProject) {
 // record/update state (the risk step is allowed to run again on later sessions)
 if (firstTime) { state[root].initialized = new Date().toISOString(); state[root].actions = actions.slice(); state[root].notes = notes.slice(); }
 if (riskAdded > 0) state[root].lastRisk = new Date().toISOString();
-writeFile(stateFile, JSON.stringify(state, null, 2) + "\n");
+// RISK-SETTINGS-001: re-read under a lock and merge THIS project's subtree onto the fresh
+// on-disk copy, so a concurrent writer (gsd-config-patch.mjs, another session) isn't clobbered
+// by writing the whole stale `state`. In-memory state[root] only ever gains keys during a run
+// (never deletes), and each flag has a single owning writer, so spreading it over the fresh
+// value is safe - keys other writers added meanwhile survive via `...st[root]`.
+updateJsonFile(stateFile, (st) => { st[root] = { ...(st[root] || {}), ...(state[root] || {}) }; });
 
 emit([
   actions.length ? `Project auto-init (${root}): ${actions.join("; ")}.` : "",

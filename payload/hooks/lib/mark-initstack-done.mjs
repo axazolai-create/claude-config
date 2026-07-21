@@ -5,12 +5,12 @@
 // Claude Code hook, just a plain script run once per /init-stack invocation.
 // Idempotent: only writes if the flag isn't already set, matching every other one-time flag in
 // the shared ~/.claude/state/project-init.json file (see session-init.mjs, gsd-config-patch.mjs).
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
+import { updateJsonFile } from "./atomic-json.mjs";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
-const writeFile = (p, content) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, content); return true; } catch { return false; } };
 const readJSON = (p) => JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, ""));
 
 function findRoot(start) {
@@ -27,9 +27,12 @@ function findRoot(start) {
 
 const root = findRoot(process.cwd());
 const stateFile = join(homedir(), ".claude", "state", "project-init.json");
-let state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
-if (!state[root]) state[root] = {};
-if (!state[root].initStackRun) {
-  state[root].initStackRun = new Date().toISOString();
-  writeFile(stateFile, JSON.stringify(state, null, 2) + "\n");
+const state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
+// Idempotent + RISK-SETTINGS-001 merge-safe: re-check and set the flag under a lock on the fresh
+// on-disk copy, so a concurrent session-init.mjs / gsd-config-patch.mjs write isn't clobbered.
+if (!state[root] || !state[root].initStackRun) {
+  updateJsonFile(stateFile, (st) => {
+    st[root] ||= {};
+    if (!st[root].initStackRun) st[root].initStackRun = new Date().toISOString();
+  });
 }
