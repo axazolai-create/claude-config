@@ -76,7 +76,7 @@ the target provider's setup below. This is what makes the choice reversible on r
 - Reuse the same URI/creds as `~/.graphify/neo4j.env`. Never echo the password back.
 - Needs `uv`/`uvx` (see `graphify-setup.mjs --bootstrap-uv` if missing - with consent).
 - Verify: `claude mcp list` shows `neo4j` connected; then run a Cypher query
-  (`MATCH (n) RETURN count(n)`) - see `payload/graphify-neo4j.cypher` for a cookbook.
+  (`MATCH (n) RETURN count(n)`) - see `~/.claude/graphify-neo4j.cypher` for a cookbook.
 - Overlap: graphify (local JSON, per-project) vs this Neo4j MCP (cross-project global graph).
   Rule of thumb: `graphify query` for the current repo, Neo4j MCP for cross-repo questions.
 

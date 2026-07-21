@@ -122,7 +122,7 @@ A Neo4j MCP named \`neo4j\` may hold graphify's merged GLOBAL graph (all repos o
 pushed by graphify-neo4j-push.mjs. When it is configured:
 - CROSS-PROJECT / "how does repo A relate to repo B" / "who else uses this library" questions →
   query the \`neo4j\` MCP with Cypher (query by \`label\`/\`repo\`, never by node id — ids are not
-  stable across graphify rebuilds). See payload/graphify-neo4j.cypher for canned queries.
+  stable across graphify rebuilds). See ~/.claude/graphify-neo4j.cypher for canned queries.
 - CURRENT-repo questions → keep using \`graphify query "<question>"\` on the local JSON graph.
 The local JSON graph stays graphify's source of truth; Neo4j is an additive cross-project mirror.
 </neo4j_global_graph_routing>`;
@@ -344,13 +344,18 @@ the same task): a behavior-adding task that would otherwise get \`tdd="true"\` i
 export const PATCHES = [
   {
     id: "neo4j-global-graph-routing",
-    version: 1,
+    version: 2,
+    // v2 (2026-07-21): fixed the cookbook pointer to the DEPLOYED path - the repo-relative path
+    // this block used to reference never resolves once installed; setup.mjs lands that file at
+    // ~/.claude/graphify-neo4j.cypher, so the block now points there. Also narrowed appliesTo to
+    // exclude EXCLUDED_AGENTS, matching context-mode-routing-block's scope.
     // Gated on the write side being configured (neo4j.env present) - otherwise the guidance
     // points agents at an MCP that isn't there. Same anchor as the context-mode routing block.
     // Placed FIRST in array order (not appended) so it reads LAST among the `</role>`-anchored
     // group, per the reversal rule above - it's situational/gated guidance, subordinate to the
     // core context-mode/executor disciplines that follow it in the array.
-    appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md") && isNeo4jConfigured(),
+    appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md")
+      && !EXCLUDED_AGENTS.has(name) && isNeo4jConfigured(),
     block: NEO4J_GRAPH_ROUTING_BLOCK,
     insertAnchor: "</role>", insertMode: "after",
   },

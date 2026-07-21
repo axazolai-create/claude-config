@@ -31,10 +31,6 @@ Run: `python3 ~/.claude/bin/init-stack.py`
 Parse the `STATUS_JSON` block (`stacks`, `plugins[]` with `state`, `present[]` already-enabled) and
 show me the human report (state per plugin, and which are already enabled).
 
-- Check graphify freshness (best-effort, non-blocking): run
-  `node ~/.claude/bin/graphify-freshness.mjs`. If it prints an update line, tell me the
-  upgrade command; never upgrade automatically.
-
 ## 2. Stack-rules snapshot (build if missing or stale)
 `.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
 no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). `session-init.mjs`
@@ -199,6 +195,10 @@ later) - preserve every other key under `code_quality` and elsewhere.
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
 `docs/superpowers/specs/2026-07-10-leanmode-design.md`).
+
+- Check graphify freshness (best-effort, non-blocking): run
+  `node ~/.claude/bin/graphify-freshness.mjs`. If it prints an update line, tell me the
+  upgrade command; never upgrade automatically.
 
 ## 10. Apply pending gsd-* agent patches (machine-wide, not project-specific)
 `~/.claude/agents/gsd-*.md` are owned by the separate `gsd-core` tool, not this bundle -
