@@ -35,7 +35,11 @@
   changes (new framework added, etc.) — drift is silent until someone re-runs `/init-stack` or
   asks for a rebuild. (2) A machine that updates the bundle but never re-runs `setup.mjs` keeps
   the old auto-loaded `~/.claude/rules/` copies alongside the snapshot — every rule then loads
-  twice.
+  twice. (3) Even where the compiler subagent still stamps the frontmatter, the staleness check it
+  supports is weak: `computeSourceHash` (`stack-rules-check.mjs:20-38`) hashes only relative path +
+  size + mtime (`:32-33`), so a size-and-mtime-preserving edit (archive extraction, `rsync -t`,
+  `cp -p`) is invisible; and the read slices only the first 800 bytes (`:92`), so a snapshot
+  truncated mid-write past its frontmatter still reads `status:"ok"` (`:95`).
 - **Mitigation:** (1) `/init-stack` now owns building the snapshot (rules-src/README.md §
   "Building stack-rules") and can be re-run any time to refresh it; `stack-rules-check.mjs` is
   kept as a CLI utility so the compiler subagent can still stamp sourceHash/stackFingerprint
@@ -146,3 +150,76 @@
   token counts only).
 - **Residual:** `cost_usd` is always a **best-effort local estimate**, never billing-grade — same
   disclaimer Claude Code's own `/usage` command carries for its dollar figure. Accepted.
+
+## RISK-SETTINGS-001 — Unlocked read-modify-write on shared config/state → lost updates under concurrency
+
+- **Status:** Open (unmitigated)
+- **Context:** Several independent writers mutate the same shared files with plain
+  `readFileSync` → `JSON.parse` → `writeFile`, no lock and no temp+rename atomicity, so a
+  concurrent writer (a second session, or a hook firing during `/init-stack`) can silently drop
+  the other's update. Three surfaces:
+  - Project `.claude/settings.json` — `init-stack.py apply()` reads `:598` / writes `:615`;
+    `session-init.mjs:201-207` independently RMWs it. `deep_merge` (`init-stack.py:309-315`)
+    recurses only into dicts, so a template array-valued `merge` key **replaces** a user-set array
+    rather than merging.
+  - Machine-wide `~/.claude/agents/gsd-*.md` — three unsynchronized writers: `session-init.mjs:452`
+    (`syncGsdAgentsContextMode`, every session), `init-stack.py:945-960` (every invocation), and
+    `gsd-agent-patches.mjs:592` (prose patches). Two concurrent sessions interleave, last writer
+    wins; a context-mode tool-grant or a freshly-applied patch can be clobbered.
+  - `~/.claude/state/project-init.json` — RMW at `session-init.mjs:543`, `gsd-config-patch.mjs:266`
+    (fires on EVERY `Bash|Write|Edit|MultiEdit`), and `mark-initstack-done.mjs:34`. A one-time gate
+    flag (`initStackRun`, `graphifySynced`, …) can be lost, so a step re-fires or a just-set flag is
+    overwritten and its step effectively skipped.
+- **Mitigation:** none yet. Options: a shared atomic-write helper (temp file + rename); a per-file
+  `.lock` sentinel with stale-timeout; or a single owner for the machine-wide agent sync. The
+  `deep_merge` array behaviour needs an explicit union-vs-replace policy.
+- **Residual:** until fixed, plugin entries, patch blocks, and one-time flags can be silently
+  dropped when two sessions overlap or a hook fires during `/init-stack`.
+
+## RISK-SETTINGS-002 — `session-init.mjs` writes `settings.json` without an `enabledPlugins` key
+
+- **Status:** Open (fix identified, ~1 line)
+- **Context:** `session-init.mjs:199-210` — when a GSD project has `.planning/CLAUDE.md` but no
+  `.claude/settings.json` yet, the hook creates the file with only `claudeMdExcludes` (`s = {}` at
+  `:200`, write at `:207`), no `enabledPlugins` key. This is exactly the failure `payload/CLAUDE.md`
+  § PLUGINS warns about ("Keep an `enabledPlugins` key … even if `{}` — otherwise entries in
+  settings.local.json are silently dropped on merge"): on the next Claude Code startup merge,
+  plugins declared in `settings.local.json` are dropped. `init-stack.py apply()` always writes the
+  key (`:602`, `:613`), but this hook path bypasses init-stack entirely.
+- **Mitigation:** ensure `enabledPlugins` (default `{}`) is present before the write in the
+  fresh-file branch of `session-init.mjs`.
+- **Residual:** none once the key is always emitted.
+
+## RISK-AGENTPATCH-001 — gsd-* agent patches silently skipped or mis-applied
+
+- **Status:** Open (unmitigated)
+- **Context:** `gsd-agent-patches.mjs` — (a) when gsd-core rewrites the surrounding text so
+  `insertAnchor` isn't found, `applyOrUpgradePatch` returns `noAnchor` (`:101-103`) and the write is
+  skipped; it's recorded in `skippedNoAnchor` but only surfaces if the user reads `/init-stack`
+  step 10 output. (b) If a gsd-*.md carries `CURATED:NOEDIT`, both `checkGsdAgentPatches:545` and
+  `applyGsdAgentPatches:576` `continue` — pending patches are neither applied NOR reported as
+  pending (fully silent). (c) "Applied" is keyed off the `<!-- gsd-patch:ID vN -->…<!-- /gsd-patch:ID
+  -->` marker pair (`:74-78`); a hand-broken closing marker makes `findMarkedSpan` return null and
+  `legacyMatch` (`:79-84`) fail, so a fresh block is inserted (double-apply), while a version bump
+  does `replaceOnce(marked.fullMatch, …)` (`:98`), discarding any manual edit inside the span.
+- **Mitigation:** none yet. Options: surface `skippedNoAnchor` and curated-pending as a
+  session-start note (not only step-10 output); a second-anchor/fuzzy fallback; treat a broken
+  marker as needs-attention rather than fresh-insert.
+- **Residual:** a hardening patch (e.g. the executor no-recursive-spawn guardrail) can fail to land
+  with no visible signal.
+
+## RISK-DETECT-001 — Stack-detection ambiguity: two detectors disagree; pooled `.csproj` classification
+
+- **Status:** Open (accepted / low impact for the current stack set)
+- **Context:** (a) `init-stack.py detect()` classifies by `package.json`/`.csproj` CONTENT (`:154`
+  nest via `@nestjs/core`, `:162-167` react via deps, `:211-219` C# by csproj text), whereas
+  `stack-rules-check.mjs detectMarkers` (`:45`, `:72-81`) keys off FILENAMES only — the two use
+  different signal sets, so a content-only stack change (adding a framework dependency with no new
+  config file) never moves the fingerprint (compounds RISK-STACKRULES-002). (b) `_csproj_text()`
+  (`:121-128`) concatenates EVERY `.csproj` in the tree into one string before classifying, so in a
+  mixed solution one ASP.NET/WPF project suppresses a genuine console app's `csharp-cli` tag (gated
+  `not any(aspnet, wpf)` at `:216`), and separate web + desktop projects are indistinguishable.
+- **Mitigation:** the fingerprint desync overlaps the already-accepted RISK-STACKRULES-002; C#
+  pooling could classify per-`.csproj` instead of on concatenated text.
+- **Residual:** rare mis-selection in mixed .NET solutions; content-only framework switches need a
+  manual `/init-stack` rebuild. Low impact while the active project set is Node-centric.
