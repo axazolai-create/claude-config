@@ -16,18 +16,12 @@ paths:
   cache poisoning from unlisted env vars affecting output.
 - Version/publish strategy is explicit and consistent (fixed vs independent versioning) —
   don't mix ad hoc per-package tagging with a workspace-wide release tool.
-- Git worktrees + dependency store: sharing one store across worktrees (pnpm
-  `enableGlobalVirtualStore` / a relocated `virtual-store-dir` outside the worktree) avoids
-  reinstalling per worktree, but it is OPT-IN for genuine parallel-worktree work, not a default.
-  Moving the store out of the project tree breaks phantom-dependency resolution: a package that
-  imports an UNDECLARED dep (in neither its `dependencies` nor `peerDependencies`) and relies on
-  Node walking up `node_modules` to find it (e.g. `@hookform/resolvers`'s `/zod` subpath)
-  resolved only because the in-tree store happened to sit under the app's `node_modules`; an
-  out-of-tree store is never reached by that upward walk. A bundler root (Turbopack's `root`)
-  does NOT fix this — it governs what the bundler may READ, not how Node resolves modules. Fix
-  the offending package with `pnpm patch` to declare the missing dep as an OPTIONAL peer
-  (`peerDependencies` + `peerDependenciesMeta.<dep>.optional: true`) so pnpm links it by the
-  graph; or keep the local per-project store when you don't run parallel worktrees.
+- Git worktrees + dependency store: keep pnpm's default per-project store — do NOT share/relocate
+  it out of the worktree (`enableGlobalVirtualStore` / a moved `virtual-store-dir`). It looks like
+  it saves per-worktree reinstalls, but an out-of-tree store breaks phantom-dependency resolution:
+  a package importing an UNDECLARED dep it finds via Node's upward `node_modules` walk (e.g.
+  `@hookform/resolvers`'s `/zod` subpath) stops resolving, and a bundler root (Turbopack's `root`)
+  does NOT fix it — that governs bundler reads, not Node module resolution.
 - Declare every imported package in `package.json` — never rely on phantom/hoisted deps that
   pnpm's strict isolation will (correctly) fail to resolve. For a third-party package that
   imports an undeclared dep, `pnpm patch` in the missing (optional) peer rather than loosening
