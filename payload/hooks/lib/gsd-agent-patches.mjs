@@ -325,21 +325,35 @@ the same task): a behavior-adding task that would otherwise get \`tdd="true"\` i
  *                              find and replace an unmarked pre-versioning application. Add one
  *                              here whenever you bump `version` on an already-shipped patch.
  * insertAnchor/insertMode:    where a FRESH application (nothing found at all) gets inserted. */
-// The three `</role>`-anchored entries below (context-mode-routing-block,
-// executor-no-recursive-agent-spawn, executor-context-mode-read-discipline) are grouped and
-// ordered deliberately. `insertAfter` does `content.replace(anchor, anchor + block)`, and a
-// plain-string `.replace` always matches the FIRST (only) occurrence of `</role>` - which never
-// moves - so each later patch's block lands immediately after the tag, ahead of blocks already
-// inserted by earlier ones. Net effect: for patches sharing one insertAfter anchor, the final
-// top-to-bottom reading order is the REVERSE of application order. These three are listed here
-// in reverse of their intended reading order (routing block first, no-recursive-spawn second,
-// context-mode-read-discipline third) specifically so applying them in THIS array order produces
-// that reading order. If you add a fourth patch anchored at `</role>`, place it in this run at
-// the position matching where you want it to read, remembering the reversal - don't just append
-// it at the end, that puts it first.
+// The four `</role>`-anchored entries below (context-mode-routing-block,
+// executor-no-recursive-agent-spawn, executor-context-mode-read-discipline,
+// neo4j-global-graph-routing) are grouped and ordered deliberately. `insertAfter` does
+// `content.replace(anchor, anchor + block)`, and a plain-string `.replace` always matches the
+// FIRST (only) occurrence of `</role>` - which never moves - so each later patch's block lands
+// immediately after the tag, ahead of blocks already inserted by earlier ones. Net effect: for
+// patches sharing one insertAfter anchor, the final top-to-bottom reading order is the REVERSE
+// of application order. These four are listed here in reverse of their intended reading order
+// (routing block first, no-recursive-spawn second, context-mode-read-discipline third,
+// neo4j-global-graph-routing fourth/last - it's situational/gated on neo4j.env and subordinate
+// to the core context-mode/executor disciplines above it) specifically so applying them in THIS
+// array order produces that reading order. If you add a fifth patch anchored at `</role>`,
+// place it in this run at the position matching where you want it to read, remembering the
+// reversal - don't just append it at the end, that puts it first.
 // Caveat: this only governs a FRESH insertion. A content upgrade (`legacyMatch`/marked-span
 // replace) rewrites the block IN PLACE at its existing position and never touches ordering.
 export const PATCHES = [
+  {
+    id: "neo4j-global-graph-routing",
+    version: 1,
+    // Gated on the write side being configured (neo4j.env present) - otherwise the guidance
+    // points agents at an MCP that isn't there. Same anchor as the context-mode routing block.
+    // Placed FIRST in array order (not appended) so it reads LAST among the `</role>`-anchored
+    // group, per the reversal rule above - it's situational/gated guidance, subordinate to the
+    // core context-mode/executor disciplines that follow it in the array.
+    appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md") && isNeo4jConfigured(),
+    block: NEO4J_GRAPH_ROUTING_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
+  },
   {
     id: "executor-context-mode-read-discipline",
     version: 1,
@@ -463,15 +477,6 @@ export const PATCHES = [
     block: PLANNER_VERIFY_ISOLATED_BLOCK,
     insertAnchor: "Exceptions where `tdd=\"true\"` is not needed: `type=\"checkpoint:*\"` tasks, configuration-only files, documentation, migration scripts, glue code wiring existing tested components, styling-only changes.",
     insertMode: "after",
-  },
-  {
-    id: "neo4j-global-graph-routing",
-    version: 1,
-    // Gated on the write side being configured (neo4j.env present) - otherwise the guidance
-    // points agents at an MCP that isn't there. Same anchor as the context-mode routing block.
-    appliesTo: (name) => name.startsWith("gsd-") && name.endsWith(".md") && isNeo4jConfigured(),
-    block: NEO4J_GRAPH_ROUTING_BLOCK,
-    insertAnchor: "</role>", insertMode: "after",
   },
 ];
 
