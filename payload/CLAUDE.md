@@ -32,15 +32,6 @@
 - Reply in Russian.
 - Keep all documentation and config files in English.
 
-## Communication style (Russian replies)
-- Keep replies orthographically correct. **Before sending, scan for stray Latin letters
-  mixed mid-word into Cyrillic** (keyboard-layout slip: «objawление» → «объявление») — a
-  word is fully Cyrillic or fully Latin, never a mix, outside intentional inline English
-  terms per the priority rule below.
-- **Term priority:** natural Russian word → real English term → (never) transliteration.
-  - Plain English (Latin script) when translating loses precision or needs a multi-word.
-  - Never invented phonetic hybrids; established loanwords are fine («рендерит», «коммит», «пул-реквест»).
-
 ## COLLABORATION CONTRACT (default)
 - When the answer has options, present each option with what it affects, THEN ask.
 - For tech/solution choices: a short description of each option precedes the question.
