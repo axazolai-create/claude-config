@@ -3,11 +3,14 @@
 // installed / parse error => exit 0 silently. Never blocks setup or init-stack.
 import { spawnSync } from "node:child_process";
 import { get } from "node:https";
+import { pathToFileURL } from "node:url";
 
 export function cmpSemver(a, b) {
   const pa = String(a).split(".").map(Number);
   const pb = String(b).split(".").map(Number);
   for (let i = 0; i < 3; i++) {
+    // A non-numeric/prerelease segment parses to NaN; `|| 0` intentionally coerces it to
+    // 0 (fail-soft), not an oversight.
     const x = pa[i] || 0, y = pb[i] || 0;
     if (x < y) return -1;
     if (x > y) return 1;
@@ -16,8 +19,8 @@ export function cmpSemver(a, b) {
 }
 
 function installedVersion() {
-  const r = spawnSync("graphify", ["--version"], { encoding: "utf8" });
-  if (r.status !== 0 || !r.stdout) return null;
+  const r = spawnSync("graphify", ["--version"], { encoding: "utf8", timeout: 3000 });
+  if (r.error || r.status !== 0 || !r.stdout) return null;
   const m = r.stdout.match(/(\d+\.\d+\.\d+)/);
   return m ? m[1] : null;
 }
@@ -48,6 +51,6 @@ async function main() {
 }
 
 // Only run the network path when invoked as a script, not when imported by the test.
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("graphify-freshness.mjs")) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().then(() => process.exit(0)).catch(() => process.exit(0));
 }
