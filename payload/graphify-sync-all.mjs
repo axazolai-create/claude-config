@@ -11,15 +11,18 @@
  *
  * Usage:
  *   node graphify-sync-all.mjs [--root <dir>] [--max-depth N] [--install-hooks]
- *                              [--exclude a,b,c] [--dry-run]
+ *                              [--exclude a,b,c] [--dry-run] [--neo4j-push]
  *   Defaults: --root = current directory, --max-depth 3.
+ *   --neo4j-push: after the sync, invoke ./bin/graphify-neo4j-push.mjs to push the
+ *                 refreshed global graph to Neo4j (fail-soft; skipped on --dry-run).
  * Examples:
  *   node graphify-sync-all.mjs --root /home/me/dev --install-hooks
  *   node graphify-sync-all.mjs --root C:\Dev --max-depth 4
  */
 import { readdirSync, existsSync, appendFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const argv = process.argv.slice(2);
 const optVal = (name, def) => {
@@ -32,6 +35,7 @@ const log = (s = "") => process.stdout.write(s + "\n");
 const ROOT = optVal("--root", process.cwd());
 const MAX_DEPTH = parseInt(optVal("--max-depth", "3"), 10) || 3;
 const INSTALL_HOOKS = flag("--install-hooks");
+const NEO4J_PUSH = flag("--neo4j-push");
 const DRY = flag("--dry-run");
 const EXCLUDE = new Set(
   optVal("--exclude",
@@ -105,5 +109,11 @@ if (!DRY && projects.length) {
   log("\nGlobal graph contents:");
   const gl = spawnSync("graphify", ["global", "list"], { encoding: "utf8" });
   if (gl.stdout) process.stdout.write(gl.stdout);
+}
+if (NEO4J_PUSH && !DRY) {
+  log("\n--- Neo4j push ---");
+  const pushScript = join(dirname(fileURLToPath(import.meta.url)), "bin", "graphify-neo4j-push.mjs");
+  const r = spawnSync(process.execPath, [pushScript], { stdio: "inherit" });
+  if (r.status !== 0) log("(neo4j push reported a non-zero exit - see output above)");
 }
 log(`\nLog: ${logFile}`);

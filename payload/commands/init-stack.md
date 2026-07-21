@@ -196,6 +196,10 @@ Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Let
 project dial default to `full` for this project instead of staying `off` (rationale:
 `docs/superpowers/specs/2026-07-10-leanmode-design.md`).
 
+- Check graphify freshness (best-effort, non-blocking): run
+  `node ~/.claude/bin/graphify-freshness.mjs`. If it prints an update line, tell me the
+  upgrade command; never upgrade automatically.
+
 ## 10. Apply pending gsd-* agent patches (machine-wide, not project-specific)
 `~/.claude/agents/gsd-*.md` are owned by the separate `gsd-core` tool, not this bundle -
 patching them is best-effort cross-tool maintenance. `session-init.mjs` checks read-only every

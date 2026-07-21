@@ -25,6 +25,7 @@
 // one missing anchor never blocks the other patches in the same run.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { isContextModeActive, EXCLUDED_AGENTS } from "./context-mode-gsd-agents.mjs";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
@@ -115,6 +116,21 @@ Do NOT reroute \`gsd_run()\` / \`gsd-tools.cjs\` calls (gate checks, commit vali
 precheck, worktree checks) through the sandbox — GSD drives its own control flow off their
 literal exit codes/stdout, and the sandbox would strip that signal.
 </context_mode_routing>`;
+
+const NEO4J_GRAPH_ROUTING_BLOCK = `<neo4j_global_graph_routing>
+A Neo4j MCP named \`neo4j\` may hold graphify's merged GLOBAL graph (all repos on this machine),
+pushed by graphify-neo4j-push.mjs. When it is configured:
+- CROSS-PROJECT / "how does repo A relate to repo B" / "who else uses this library" questions →
+  query the \`neo4j\` MCP with Cypher (query by \`label\`/\`repo\`, never by node id — ids are not
+  stable across graphify rebuilds). See ~/.claude/graphify-neo4j.cypher for canned queries.
+- CURRENT-repo questions → keep using \`graphify query "<question>"\` on the local JSON graph.
+The local JSON graph stays graphify's source of truth; Neo4j is an additive cross-project mirror.
+</neo4j_global_graph_routing>`;
+
+// Neo4j guidance is only useful once the write side is configured on this machine.
+function isNeo4jConfigured() {
+  return existsSync(join(homedir(), ".graphify", "neo4j.env"));
+}
 
 const FILESYSTEM_SEARCH_DISCIPLINE_BLOCK = `<filesystem_search_discipline>
 **Never run \`find /\`, \`find ~\`, \`find $HOME\`, or any \`find\` with no starting path (defaults
@@ -309,21 +325,40 @@ the same task): a behavior-adding task that would otherwise get \`tdd="true"\` i
  *                              find and replace an unmarked pre-versioning application. Add one
  *                              here whenever you bump `version` on an already-shipped patch.
  * insertAnchor/insertMode:    where a FRESH application (nothing found at all) gets inserted. */
-// The three `</role>`-anchored entries below (context-mode-routing-block,
-// executor-no-recursive-agent-spawn, executor-context-mode-read-discipline) are grouped and
-// ordered deliberately. `insertAfter` does `content.replace(anchor, anchor + block)`, and a
-// plain-string `.replace` always matches the FIRST (only) occurrence of `</role>` - which never
-// moves - so each later patch's block lands immediately after the tag, ahead of blocks already
-// inserted by earlier ones. Net effect: for patches sharing one insertAfter anchor, the final
-// top-to-bottom reading order is the REVERSE of application order. These three are listed here
-// in reverse of their intended reading order (routing block first, no-recursive-spawn second,
-// context-mode-read-discipline third) specifically so applying them in THIS array order produces
-// that reading order. If you add a fourth patch anchored at `</role>`, place it in this run at
-// the position matching where you want it to read, remembering the reversal - don't just append
-// it at the end, that puts it first.
+// The four `</role>`-anchored entries below (context-mode-routing-block,
+// executor-no-recursive-agent-spawn, executor-context-mode-read-discipline,
+// neo4j-global-graph-routing) are grouped and ordered deliberately. `insertAfter` does
+// `content.replace(anchor, anchor + block)`, and a plain-string `.replace` always matches the
+// FIRST (only) occurrence of `</role>` - which never moves - so each later patch's block lands
+// immediately after the tag, ahead of blocks already inserted by earlier ones. Net effect: for
+// patches sharing one insertAfter anchor, the final top-to-bottom reading order is the REVERSE
+// of application order. These four are listed here in reverse of their intended reading order
+// (routing block first, no-recursive-spawn second, context-mode-read-discipline third,
+// neo4j-global-graph-routing fourth/last - it's situational/gated on neo4j.env and subordinate
+// to the core context-mode/executor disciplines above it) specifically so applying them in THIS
+// array order produces that reading order. If you add a fifth patch anchored at `</role>`,
+// place it in this run at the position matching where you want it to read, remembering the
+// reversal - don't just append it at the end, that puts it first.
 // Caveat: this only governs a FRESH insertion. A content upgrade (`legacyMatch`/marked-span
 // replace) rewrites the block IN PLACE at its existing position and never touches ordering.
 export const PATCHES = [
+  {
+    id: "neo4j-global-graph-routing",
+    version: 2,
+    // v2 (2026-07-21): fixed the cookbook pointer to the DEPLOYED path - the repo-relative path
+    // this block used to reference never resolves once installed; setup.mjs lands that file at
+    // ~/.claude/graphify-neo4j.cypher, so the block now points there. Also narrowed appliesTo to
+    // exclude EXCLUDED_AGENTS, matching context-mode-routing-block's scope.
+    // Gated on the write side being configured (neo4j.env present) - otherwise the guidance
+    // points agents at an MCP that isn't there. Same anchor as the context-mode routing block.
+    // Placed FIRST in array order (not appended) so it reads LAST among the `</role>`-anchored
+    // group, per the reversal rule above - it's situational/gated guidance, subordinate to the
+    // core context-mode/executor disciplines that follow it in the array.
+    appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md")
+      && !EXCLUDED_AGENTS.has(name) && isNeo4jConfigured(),
+    block: NEO4J_GRAPH_ROUTING_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
+  },
   {
     id: "executor-context-mode-read-discipline",
     version: 1,

@@ -724,6 +724,46 @@ async function main() {
     }
   }
 
+  /* ---------- opt-in: one-time, machine-wide graphify -> Neo4j (LAN) ---------- */
+  // Same "decide once, record in settings.json.env, never re-ask" idiom as the update-check
+  // block above. Non-secret decision recorded in settings.json.env; the password is written
+  // ONLY to ~/.graphify/neo4j.env (chmod 600), never into the repo or settings.json.
+  if (!DRY) {
+    let neo4jSettings = {};
+    try { neo4jSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { neo4jSettings = {}; }
+    const neo4jDecided = neo4jSettings.env && "GRAPHIFY_NEO4J" in neo4jSettings.env;
+    if (!neo4jDecided && INTERACTIVE) {
+      const a = await ask("\nConfigure graphify -> Neo4j (LAN) for the global knowledge graph? " +
+        "Writes connection + password to ~/.graphify/neo4j.env (never committed). [y/N] > ");
+      neo4jSettings.env = neo4jSettings.env || {};
+      if (a[0] === "y") {
+        const uri = (await ask("  Neo4j bolt URI [bolt://localhost:7687] > ")).trim() || "bolt://localhost:7687";
+        const user = (await ask("  Neo4j user [neo4j] > ")).trim() || "neo4j";
+        const pw = (await ask("  Neo4j password > ")).trim();
+        // Optional feature: a filesystem failure here (mkdir/write) must never abort the rest of
+        // setup. On failure, GRAPHIFY_NEO4J is deliberately left unset so this offer re-asks next
+        // run instead of silently recording a false "declined".
+        try {
+          const envPath = join(HOME, ".graphify", "neo4j.env");
+          mkdirSync(dirname(envPath), { recursive: true });
+          writeFileSync(envPath, `NEO4J_URI=${uri}\nNEO4J_USER=${user}\nNEO4J_PASSWORD=${pw}\n`);
+          try { chmodSync(envPath, 0o600); } catch { /* best-effort - no-op on Windows */ }
+          neo4jSettings.env.GRAPHIFY_NEO4J = "1";
+          if (write(SETTINGS, JSON.stringify(neo4jSettings, null, 2) + "\n"))
+            summary.push(`updated  ${SETTINGS} (graphify-neo4j: enabled)`);
+          log("  Wrote ~/.graphify/neo4j.env. Next: run '/init-mcp neo4j' (+ restart) for reads, and");
+          log("  'node ~/.claude/graphify-sync-all.mjs --neo4j-push' (or the push script) to write.");
+        } catch (e) {
+          log(`  could not write ~/.graphify/neo4j.env, skipping (will re-ask next run): ${e.message}`);
+        }
+      } else {
+        neo4jSettings.env.GRAPHIFY_NEO4J = "0";
+        if (write(SETTINGS, JSON.stringify(neo4jSettings, null, 2) + "\n"))
+          summary.push(`updated  ${SETTINGS} (graphify-neo4j: declined - won't ask again here)`);
+      }
+    }
+  }
+
   /* ---------- prune stale files + persist manifest ---------- */
   migrateRulesDir();
   overwriteTemplatesDir();
@@ -784,6 +824,12 @@ async function main() {
     ? Object.entries(partial.hooks).map(([ev, entries]) => `${ev} x${entries.length}`).join(", ")
     : "see settings.partial.json";
   log(`Verify with /hooks (expect: ${hookCounts}).`);
+
+  // Best-effort graphify staleness nudge (never blocks; exits 0 on any error/offline).
+  if (!DRY) {
+    const fresh = join(CDIR, "bin", "graphify-freshness.mjs");
+    if (existsSync(fresh)) spawnSync(process.execPath, [fresh], { stdio: "inherit" });
+  }
 
   log("\n=== Project setup: what to run, and when ===");
   log("");

@@ -1,6 +1,6 @@
 ---
 description: Set up / switch / remove per-project MCP servers (git host, Postgres, web search, Serena) with consent, auth, and verification
-argument-hint: "[github|gitlab|postgres|search|serena|status]"
+argument-hint: "[github|gitlab|postgres|neo4j|search|serena|status]"
 allowed-tools: Bash(claude *), Bash(git *), Bash(gh *), Bash(glab *), Bash(npx *), Bash(uvx *), Bash(docker *), WebSearch, Read
 ---
 
@@ -14,16 +14,16 @@ Most of these servers talk to a network API or a service I run; only Postgres an
 fully local. Flag the cloud/no-cloud status when you propose each.
 
 ## 0. Read current state (always first, no writes)
-- `claude mcp list` - which servers are already configured (github/gitlab/postgres/search/
-  serena/...).
+- `claude mcp list` - which servers are already configured (github/gitlab/postgres/neo4j/
+  search/serena/...).
 - `git remote -v` - detect the git host of this repo (github.com / gitlab.* / bitbucket / a
   self-hosted host / none).
 - Check for `.serena/project.yml` at repo root - if present, Serena is already configured for
   this project (regardless of whether it also shows in `claude mcp list`).
 - Show me a short summary: "Current MCP: <list>. Git remote: <host>. Serena: <configured|not
   configured>." Then offer the actions below. If I passed an argument (`github`/`gitlab`/
-  `postgres`/`search`/`serena`/`status`), jump to it; `status` just prints this summary and
-  stops.
+  `postgres`/`neo4j`/`search`/`serena`/`status`), jump to it; `status` just prints this
+  summary and stops.
 
 ## 1. Git host (GitHub or GitLab) - single active choice, switchable
 Detect from the remote, but let me override (I may want a host that differs from `origin`).
@@ -64,6 +64,21 @@ the target provider's setup below. This is what makes the choice reversible on r
   don't use it unless I explicitly ask. This mirrors the repo's db-live-access-gate posture.
 - Needs `uv`/`uvx` present (see `graphify-setup.mjs --bootstrap-uv` if missing - with consent).
 - Verify: `claude mcp list` shows `postgres`; then have it read the schema.
+
+## 2b. Neo4j (opt-in, reads the graphify global graph via Cypher)
+- Only if I ask, and only meaningful once the global graph has been pushed to Neo4j (see
+  `graphify-neo4j-push.mjs`). This is the READ side of the graphify Neo4j mirror.
+- **User scope** (not project) - the global graph is cross-project, so the MCP must be
+  available in every repo: `--scope user`.
+- Verify the current Cypher MCP package via WebSearch before adding (package names drift);
+  the common one is `mcp-neo4j-cypher`. Confirm, then:
+  `claude mcp add neo4j --scope user -e NEO4J_URI="bolt://<nas>:7687" -e NEO4J_USERNAME="neo4j" -e NEO4J_PASSWORD="<pw>" -- uvx mcp-neo4j-cypher`
+- Reuse the same URI/creds as `~/.graphify/neo4j.env`. Never echo the password back.
+- Needs `uv`/`uvx` (see `graphify-setup.mjs --bootstrap-uv` if missing - with consent).
+- Verify: `claude mcp list` shows `neo4j` connected; then run a Cypher query
+  (`MATCH (n) RETURN count(n)`) - see `~/.claude/graphify-neo4j.cypher` for a cookbook.
+- Overlap: graphify (local JSON, per-project) vs this Neo4j MCP (cross-project global graph).
+  Rule of thumb: `graphify query` for the current repo, Neo4j MCP for cross-repo questions.
 
 ## 3. Web search (opt-in). Default: the built-in WebSearch tool - add nothing.
 - Only if I want an independent/self-hosted search. Recommend **SearXNG self-hosted** (fully
