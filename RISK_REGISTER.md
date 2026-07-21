@@ -213,3 +213,45 @@
   distinct nodes.
 - **Residual:** transient oscillation for a genuinely divergent shared repo under frequent dual
   sync. Accepted; revisit only if observed.
+
+## RISK-PNPM-001 — False positives from dynamic/conditional imports
+
+- **Status:** Open (accepted / low)
+- **Context:** the scan statically extracts bare imports (`import`/`require`/`export-from`/dynamic
+  `import()`) and flags any undeclared specifier whose package is installed somewhere in the
+  workspace. A conditionally- or dynamically-imported package that the consumer never actually
+  reaches at runtime could still be flagged.
+- **Mitigation:** three layers make a false positive harmless. (1) The **installed-in-workspace
+  gate** — a specifier is only flagged when its package is genuinely resolvable, so a genuinely
+  absent optional adapter is never touched. (2) The fix is an **optional peer**
+  (`peerDependenciesMeta.optional: true`) — declaring one that goes unused has no effect on
+  resolution or install. (3) **Additive-only** writes — nothing existing is removed or rewritten,
+  so an over-declaration is trivially reversible by hand.
+- **Residual:** at worst a harmless, unused optional-peer line in `pnpm-workspace.yaml`. Accepted.
+
+## RISK-PNPM-002 — Native-trigger coverage gap for sub-package installs
+
+- **Status:** Open (accepted)
+- **Context:** the always-on trigger is a PostToolUse hook (fires after Claude-invoked
+  `pnpm install`/`add`) plus a root `postinstall` (fires on the user's own top-level installs). An
+  install run *inside a nested workspace package* in the user's own terminal may not fire the root
+  `postinstall`, leaving a newly-introduced phantom undetected until the next top-level install.
+- **Mitigation:** the Claude-side hook covers agent-driven installs regardless of directory, and the
+  `/pnpm-phantom-fix` command is a manual backstop the user can run at any time. The failure mode is
+  detection latency, not a wrong write.
+- **Residual:** a phantom introduced by a manual sub-package install stays latent until the next
+  top-level install or manual scan. Accepted; documented as a caveat in the command.
+
+## RISK-PNPM-003 — Auto-writing pnpm-workspace.yaml
+
+- **Status:** Open (accepted / low)
+- **Context:** the scan writes `packageExtensions` entries into `pnpm-workspace.yaml` automatically.
+  Node has no stdlib YAML parser and npm deps are forbidden, so a minimal line-oriented handler
+  edits the file — a full parser is not available to guarantee round-tripping arbitrary shapes.
+- **Mitigation:** the handler is **additive-only** (only inserts new lines, never rewrites existing
+  ones) and **fail-safe**: on any shape it can't safely edit (flow/JSON-style block, tabs, or a `P`
+  key already present where a fresh block would risk a duplicate mapping key) it makes **no write**
+  and prints the entries for manual addition. Idempotency and the fail-safe paths are locked by
+  unit tests.
+- **Residual:** an unusual hand-authored `pnpm-workspace.yaml` shape falls back to manual entry
+  rather than an automated fix. Accepted — safety over convenience.

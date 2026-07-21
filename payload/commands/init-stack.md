@@ -191,6 +191,16 @@ On decline: `Edit` `.planning/config.json` to set `code_quality.fallow.enabled: 
 explicitly (don't leave it to silently inherit `true` from the personal default and fail
 later) - preserve every other key under `code_quality` and elsewhere.
 
+### pnpm phantom-dependency guard (only if pnpm)
+Only if this project uses pnpm (a `pnpm-lock.yaml` or `pnpm-workspace.yaml` at/above root).
+With my consent, wire the phantom-dependency guard so an out-of-tree store
+(`enableGlobalVirtualStore`) can't break undeclared-but-imported modules (phantom deps like
+`@hookform/resolvers`→`zod`):
+`node ~/.claude/bin/pnpm-phantom-fix-install.mjs <project root>`
+This adds a PostToolUse hook (runs after Claude-invoked `pnpm install`/`add`) and a root
+`postinstall` (covers my own terminal), both idempotent and additive-only. For a non-pnpm
+project, skip entirely.
+
 ## 9. Mark leanmode dial default (always, no gate)
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
