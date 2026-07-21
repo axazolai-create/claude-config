@@ -25,6 +25,7 @@
 // one missing anchor never blocks the other patches in the same run.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { isContextModeActive, EXCLUDED_AGENTS } from "./context-mode-gsd-agents.mjs";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
@@ -115,6 +116,21 @@ Do NOT reroute \`gsd_run()\` / \`gsd-tools.cjs\` calls (gate checks, commit vali
 precheck, worktree checks) through the sandbox — GSD drives its own control flow off their
 literal exit codes/stdout, and the sandbox would strip that signal.
 </context_mode_routing>`;
+
+const NEO4J_GRAPH_ROUTING_BLOCK = `<neo4j_global_graph_routing>
+A Neo4j MCP named \`neo4j\` may hold graphify's merged GLOBAL graph (all repos on this machine),
+pushed by graphify-neo4j-push.mjs. When it is configured:
+- CROSS-PROJECT / "how does repo A relate to repo B" / "who else uses this library" questions →
+  query the \`neo4j\` MCP with Cypher (query by \`label\`/\`repo\`, never by node id — ids are not
+  stable across graphify rebuilds). See payload/graphify-neo4j.cypher for canned queries.
+- CURRENT-repo questions → keep using \`graphify query "<question>"\` on the local JSON graph.
+The local JSON graph stays graphify's source of truth; Neo4j is an additive cross-project mirror.
+</neo4j_global_graph_routing>`;
+
+// Neo4j guidance is only useful once the write side is configured on this machine.
+function isNeo4jConfigured() {
+  return existsSync(join(homedir(), ".graphify", "neo4j.env"));
+}
 
 const FILESYSTEM_SEARCH_DISCIPLINE_BLOCK = `<filesystem_search_discipline>
 **Never run \`find /\`, \`find ~\`, \`find $HOME\`, or any \`find\` with no starting path (defaults
@@ -447,6 +463,15 @@ export const PATCHES = [
     block: PLANNER_VERIFY_ISOLATED_BLOCK,
     insertAnchor: "Exceptions where `tdd=\"true\"` is not needed: `type=\"checkpoint:*\"` tasks, configuration-only files, documentation, migration scripts, glue code wiring existing tested components, styling-only changes.",
     insertMode: "after",
+  },
+  {
+    id: "neo4j-global-graph-routing",
+    version: 1,
+    // Gated on the write side being configured (neo4j.env present) - otherwise the guidance
+    // points agents at an MCP that isn't there. Same anchor as the context-mode routing block.
+    appliesTo: (name) => name.startsWith("gsd-") && name.endsWith(".md") && isNeo4jConfigured(),
+    block: NEO4J_GRAPH_ROUTING_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
   },
 ];
 
