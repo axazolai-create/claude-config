@@ -44,7 +44,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
-import { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./lib/gsd-agent-patches.mjs";
+import { checkGsdAgentPatches, checkCuratedGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./lib/gsd-agent-patches.mjs";
 import { checkGsdWorkflowPatches } from "./lib/gsd-workflow-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 import { updateJsonFile } from "./lib/atomic-json.mjs";
@@ -475,6 +475,15 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
     notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
       `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
       `(step 10 applies these) or /init-session to apply.`);
+
+  // Curated (CURATED:NOEDIT) agent files are skipped by the apply path, so a pending patch on one
+  // is never auto-applied - surface it so it doesn't sit silently unpatched (RISK-AGENTPATCH-001).
+  const curatedPending = safe(() => checkCuratedGsdAgentPatches({ claudeDir })) || {};
+  const curatedFiles = Object.keys(curatedPending);
+  if (curatedFiles.length)
+    notes.push(`WARNING: ${curatedFiles.length} CURATED gsd-* agent file(s) have pending patches ` +
+      `that can NOT be auto-applied (${curatedFiles.slice(0, 5).join(", ")}` +
+      `${curatedFiles.length > 5 ? ", ..." : ""}) - apply by hand or remove the CURATED:NOEDIT marker.`);
 
   // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
   // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale

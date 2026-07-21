@@ -10,6 +10,7 @@
 // init-stack.py via `node`), and imported directly by session-init.mjs (both already Node/ESM).
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { withFileLock, writeFileAtomic } from "./atomic-json.mjs";
 
 export const MCP_TOOL = "mcp__plugin_context-mode_context-mode__*";
 // Whole-line match, whitespace-lenient - keep in sync with deny-curated-claude-md.mjs / session-init.mjs.
@@ -84,12 +85,16 @@ export function syncGsdAgentsContextMode({ claudeDir }) {
     if (!name.startsWith("gsd-") || !name.endsWith(".md")) continue;
     if (EXCLUDED_AGENTS.has(name)) continue;
     const p = join(agentsDir, name);
-    const content = safe(() => readFileSync(p, "utf8"));
-    if (content === undefined) continue;
-    if (isCurated(content)) { result.skipped.push(name); continue; }
-    const updated = addContextModeToolIfMissing(content);
-    if (updated === null) continue; // already present, or frontmatter not recognized - no-op
-    if (safe(() => { writeFileSync(p, updated); return true; })) result.updated.push(name);
+    // RISK-SETTINGS-001: lock read+write and write atomically so two concurrent sessions (or an
+    // apply of gsd-agent-patches) can't interleave and clobber this file mid-write.
+    withFileLock(p, () => {
+      const content = safe(() => readFileSync(p, "utf8"));
+      if (content === undefined) return;
+      if (isCurated(content)) { result.skipped.push(name); return; }
+      const updated = addContextModeToolIfMissing(content);
+      if (updated === null) return; // already present, or frontmatter not recognized - no-op
+      if (safe(() => { writeFileAtomic(p, updated); return true; })) result.updated.push(name);
+    });
   }
   return result;
 }

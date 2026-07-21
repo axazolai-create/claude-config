@@ -26,6 +26,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { isContextModeActive, EXCLUDED_AGENTS } from "./context-mode-gsd-agents.mjs";
+import { withFileLock, writeFileAtomic } from "./atomic-json.mjs";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const MARKER_RE = /^<!--\s*CURATED:NOEDIT\s*-->$/;
@@ -76,6 +77,11 @@ function findMarkedSpan(content, id) {
   const m = content.match(re);
   return m ? { version: Number(m[1]), fullMatch: m[0] } : null;
 }
+// An OPEN marker present without a matching close (so findMarkedSpan returns null) - a span whose
+// closing marker was hand-deleted/broken. Used to avoid a double-apply (RISK-AGENTPATCH-001).
+function hasOpenMarker(content, id) {
+  return new RegExp(`<!-- gsd-patch:${escapeRegExp(id)} v\\d+ -->`).test(content);
+}
 function legacyMatch(content, patch) {
   for (const candidate of [patch.block, ...(patch.priorBlocks || [])]) {
     if (content.includes(candidate)) return candidate;
@@ -89,8 +95,10 @@ function isPatchCurrent(content, patch) {
 // Returns { content, kind } where kind is one of:
 //   null        - already current, nothing written
 //   "upgraded"  - a stale marked span OR an unmarked legacy application was replaced in place
-//   "applied"   - freshly inserted at insertAnchor (nothing found at all beforehand)
-//   "noAnchor"  - fresh insertion attempted but insertAnchor wasn't found in the file
+//   "applied"      - freshly inserted at insertAnchor (nothing found at all beforehand)
+//   "noAnchor"     - fresh insertion attempted but insertAnchor wasn't found in the file
+//   "brokenMarker" - an open marker exists but its closing marker is missing (hand-broken span);
+//                    NOT reinserted, to avoid leaving two copies - flagged for manual repair
 function applyOrUpgradePatch(content, patch) {
   const marked = findMarkedSpan(content, patch.id);
   if (marked && marked.version === patch.version) return { content, kind: null };
@@ -98,6 +106,7 @@ function applyOrUpgradePatch(content, patch) {
   if (marked) return { content: replaceOnce(content, marked.fullMatch, wrapped), kind: "upgraded" };
   const legacy = legacyMatch(content, patch);
   if (legacy) return { content: replaceOnce(content, legacy, wrapped), kind: "upgraded" };
+  if (hasOpenMarker(content, patch.id)) return { content, kind: "brokenMarker" };
   const inserter = patch.insertMode === "before" ? insertBefore : insertAfter;
   const updated = inserter(content, patch.insertAnchor, wrapped);
   return updated === null ? { content, kind: "noAnchor" } : { content: updated, kind: "applied" };
@@ -549,6 +558,24 @@ export function checkGsdAgentPatches({ claudeDir }) {
   return pending; // {} means fully up to date
 }
 
+/* ---------- read-only: CURATED files that have a pending patch (never writes) ----------
+ * Editable files are handled by checkGsdAgentPatches above and can be auto-applied. Curated
+ * (CURATED:NOEDIT) files are skipped by both the check and the apply path, so a pending patch on
+ * one would be neither applied NOR reported (RISK-AGENTPATCH-001). Report them separately so the
+ * user knows a manual edit is needed. */
+export function checkCuratedGsdAgentPatches({ claudeDir }) {
+  const pending = {}; // { filename: [patchId, ...] } - CURATED files only
+  for (const name of listAgentFiles(claudeDir)) {
+    const applicable = PATCHES.filter((p) => p.appliesTo(name, claudeDir));
+    if (!applicable.length) continue;
+    const content = safe(() => readFileSync(join(claudeDir, "agents", name), "utf8"));
+    if (content === undefined || !isCurated(content)) continue;
+    const missing = applicable.filter((patch) => !isPatchCurrent(content, patch)).map((patch) => patch.id);
+    if (missing.length) pending[name] = missing;
+  }
+  return pending; // {} means no curated file has a pending patch
+}
+
 /* ---------- read-only: which files still carry text from a RETIRED patch (never writes) ---------- */
 export function checkRetiredGsdAgentPatches({ claudeDir }) {
   const pending = {}; // { filename: [retiredPatchId, ...] }
@@ -565,31 +592,37 @@ export function checkRetiredGsdAgentPatches({ claudeDir }) {
 
 /* ---------- write: apply every pending patch (only called explicitly, see file header) ---------- */
 export function applyGsdAgentPatches({ claudeDir }) {
-  const result = { applied: [], upgraded: [], skippedCurated: [], skippedNoAnchor: [], removedRetired: [] };
+  const result = { applied: [], upgraded: [], skippedCurated: [], skippedNoAnchor: [], skippedBrokenMarker: [], removedRetired: [] };
   for (const name of listAgentFiles(claudeDir)) {
     const applicable = PATCHES.filter((p) => p.appliesTo(name, claudeDir));
     const applicableRetired = RETIRED_PATCHES.filter((p) => p.appliesTo(name, claudeDir));
     if (!applicable.length && !applicableRetired.length) continue;
     const p = join(claudeDir, "agents", name);
-    let content = safe(() => readFileSync(p, "utf8"));
-    if (content === undefined) continue;
-    if (isCurated(content)) { result.skippedCurated.push(name); continue; }
-    let changed = false;
-    for (const patch of applicable) {
-      const { content: updated, kind } = applyOrUpgradePatch(content, patch);
-      if (kind === null) continue; // already current
-      if (kind === "noAnchor") { result.skippedNoAnchor.push(`${name}:${patch.id}`); continue; }
-      content = updated;
-      changed = true;
-      (kind === "upgraded" ? result.upgraded : result.applied).push(`${name}:${patch.id}`);
-    }
-    for (const patch of applicableRetired) {
-      if (!patch.detect(content)) continue; // nothing left to clean up
-      content = patch.revert(content);
-      changed = true;
-      result.removedRetired.push(`${name}:${patch.id}`);
-    }
-    if (changed) safe(() => writeFileSync(p, content));
+    // RISK-SETTINGS-001: lock read+patch+write so a concurrent syncGsdAgentsContextMode (runs
+    // every session) or a second apply can't interleave, and write atomically so a crash can't
+    // leave a half-written agent file.
+    withFileLock(p, () => {
+      let content = safe(() => readFileSync(p, "utf8"));
+      if (content === undefined) return;
+      if (isCurated(content)) { result.skippedCurated.push(name); return; }
+      let changed = false;
+      for (const patch of applicable) {
+        const { content: updated, kind } = applyOrUpgradePatch(content, patch);
+        if (kind === null) continue; // already current
+        if (kind === "noAnchor") { result.skippedNoAnchor.push(`${name}:${patch.id}`); continue; }
+        if (kind === "brokenMarker") { result.skippedBrokenMarker.push(`${name}:${patch.id}`); continue; }
+        content = updated;
+        changed = true;
+        (kind === "upgraded" ? result.upgraded : result.applied).push(`${name}:${patch.id}`);
+      }
+      for (const patch of applicableRetired) {
+        if (!patch.detect(content)) continue; // nothing left to clean up
+        content = patch.revert(content);
+        changed = true;
+        result.removedRetired.push(`${name}:${patch.id}`);
+      }
+      if (changed) safe(() => writeFileAtomic(p, content));
+    });
   }
   return result;
 }
