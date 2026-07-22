@@ -31,7 +31,7 @@
  * writes `.new` or `.bak` side files anywhere under ~/.claude - a diff is either shown for you
  * to act on, or the change is applied directly with no backup.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -209,6 +209,62 @@ async function choose(label, fallback = "skip") {
   let a = "";
   while (!["m", "r", "s"].includes(a[0])) a = await ask(`    choose (m)erge / (r)eplace / (s)kip > `);
   return a[0] === "m" ? "merge" : a[0] === "r" ? "replace" : "skip";
+}
+
+/* ---------- offer to relocate the config dir via CLAUDE_CONFIG_DIR ---------- */
+// Case-preserving prompt — ask() lowercases its answer, which would corrupt a filesystem path.
+function askRaw(q) {
+  return new Promise((res) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(q, (a) => { rl.close(); res((a || "").trim()); });
+  });
+}
+
+// CLAUDE_CONFIG_DIR is the (undocumented, CLI-only) env var that relocates the user config dir.
+// We only READ it elsewhere; this step lets the user SET/change it. Default offered = the target
+// of an existing ~/.claude symlink, if any. The symlink is deliberately NOT removed (a
+// filesystem-level fallback that also covers the VS Code extension, which ignores the env var,
+// and any tool that still hardcodes ~/.claude).
+async function proposeConfigDir() {
+  const current = process.env.CLAUDE_CONFIG_DIR || "";
+  const home = join(HOME, ".claude");
+  let symlinkTarget = "";
+  try { const rp = realpathSync(home); if (rp !== home) symlinkTarget = rp; } catch { /* absent */ }
+
+  log("");
+  log("Config dir relocation (CLAUDE_CONFIG_DIR):");
+  log(`  current : ${current || "(unset - using ~/.claude)"}`);
+  if (symlinkTarget) log(`  ~/.claude is a symlink -> ${symlinkTarget}`);
+
+  if (!INTERACTIVE) {
+    if (!current) log(`  To relocate (CLI): setx CLAUDE_CONFIG_DIR "<dir>" (Windows), then restart + re-run.`);
+    return;
+  }
+
+  const dflt = current || symlinkTarget || "";
+  const q = dflt
+    ? `  Enter a config-dir path to set/change, or press Enter to keep [${dflt}] > `
+    : `  Enter a config-dir path to relocate off ~/.claude, or press Enter to skip > `;
+  const target = (await askRaw(q)) || dflt;
+  if (!target) { log("  skipped (config dir unchanged)."); return; }
+  if (target === current) { log(`  already set to ${target} (no change).`); return; }
+
+  if (platform() === "win32") {
+    const r = spawnSync("setx", ["CLAUDE_CONFIG_DIR", target], { encoding: "utf8" });
+    if (r.status === 0) log(`  set (persistent, user scope): CLAUDE_CONFIG_DIR=${target}`);
+    else { log(`  could not run setx (${((r.stderr || (r.error && r.error.message)) || "").trim()}). Set it manually:`); log(`    setx CLAUDE_CONFIG_DIR "${target}"`); }
+  } else {
+    log(`  add to your shell profile (~/.bashrc, ~/.zshenv, ...):`);
+    log(`    export CLAUDE_CONFIG_DIR="${target}"`);
+  }
+
+  if (symlinkTarget) {
+    log(`  Keeping the ~/.claude symlink - a filesystem-level fallback that also covers the VS Code`);
+    log(`  extension (which ignores CLAUDE_CONFIG_DIR) and any tool that hardcodes ~/.claude.`);
+  }
+  log(`  NOTE: the env var is read at launch - restart your terminal AND re-run 'node setup.mjs' to`);
+  log(`  deploy into ${target}. This run still deploys into ${CDIR}. Marketplace plugins may need`);
+  log(`  reinstalling under the new dir (their registry stores absolute paths).`);
 }
 
 /* ---------- copy any bundle file into ~/.claude with conflict resolution ---------- */
@@ -450,6 +506,7 @@ async function resolveInstalledSha() {
 }
 
 async function main() {
+  await proposeConfigDir();
   log(`Installing into ${CDIR}${DRY ? "  [DRY RUN]" : ""}`);
   mkdirSync(CDIR, { recursive: true });
 
