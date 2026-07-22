@@ -278,6 +278,30 @@ If a task seems to genuinely need further decomposition into parallel sub-work, 
 architectural question — return a Rule 4 checkpoint instead of attempting it yourself.
 </no_recursive_agent_spawn>`;
 
+// Sibling of the executor block above, but for the ONE gsd-* worker that legitimately DOES have
+// the `Agent` tool: gsd-debug-session-manager.md dispatches gsd-debugger at Step 2, so executor's
+// "you do not have the Agent tool" wording would flatly contradict its own frontmatter - exactly
+// the guardrail-vs-override contradiction that triggered refusals in the 2026-07 tests. This block
+// states the bounded exception truthfully instead: Agent is granted for a single depth-capped use,
+// and gsd-debugger (its only child) is a structural leaf with no Agent tool of its own, so the
+// chain can't recurse past depth 2.
+const DEBUG_SESSION_MANAGER_NO_RECURSIVE_AGENT_SPAWN_BLOCK = `<no_recursive_agent_spawn>
+You DO have the \`Agent\` tool (see your \`tools:\` frontmatter) — this is a deliberate, reviewed
+exception, granted for exactly ONE depth-capped use: dispatching the \`gsd-debugger\` investigator
+(Step 2). \`gsd-debugger\` is a structural leaf — it has no \`Agent\` tool of its own and therefore
+cannot spawn anything further — so the dispatch tree stays at depth 2 (you → debugger), the only
+configuration proven safe in the 2026-07 recursive-delegation tests (see gsd.md "Depth boundary").
+
+Hard limits, not negotiable:
+- Dispatch ONLY \`subagent_type="gsd-debugger"\`. Never any other agent, never a coordinator or
+  "fan-out" agent, never a freshly authored role that itself dispatches further work.
+- Never run more than one debugger at a time; never recurse; never work around the depth cap by
+  shelling out to a CLI that itself dispatches Claude Code agents.
+- If work seems to genuinely need parallel decomposition beyond a single debugger, that is an
+  architectural decision the orchestrator owns — surface it as a checkpoint, do not attempt it
+  yourself.
+</no_recursive_agent_spawn>`;
+
 const EXECUTOR_CONTEXT_MODE_READ_DISCIPLINE_BLOCK = `<context_mode_read_discipline>
 context-mode's own large-file nudge on \`Read\` fires **at most once per session** and never
 blocks — after the first large file you read, every subsequent large \`Read\` gets zero
@@ -325,20 +349,24 @@ the same task): a behavior-adding task that would otherwise get \`tdd="true"\` i
  *                              find and replace an unmarked pre-versioning application. Add one
  *                              here whenever you bump `version` on an already-shipped patch.
  * insertAnchor/insertMode:    where a FRESH application (nothing found at all) gets inserted. */
-// The four `</role>`-anchored entries below (context-mode-routing-block,
+// The five `</role>`-anchored entries below (context-mode-routing-block,
 // executor-no-recursive-agent-spawn, executor-context-mode-read-discipline,
-// neo4j-global-graph-routing) are grouped and ordered deliberately. `insertAfter` does
-// `content.replace(anchor, anchor + block)`, and a plain-string `.replace` always matches the
-// FIRST (only) occurrence of `</role>` - which never moves - so each later patch's block lands
-// immediately after the tag, ahead of blocks already inserted by earlier ones. Net effect: for
-// patches sharing one insertAfter anchor, the final top-to-bottom reading order is the REVERSE
-// of application order. These four are listed here in reverse of their intended reading order
-// (routing block first, no-recursive-spawn second, context-mode-read-discipline third,
-// neo4j-global-graph-routing fourth/last - it's situational/gated on neo4j.env and subordinate
-// to the core context-mode/executor disciplines above it) specifically so applying them in THIS
-// array order produces that reading order. If you add a fifth patch anchored at `</role>`,
-// place it in this run at the position matching where you want it to read, remembering the
-// reversal - don't just append it at the end, that puts it first.
+// neo4j-global-graph-routing, debug-session-manager-no-recursive-agent-spawn) are grouped and
+// ordered deliberately. `insertAfter` does `content.replace(anchor, anchor + block)`, and a
+// plain-string `.replace` always matches the FIRST (only) occurrence of `</role>` - which never
+// moves - so each later patch's block lands immediately after the tag, ahead of blocks already
+// inserted by earlier ones. Net effect: for patches sharing one insertAfter anchor, the final
+// top-to-bottom reading order is the REVERSE of application order.
+// The first four are listed here in reverse of their intended reading order for the files where
+// several apply at once (routing block first, no-recursive-spawn second, context-mode-read-
+// discipline third, neo4j-global-graph-routing fourth/last - it's situational/gated on neo4j.env
+// and subordinate to the core context-mode/executor disciplines above it) specifically so
+// applying them in THIS array order produces that reading order. The fifth
+// (debug-session-manager-no-recursive-agent-spawn) is file-scoped to gsd-debug-session-manager.md,
+// where only it + context-mode-routing-block + neo4j apply; it sits AFTER context-mode-routing-
+// block on purpose so, per the reversal, its safety guardrail reads FIRST in that file. If you
+// add a sixth patch anchored at `</role>`, place it in this run at the position matching where you
+// want it to read, remembering the reversal - don't just append it at the end, that puts it first.
 // Caveat: this only governs a FRESH insertion. A content upgrade (`legacyMatch`/marked-span
 // replace) rewrites the block IN PLACE at its existing position and never touches ordering.
 export const PATCHES = [
@@ -394,6 +422,23 @@ export const PATCHES = [
     appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md")
       && !EXCLUDED_AGENTS.has(name) && isContextModeActive(claudeDir),
     block: CONTEXT_MODE_ROUTING_BLOCK,
+    insertAnchor: "</role>", insertMode: "after",
+  },
+  {
+    id: "debug-session-manager-no-recursive-agent-spawn",
+    version: 1,
+    // The one gsd-* worker that legitimately NEEDS `Agent` (dispatches gsd-debugger at Step 2),
+    // so it can't carry executor's "you do not have Agent" block - that would contradict its own
+    // frontmatter, the exact guardrail-vs-override shape that caused refusals in the 2026-07
+    // tests. gsd-debugger is a structural leaf (no Agent tool), so the chain is depth-capped at 2.
+    // Beyond documenting the bounded exception truthfully, this block carries the
+    // <no_recursive_agent_spawn> marker checkRecursiveAgentSpawnGuardrail looks for - turning a
+    // recurring hand-fix after every gsd-core update into a reapplied patch. Unconditional (a
+    // safety guardrail, not context-mode-gated), mirroring executor-no-recursive-agent-spawn.
+    // Placed AFTER context-mode-routing-block in array order so, per the </role> reversal rule
+    // above, it reads FIRST after </role> - matching the block's position in the shipped file.
+    appliesTo: (name) => name === "gsd-debug-session-manager.md",
+    block: DEBUG_SESSION_MANAGER_NO_RECURSIVE_AGENT_SPAWN_BLOCK,
     insertAnchor: "</role>", insertMode: "after",
   },
   {
