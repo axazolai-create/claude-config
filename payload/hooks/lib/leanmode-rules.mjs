@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const readJSON = (p) => JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, ""));
@@ -69,7 +70,7 @@ export function resolveBaseLevel(agentType, root) {
 export function resolveDial(root) {
   const cfg = readLeanmodeConfig(root);
   if (typeof cfg.dial === "string") return cfg.dial;
-  const stateFile = join(homedir(), ".claude", "state", "project-init.json");
+  const stateFile = join(CLAUDE_DIR, "state", "project-init.json");
   const state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
   return (state[root] && state[root].initStackRun) ? "full" : "off";
 }

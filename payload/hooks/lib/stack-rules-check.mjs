@@ -12,6 +12,7 @@ import { join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const sha16 = (s) => createHash("sha1").update(s).digest("hex").slice(0, 16);
 
@@ -82,7 +83,7 @@ export function detectMarkers(root) {
 
 export const computeStackFingerprint = (root) => sha16(detectMarkers(root).join(","));
 
-export function checkStackRules(root, srcDir = join(homedir(), ".claude", "rules-src")) {
+export function checkStackRules(root, srcDir = join(CLAUDE_DIR, "rules-src")) {
   const sourceHash = computeSourceHash(srcDir);
   const stackFingerprint = computeStackFingerprint(root);
   const snapshotPath = join(root, ".claude", "stack-rules.md");

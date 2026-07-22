@@ -53,6 +53,7 @@ import {
   safe, writeFile, readJSON, findRoot, projectNameOf, normalizeModel,
   appendJSONL, readNewJSONLEntries, ensureGitignored,
 } from "./lib/token-usage-shared.mjs";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 if (process.env.CLAUDE_TOKEN_USAGE_LOG === "0") process.exit(0);
 
@@ -60,12 +61,12 @@ let d = {};
 try { d = JSON.parse(safe(() => readFileSync(0, "utf8")) || "{}"); } catch { process.exit(0); }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PRICING_FILE = join(homedir(), ".claude", "state", "model-pricing.json");
-const GLOBAL_LOG = join(homedir(), ".claude", "state", "token-usage.jsonl");
+const PRICING_FILE = join(CLAUDE_DIR, "state", "model-pricing.json");
+const GLOBAL_LOG = join(CLAUDE_DIR, "state", "token-usage.jsonl");
 // Shared per-root state file with session-init.mjs / gsd-config-patch.mjs - same namespace,
 // just new independent keys (tokenLogCursor, subagentLogCursors) so this never collides with
 // their flags.
-const PROJECT_STATE_FILE = join(homedir(), ".claude", "state", "project-init.json");
+const PROJECT_STATE_FILE = join(CLAUDE_DIR, "state", "project-init.json");
 
 const COST_ENABLED = process.env.CLAUDE_TOKEN_USAGE_COST !== "0";
 const PRICING_REFRESH_THROTTLE_MS = 24 * 60 * 60 * 1000;

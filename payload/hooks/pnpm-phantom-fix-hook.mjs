@@ -3,7 +3,7 @@
 // tool. If it was an install-family command (install/i/add) in a pnpm project, run
 // pnpm-phantom-scan.mjs and surface its report as additionalContext. Fail-open: any error =>
 // exit 0, no output, never blocks the tool.
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -79,7 +79,18 @@ function main() {
   }));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Symlink-robust entry-point check: Node realpaths import.meta.url, but process.argv[1]
+// keeps the (possibly symlinked) invocation path — so a symlinked ~/.claude makes the naive
+// equality FALSE and main() never runs. Match the raw OR the realpath'd argv[1] (covers the
+// default resolver and --preserve-symlinks).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  if (import.meta.url === pathToFileURL(a).href) return true;
+  try { return import.meta.url === pathToFileURL(realpathSync(a)).href; } catch { return false; }
+}
+
+if (isMainModule()) {
   try { main(); } catch { /* fail-open */ }
   process.exit(0);
 }

@@ -13,6 +13,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const argv = process.argv.slice(2);
 const GLOBAL = argv.includes("--global");
@@ -51,7 +52,7 @@ function readJSONLRecords(path) {
 }
 
 const logPath = GLOBAL
-  ? join(homedir(), ".claude", "state", "token-usage.jsonl")
+  ? join(CLAUDE_DIR, "state", "token-usage.jsonl")
   : join(findRoot(rootArg || process.cwd()), ".claude", "token-usage.jsonl");
 
 if (!existsSync(logPath)) {

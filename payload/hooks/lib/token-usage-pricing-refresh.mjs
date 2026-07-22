@@ -11,9 +11,10 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const PRICING_URL = "https://docs.claude.com/en/docs/about-claude/pricing";
-const OUT_FILE = join(homedir(), ".claude", "state", "model-pricing.json");
+const OUT_FILE = join(CLAUDE_DIR, "state", "model-pricing.json");
 const MIN_EXPECTED_MODELS = 8; // page currently lists 14+; a big drop signals a parse break, not a real catalog shrink
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };

@@ -31,7 +31,7 @@
  * writes `.new` or `.bak` side files anywhere under ~/.claude - a diff is either shown for you
  * to act on, or the change is applied directly with no backup.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -49,7 +49,10 @@ import { createInterface } from "node:readline";
 const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(REPO_ROOT, "payload");
 const HOME = homedir();
-const CDIR = join(HOME, ".claude");
+// Config dir honors CLAUDE_CONFIG_DIR (the official Claude Code relocation env var); falls back
+// to ~/.claude. This lets the whole bundle be installed into a relocated config dir without a
+// symlink. Runtime scripts/hooks below use the same fallback.
+const CDIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
 const HOOKS = join(CDIR, "hooks");
 const SKILL = join(CDIR, "skills", "using-git-worktrees");
 const SETTINGS = join(CDIR, "settings.json");
@@ -206,6 +209,62 @@ async function choose(label, fallback = "skip") {
   let a = "";
   while (!["m", "r", "s"].includes(a[0])) a = await ask(`    choose (m)erge / (r)eplace / (s)kip > `);
   return a[0] === "m" ? "merge" : a[0] === "r" ? "replace" : "skip";
+}
+
+/* ---------- offer to relocate the config dir via CLAUDE_CONFIG_DIR ---------- */
+// Case-preserving prompt — ask() lowercases its answer, which would corrupt a filesystem path.
+function askRaw(q) {
+  return new Promise((res) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(q, (a) => { rl.close(); res((a || "").trim()); });
+  });
+}
+
+// CLAUDE_CONFIG_DIR is the (undocumented, CLI-only) env var that relocates the user config dir.
+// We only READ it elsewhere; this step lets the user SET/change it. Default offered = the target
+// of an existing ~/.claude symlink, if any. The symlink is deliberately NOT removed (a
+// filesystem-level fallback that also covers the VS Code extension, which ignores the env var,
+// and any tool that still hardcodes ~/.claude).
+async function proposeConfigDir() {
+  const current = process.env.CLAUDE_CONFIG_DIR || "";
+  const home = join(HOME, ".claude");
+  let symlinkTarget = "";
+  try { const rp = realpathSync(home); if (rp !== home) symlinkTarget = rp; } catch { /* absent */ }
+
+  log("");
+  log("Config dir relocation (CLAUDE_CONFIG_DIR):");
+  log(`  current : ${current || "(unset - using ~/.claude)"}`);
+  if (symlinkTarget) log(`  ~/.claude is a symlink -> ${symlinkTarget}`);
+
+  if (!INTERACTIVE) {
+    if (!current) log(`  To relocate (CLI): setx CLAUDE_CONFIG_DIR "<dir>" (Windows), then restart + re-run.`);
+    return;
+  }
+
+  const dflt = current || symlinkTarget || "";
+  const q = dflt
+    ? `  Enter a config-dir path to set/change, or press Enter to keep [${dflt}] > `
+    : `  Enter a config-dir path to relocate off ~/.claude, or press Enter to skip > `;
+  const target = (await askRaw(q)) || dflt;
+  if (!target) { log("  skipped (config dir unchanged)."); return; }
+  if (target === current) { log(`  already set to ${target} (no change).`); return; }
+
+  if (platform() === "win32") {
+    const r = spawnSync("setx", ["CLAUDE_CONFIG_DIR", target], { encoding: "utf8" });
+    if (r.status === 0) log(`  set (persistent, user scope): CLAUDE_CONFIG_DIR=${target}`);
+    else { log(`  could not run setx (${((r.stderr || (r.error && r.error.message)) || "").trim()}). Set it manually:`); log(`    setx CLAUDE_CONFIG_DIR "${target}"`); }
+  } else {
+    log(`  add to your shell profile (~/.bashrc, ~/.zshenv, ...):`);
+    log(`    export CLAUDE_CONFIG_DIR="${target}"`);
+  }
+
+  if (symlinkTarget) {
+    log(`  Keeping the ~/.claude symlink - a filesystem-level fallback that also covers the VS Code`);
+    log(`  extension (which ignores CLAUDE_CONFIG_DIR) and any tool that hardcodes ~/.claude.`);
+  }
+  log(`  NOTE: the env var is read at launch - restart your terminal AND re-run 'node setup.mjs' to`);
+  log(`  deploy into ${target}. This run still deploys into ${CDIR}. Marketplace plugins may need`);
+  log(`  reinstalling under the new dir (their registry stores absolute paths).`);
 }
 
 /* ---------- copy any bundle file into ~/.claude with conflict resolution ---------- */
@@ -447,6 +506,7 @@ async function resolveInstalledSha() {
 }
 
 async function main() {
+  await proposeConfigDir();
   log(`Installing into ${CDIR}${DRY ? "  [DRY RUN]" : ""}`);
   mkdirSync(CDIR, { recursive: true });
 
@@ -603,7 +663,9 @@ async function main() {
   }
   const partialRaw = read(join(REPO_ROOT, "settings.partial.json"));
   const partial = partialRaw === undefined ? null
-    : safe(() => JSON.parse(partialRaw.split("<HOME>").join(JSON.stringify(HOME).slice(1, -1))));
+    : safe(() => JSON.parse(partialRaw
+        .split("<HOME>/.claude").join(JSON.stringify(CDIR).slice(1, -1))
+        .split("<HOME>").join(JSON.stringify(HOME).slice(1, -1))));
   if (partialRaw !== undefined && partial === null) summary.push("settings.partial.json: failed to parse - settings.json hooks left untouched");
 
   if (cur !== null && partial !== null) {
@@ -644,6 +706,21 @@ async function main() {
       } else if (!(k in merged.permissions)) {
         merged.permissions[k] = v;
       }
+    }
+    // Normalize file-permission rules: Claude Code now matches ALL file-editing tools via the
+    // Edit(path) form, so Write(x)/MultiEdit(x) path rules are ignored ("not matched by file
+    // permission checks") and MultiEdit is no longer a known tool. Rewrite those to Edit(x) and
+    // dedup, migrating stale rules (from older bundles or hand-added settings) that would
+    // otherwise keep emitting startup warnings. Non-file rules (Bash(...), mcp__*, …) untouched.
+    for (const k of Object.keys(merged.permissions)) {
+      if (!Array.isArray(merged.permissions[k])) continue;
+      const seen = new Set();
+      merged.permissions[k] = merged.permissions[k].reduce((acc, r) => {
+        const nr = typeof r === "string" ? r.replace(/^(?:Write|MultiEdit)\(/, "Edit(") : r;
+        const key = typeof nr === "string" ? nr : JSON.stringify(nr);
+        if (!seen.has(key)) { seen.add(key); acc.push(nr); }
+        return acc;
+      }, []);
     }
 
     // statusLine: only take over from an absent value or from gsd-core's own default

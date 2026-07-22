@@ -5,13 +5,14 @@
 // installs). No removal path — uninstall-safety is structural.
 //
 // Usage: node pnpm-phantom-fix-install.mjs <projectRoot>
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const SCAN_CMD = "node ~/.claude/bin/pnpm-phantom-scan.mjs";
-const HOOK_PATH = join(homedir(), ".claude", "hooks", "pnpm-phantom-fix-hook.mjs");
+const HOOK_PATH = join(CLAUDE_DIR, "hooks", "pnpm-phantom-fix-hook.mjs");
 
 function findUp(start, filename) {
   let dir = resolve(start);
@@ -101,7 +102,18 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Symlink-robust entry-point check: Node realpaths import.meta.url, but process.argv[1]
+// keeps the (possibly symlinked) invocation path — so a symlinked ~/.claude makes the naive
+// equality FALSE and main() never runs. Match the raw OR the realpath'd argv[1] (covers the
+// default resolver and --preserve-symlinks).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  if (import.meta.url === pathToFileURL(a).href) return true;
+  try { return import.meta.url === pathToFileURL(realpathSync(a)).href; } catch { return false; }
+}
+
+if (isMainModule()) {
   try { main(); } catch (e) { console.log(`error: ${e.message}`); }
   process.exit(0);
 }

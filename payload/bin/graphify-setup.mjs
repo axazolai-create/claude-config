@@ -49,6 +49,7 @@ const BUILD_REPOS = buildIdx !== -1 ? argv.slice(buildIdx + 1).filter((a) => !a.
 const IS_WIN = platform() === "win32";
 const IS_MAC = platform() === "darwin";
 const HOME = homedir();
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
 const GLOBAL_DIR = join(HOME, ".graphify");
 const GLOBAL_GRAPH = join(GLOBAL_DIR, "global-graph.json");
 const SPEC = `graphifyy[${EXTRAS}]`;
@@ -193,7 +194,7 @@ function doctor() {
   const gv = graphifyVersion();
   log("  graphify CLI : " + (gv || "NOT on PATH"));
   log("  extras spec  : " + SPEC);
-  const skill = join(HOME, ".claude", "skills", "graphify", "SKILL.md");
+  const skill = join(CLAUDE_DIR, "skills", "graphify", "SKILL.md");
   log("  /graphify skill: " + (existsSync(skill) ? "installed (user)" : "not installed (run: graphify install)"));
   log("  global graph : " + (existsSync(GLOBAL_GRAPH) ? GLOBAL_GRAPH : "not built yet"));
   if (gv) { const gl = capture("graphify", ["global", "list"]); if (gl.ok && gl.out) log("  global repos :\n" + gl.out.split(/\r?\n/).map((l) => "    " + l).join("\n")); }
