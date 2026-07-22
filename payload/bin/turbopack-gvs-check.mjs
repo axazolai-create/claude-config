@@ -7,7 +7,7 @@
 // Advisory only: exit 0 always.
 //
 // Usage: node turbopack-gvs-check.mjs [--root <dir>]
-import { readFileSync, existsSync, lstatSync, readlinkSync } from "node:fs";
+import { readFileSync, existsSync, lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { usesTurbopack, parseGvsFlag, detectConfigFormat, buildRecipe } from "./lib/turbopack-gvs-lib.mjs";
@@ -79,7 +79,18 @@ function main() {
   console.log("the store (Next.js docs). Alternative if this misbehaves: disable gVS entirely (store in-tree).");
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Symlink-robust entry-point check: Node realpaths import.meta.url, but process.argv[1]
+// keeps the (possibly symlinked) invocation path — so a symlinked ~/.claude makes the naive
+// equality FALSE and main() never runs. Match the raw OR the realpath'd argv[1] (covers the
+// default resolver and --preserve-symlinks).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  if (import.meta.url === pathToFileURL(a).href) return true;
+  try { return import.meta.url === pathToFileURL(realpathSync(a)).href; } catch { return false; }
+}
+
+if (isMainModule()) {
   try { main(); } catch { /* advisory, never throws */ }
   process.exit(0);
 }

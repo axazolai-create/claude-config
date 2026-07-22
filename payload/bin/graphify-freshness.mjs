@@ -2,6 +2,7 @@
 // Best-effort: nudge if the installed graphify lags PyPI. Fail-soft: no network / not
 // installed / parse error => exit 0 silently. Never blocks setup or init-stack.
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { get } from "node:https";
 import { pathToFileURL } from "node:url";
 
@@ -51,6 +52,17 @@ async function main() {
 }
 
 // Only run the network path when invoked as a script, not when imported by the test.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Symlink-robust entry-point check: Node realpaths import.meta.url, but process.argv[1]
+// keeps the (possibly symlinked) invocation path — so a symlinked ~/.claude makes the naive
+// equality FALSE and main() never runs. Match the raw OR the realpath'd argv[1] (covers the
+// default resolver and --preserve-symlinks).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  if (import.meta.url === pathToFileURL(a).href) return true;
+  try { return import.meta.url === pathToFileURL(realpathSync(a)).href; } catch { return false; }
+}
+
+if (isMainModule()) {
   main().then(() => process.exit(0)).catch(() => process.exit(0));
 }

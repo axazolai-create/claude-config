@@ -7,7 +7,7 @@
 // appear when a background task is created/completed, the events fire here and their schema is
 // captured — then real TaskCreated-nudge / TaskCompleted handling can be wired on top.
 // Fail-open: any error => exit 0, no output.
-import { readFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { readFileSync, appendFileSync, mkdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,7 +32,18 @@ function main() {
   } catch { /* ignore */ }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Symlink-robust entry-point check: Node realpaths import.meta.url, but process.argv[1]
+// keeps the (possibly symlinked) invocation path — so a symlinked ~/.claude makes the naive
+// equality FALSE and main() never runs. Match the raw OR the realpath'd argv[1] (covers the
+// default resolver and --preserve-symlinks).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  if (import.meta.url === pathToFileURL(a).href) return true;
+  try { return import.meta.url === pathToFileURL(realpathSync(a)).href; } catch { return false; }
+}
+
+if (isMainModule()) {
   try { main(); } catch { /* fail-open */ }
   process.exit(0);
 }

@@ -4,7 +4,7 @@
 // `gh run watch <id> --exit-status` — which EXITS when CI finishes (pass/fail) and thereby
 // re-invokes me. That turns "did CI pass?" into a guaranteed push event instead of something
 // I must remember to poll. Fail-open: any error => exit 0, no output.
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -59,7 +59,18 @@ function main() {
   }));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Symlink-robust entry-point check: Node realpaths import.meta.url, but process.argv[1]
+// keeps the (possibly symlinked) invocation path — so a symlinked ~/.claude makes the naive
+// equality FALSE and main() never runs. Match the raw OR the realpath'd argv[1] (covers the
+// default resolver and --preserve-symlinks).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  if (import.meta.url === pathToFileURL(a).href) return true;
+  try { return import.meta.url === pathToFileURL(realpathSync(a)).href; } catch { return false; }
+}
+
+if (isMainModule()) {
   try { main(); } catch { /* fail-open */ }
   process.exit(0);
 }
