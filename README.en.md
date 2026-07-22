@@ -20,6 +20,7 @@ After installing — **restart Claude Code** (hooks and settings are only read a
 - [Order of operations](#order-of-operations)
   - [Initial setup (new machine)](#initial-setup-new-machine)
   - [Reconfiguring](#reconfiguring)
+- [Bundle variants (full/lite)](#bundle-variants-fulllite)
 - [Relocating `~/.claude` to another drive](#relocating-claude-to-another-drive)
 - [Additional subsystems (bin/commands/hooks)](#additional-subsystems-bincommandshooks)
 - [Why any of this (problem → solution)](#why-any-of-this-problem-solution)
@@ -130,6 +131,12 @@ changes).
 Bottom line for a new machine: `setup.mjs` — once, `/init-stack` — per project (right after
 cloning the repo, or whenever it first needs plugins).
 
+> Step 3 and the whole "Reconfiguring" table below describe the **full**-variant `/init-stack`
+> (the Python script + plugin machinery). In the **lite** variant, `/init-stack` is not the same
+> thing: it only detects the stack and assembles `.claude/stack-rules.md`, with no Python and no
+> plugin install/enable step at all. Details and how to pick/switch the variant — "Bundle
+> variants" below.
+
 ### Reconfiguring
 
 | What changed | What to run | How often |
@@ -143,6 +150,74 @@ cloning the repo, or whenever it first needs plugins).
 After ANY of these steps that touched `settings.json` (user-level or project-level) —
 **restart Claude Code**: hooks, the user `CLAUDE.md`, and `enabledPlugins` only resolve at
 startup, there's no hot-reload.
+
+---
+
+## Bundle variants (full/lite)
+
+The bundle installs in one of two variants. The choice isn't tied to the first install —
+switch at any time by re-running `setup.mjs`.
+
+- **full** (default) — everything this README describes: every hook, every command, every
+  skill, plus the `gsd` plugin on top of the rest.
+- **lite** — a slimmed-down set with no GSD machinery:
+  - plugins — only `superpowers`, `context-mode`, `context7` (no `gsd`);
+  - exactly 6 hooks: `secrets-gate`, `deny-curated-claude-md`, `graphify-global-sync`,
+    `leanmode-subagent`, `token-usage-log`, `session-init` (the last one still runs, but skips
+    every GSD-specific step — see the callout in "Project auto-init" below);
+  - `graphify` without the neo4j add-on; `leanmode`; three "lazy" skills
+    (`model-selection-policy`, `token-usage`, `update-changelog`);
+  - its own `/init-stack` — stack detection + assembling `.claude/stack-rules.md` only, no
+    Python/plugin machinery (see the callout in "Initial setup" above);
+  - its own `CLAUDE.md` (shorter, no GSD sections) and its own `rules-src/README.md` (no GSD
+    specifics) — both come from the `payload-lite/` overlay, which layers on top of `payload/`
+    per the `include`/`exclude` lists in `variants.json` (exclude wins over include);
+  - **NOT included**: `gsd` agents and hooks, `db-live-access-gate`, `ci-watch-nudge`, the
+    `schedulewakeup` nudge, the pnpm-phantom guard, bg-supervision (`supervise-bg.mjs`),
+    `task-lifecycle-probe`, the `/init-mcp` command, the `stack-markers` skill, the
+    `using-git-worktrees` shadow skill.
+
+### Selecting a variant
+
+- Interactively: `node setup.mjs` asks `bundle variant [full/lite] (Enter = …)` — the default
+  (Enter) comes from whatever is already installed per
+  `~/.claude/state/bundle-manifest.json`'s `variant` field, or `full` on a fresh machine.
+- With a flag: `node setup.mjs --variant=lite` (or `--variant=full`) — skips the question.
+- No terminal and no flag (CI, non-TTY): keeps whatever variant is already installed, else
+  `full`.
+- Via bootstrap: POSIX — `curl ... | bash -s -- --variant=lite`; Windows —
+  `$env:CLAUDE_SETUP_ARGS='--variant=lite'; irm ... | iex` — the same flag-forwarding mechanism
+  as `--replace-all` (see "Install on a new machine" above). The bootstrap scripts themselves
+  weren't changed for variants — the flag just rides through to `setup.mjs` as usual.
+
+### Switching variants
+
+Reinstall: `node setup.mjs` (interactively pick the other variant, or pass
+`--variant=full`/`--variant=lite` directly). The installer:
+
+- finds files that aren't part of the new variant but are still on disk (surplus after the
+  switch), prints the list, and asks for confirmation before deleting (`y/N`) — the same prune
+  mechanism that cleans up stale bundle files in general (see "How the installer works" above).
+  **Curated files and files you've edited by hand** (on-disk hash doesn't match what the last
+  `setup.mjs` run recorded) are never pruned — they're left as-is even if the new variant
+  doesn't include them.
+- filters the hook entries and the `statusLine` key in `settings.json` for the new variant:
+  switching to lite drops the GSD hooks and, if it was set, the `gsd-context-meter.mjs` entry in
+  `statusLine` (your own, non-bundle `statusLine` is left alone).
+- reconciles the plugin set and prints a plan (what to install/remove, what to enable/disable)
+  — asks for confirmation (`y/N`) before calling `claude plugin install/uninstall`; if the
+  `claude` CLI isn't on PATH, it prints the commands for you to run by hand instead of
+  executing them.
+- **requires restarting Claude Code** — as always, `enabledPlugins`, hooks, and `statusLine`
+  don't hot-reload.
+
+The `~/.claude/state/bundle-manifest.json` manifest stores a `variant` field — it decides the
+default offered on the next flag-less run, and `session-init.mjs` uses the same field to decide
+which GSD-specific steps to skip (a manifest with no `variant` field is a pre-variant bundle,
+treated as `full`).
+
+For tests there's a hermetic mode: `CLAUDE_SETUP_SKIP_PLUGINS=1` skips the plugin-reconciliation
+step entirely (including the `claude plugin list` probe), without touching the CLI.
 
 ---
 
@@ -452,7 +527,9 @@ itself matches.
 The `session-init.mjs` hook fires at the start of EVERY session (state lives in
 `~/.claude/state/project-init.json`, but most steps below are NOT one-time — see why). It
 **deterministically fixes files** (doesn't rely on context injection — that can be dropped on
-fresh sessions sometimes):
+fresh sessions sometimes). In the **lite** variant the GSD-specific items below (the risk
+register, the `.planning/CLAUDE.md` exclude, the `/init-mcp` suggestion) are skipped entirely —
+see "Bundle variants" above:
 
 - **auto-marks** an unmarked root `CLAUDE.md` as curated — unless it looks GSD-generated.
   **Re-checked every session, idempotently** (used to be one-time on a project's first session
@@ -725,7 +802,8 @@ Not a hook in the `hooks.*` sense (a different `settings.json` mechanism — the
 from this bundle, driving your Claude Code" principle — here for findability:
 
 - **gsd-context-meter.mjs** (`statusLine.command`, registered — see "How the installer works"
-  above). Wraps gsd-core's own `gsd-statusline.js`: calls it as a black box and rewrites only the
+  above; **full variant only** — lite doesn't install this file and leaves `statusLine` alone,
+  see "Bundle variants"). Wraps gsd-core's own `gsd-statusline.js`: calls it as a black box and rewrites only the
   context-window progress-bar segment into a textual token counter (`[420k/1000k] 42%`) — the
   other segments (model/task/milestone bar) always match what the installed gsd-core actually
   draws, without duplicating its logic. Key property: **it never breaks the statusline** — any

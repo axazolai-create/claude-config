@@ -315,3 +315,50 @@
   skips obvious long-lived servers entirely, so those are not wrapped in the first place.
 - **Residual:** a mis-tuned bound on an atypical job could kill it early; the `HANG` marker and
   exit code 124 make that diagnosable. Accepted.
+
+## RISK-VARIANT-001 — Variant switch could delete a file the user hand-edited under `~/.claude`
+
+- **Status:** Open (accepted)
+- **Context:** switching bundle variant (`node setup.mjs --variant=...`) prunes files that the
+  new variant's `include`/`exclude` set in `variants.json` no longer covers. If prune ran
+  blindly, a file the user edited in place after install (a hand-patched hook, a customized
+  skill) could be silently deleted along with the genuinely stale ones.
+- **Mitigation:** the same `pruneStale()` hash gate used for ordinary version-to-version prune
+  applies to variant-surplus files too — a file is only deleted if its on-disk SHA still matches
+  what the last `setup.mjs` run recorded in the manifest; anything modified since is kept and
+  reported (`kept: modified since install`), never auto-removed. Curated (`CURATED:NOEDIT`)
+  files are excluded from prune candidates outright. `--dry-run` previews the full surplus list
+  with no writes, and the interactive path always asks `remove these stale files? (y/N)` before
+  deleting anything. This path is exercised end-to-end by `setup-variants.e2e.test.mjs`
+  (full→lite→full switch, asserting a hand-modified file survives prune).
+- **Residual:** the real residual is a user who runs a bulk auto-confirm flag
+  (`--replace-all`/`--merge-all`, which imply prune-confirm) without reading the printed surplus
+  list first — the hash gate still protects modified files even then, but curated/unmodified
+  surplus is removed without a per-file prompt. Accepted — same trust model as every other
+  bulk-flag use in this installer.
+
+## RISK-VARIANT-002 — `managedPlugins` marketplace ids can drift from the live marketplace
+
+- **Status:** Open (accepted)
+- **Context:** `variants.json`'s `managedPlugins` hardcodes marketplace ids
+  (`superpowers@claude-plugins-official`, `gsd@claude-plugins-official`,
+  `context-mode@context-mode`, `context7@claude-plugins-official`) that `plugin-reconcile.mjs`
+  uses to build install/uninstall/enable/disable plans. These ids are not queried live at plan
+  time — if a marketplace renames or re-publishes a plugin under a different id, the
+  reconciliation plan would target a stale id. The `gsd` id specifically is **UNVERIFIED on the
+  implementation machine**: `gsd` was not installed there as a marketplace plugin when
+  `variants.json` was written, so its id was filled in by convention (matching the two confirmed
+  `...@claude-plugins-official` ids) rather than read from a live `claude plugin list`; the
+  documented fallback if it turns out wrong is the same shape, `gsd@claude-plugins-official`.
+- **Mitigation:** reconciliation never applies silently — `buildPluginPlan()`'s full plan
+  (install/uninstall/enable/disable per plugin) is always printed before any `claude plugin ...`
+  call, and every run (interactive or bulk-flag) requires confirmation (`apply N plugin
+  action(s)? (y/N)`) before executing; a wrong id surfaces immediately as a failed `claude plugin
+  install` (`plugin-install-FAILED`) rather than a silent no-op, and
+  `CLAUDE_SETUP_SKIP_PLUGINS=1` lets the rest of setup proceed while skipping execution entirely
+  if the printed plan looks wrong.
+- **Residual:** until someone re-verifies `gsd`'s id against a live marketplace listing (`claude
+  plugin list`/`claude plugin search` on a machine with `gsd` actually installed), a full-variant
+  install/switch that needs to newly *install* `gsd` could fail at that one step; everything else
+  in `setup.mjs` (file copy, hooks, settings merge) still completes. Accepted; revisit by
+  confirming the id on a machine that has `gsd` installed via the marketplace.
