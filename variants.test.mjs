@@ -62,9 +62,17 @@ const FORBIDDEN = [
   "task-lifecycle-probe", "init-mcp",
 ];
 
+// Scope is deliberately NOT all of `skills/` — `skills/update-changelog/**` legitimately
+// mentions "GSD" (it's the changelog-writer's own instruction to STRIP any mention of GSD from
+// user-facing release notes, e.g. SKILL.md's "of every trace of AI tooling, GSD, ..." and
+// "GSD scope/decision identifiers" sections), so a blanket skills/ scan would false-positive on
+// it forever. `skills/token-usage/**` has zero "gsd" occurrences (verified) and would pass either
+// way, but only `skills/model-selection-policy/**` is the one this test is actually guarding
+// (Fix 4: the lite overlay must not regress back to citing /gsd-execute-phase / /gsd-debug).
 test("purity: resolved lite rules-src + overlay docs carry no forbidden tokens", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
-  const scope = v.rels.filter((r) => r.startsWith("rules-src/") || r === "CLAUDE.md" || r === "commands/init-stack.md");
+  const scope = v.rels.filter((r) => r.startsWith("rules-src/") || r === "CLAUDE.md"
+    || r === "commands/init-stack.md" || r.startsWith("skills/model-selection-policy/"));
   const bad = [];
   for (const rel of scope) {
     const text = readFileSync(v.srcFor(rel), "utf8").toLowerCase();
