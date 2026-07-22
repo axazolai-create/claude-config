@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, rmSync } from 'node:fs';
+import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,7 +36,17 @@ export function isLocked(root) {
 export function lock(root) { const f = LOCK(root); ensureDir(f); writeFileSync(f, JSON.stringify({ pid: process.pid })); }
 export function unlock(root) { rmSync(LOCK(root), { force: true }); }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Symlink-robust entry-point check (match raw OR realpath'd argv[1]; Node realpaths
+// import.meta.url, so under a symlinked ~/.claude the naive compare is false and main dies).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (resolve(a) === self) return true;
+  try { return realpathSync(a) === self; } catch { return false; }
+}
+
+if (isMainModule()) {
   const cmd = process.argv[2];
   const rest = process.argv.slice(3);
   const positionals = []; const flags = {};

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
+import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
 import { execFileSync } from 'node:child_process';
 import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,7 +56,17 @@ export function scaffoldConfig(root, workspaces = []) {
   }, null, 2) + '\n');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Symlink-robust entry-point check (match raw OR realpath'd argv[1]; Node realpaths
+// import.meta.url, so under a symlinked ~/.claude the naive compare is false and main dies).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (resolve(a) === self) return true;
+  try { return realpathSync(a) === self; } catch { return false; }
+}
+
+if (isMainModule()) {
   const a = Object.fromEntries(process.argv.slice(2).flatMap((x, i, xs) =>
     x.startsWith('--') ? [[x.slice(2), xs[i + 1]]] : []));
   const root = a.root || process.cwd();
