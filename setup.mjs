@@ -241,12 +241,15 @@ async function proposeConfigDir() {
     return;
   }
 
-  const dflt = current || symlinkTarget || "";
-  const q = dflt
-    ? `  Enter a config-dir path to set/change, or press Enter to keep [${dflt}] > `
-    : `  Enter a config-dir path to relocate off ~/.claude, or press Enter to skip > `;
-  const target = (await askRaw(q)) || dflt;
-  if (!target) { log("  skipped (config dir unchanged)."); return; }
+  // Enter = do NOT set/change (safe default). Setting is always an explicit action: type a path,
+  // or 'y' to accept the suggested path. This avoids silently writing the symlink target on Enter.
+  const suggestion = current || symlinkTarget || "";
+  if (suggestion) log(`  suggested path: ${suggestion}`);
+  log(`  Enter a path to set CLAUDE_CONFIG_DIR${suggestion ? ", or 'y' to use the suggested path" : ""},`);
+  log(`  or press Enter to NOT set it (leave unchanged).`);
+  const ans = await askRaw("  > ");
+  if (!ans) { log("  left unchanged (CLAUDE_CONFIG_DIR not set)."); return; }
+  const target = (suggestion && (ans === "y" || ans === "Y")) ? suggestion : ans;
   if (target === current) { log(`  already set to ${target} (no change).`); return; }
 
   if (platform() === "win32") {
