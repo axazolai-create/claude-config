@@ -107,7 +107,9 @@ if (toolName === "Read") {
           "context-mode-read-backstop: this file is " + Math.round(st.size / 1000) + "KB. context-mode's " +
           "own large-Read nudge fires at most once per session and never repeats - if you're reading this " +
           "to analyze/understand it (not about to Edit it), use ctx_execute_file instead, every time, not " +
-          "just when reminded."
+          "just when reminded. If ctx_execute_file errors as not-found / invalid parameters, its schema is " +
+          "deferred - load it once via ToolSearch (\"select:mcp__plugin_context-mode_context-mode__ctx_execute_file\") " +
+          "and retry; don't fall back to a raw Read."
         );
       }
     } catch { /* file missing/unreadable - silent passthrough */ }
