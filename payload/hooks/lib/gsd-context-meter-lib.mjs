@@ -57,7 +57,7 @@ export function computeUsedTokenMetrics(data) {
 }
 
 // Matches gsd-statusline.js's exact bar output: ` \x1b[<color>m` + optional `💀 ` +
-// 10 block/shade chars + ` NN%` + an OPTIONAL native suffix (gsd-core 1.7.0's own
+// 10 block/shade chars + ` NN%` + an OPTIONAL native suffix (gsd-core 1.8.0's own
 // opt-in `statusline.show_context_tokens`, e.g. " (156k)") + `\x1b[0m`. Color and
 // skull-prefix are captured so the replacement keeps the same color/urgency signal;
 // the bar chars are not captured - the bar itself is replaced by our own bracket

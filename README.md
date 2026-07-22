@@ -34,6 +34,7 @@ node setup.mjs
 - [Авто-инициализация проектов (SessionStart)](#авто-инициализация-проектов-sessionstart)
 - [Правила стека (stack-rules): снапшот вместо автозагрузки](#правила-стека-stack-rules-снапшот-вместо-автозагрузки)
 - [Что делает каждый хук и почему](#что-делает-каждый-хук-и-почему)
+- [Кросс-инструментные патчи gsd-core (агенты, воркфлоу, tool-grant)](#кросс-инструментные-патчи-gsd-core-агенты-воркфлоу-tool-grant)
 - [Требуемые инструменты и fallback](#требуемые-инструменты-и-fallback)
 - [PowerShell tool на Windows (опционально, руками — не через setup.mjs)](#powershell-tool-на-windows-опционально-руками-не-через-setupmjs)
 - [Проверка после установки](#проверка-после-установки)
@@ -206,13 +207,24 @@ notepad bootstrap.ps1; .\bootstrap.ps1
   CLAUDE.md                              # твои курируемые правила (содержит строку-маркер)
   settings.json                          # твой файл + до-мёрженные ключи (hooks, permissions.deny)
   add-risk.mjs                           # хелпер риск-реестра (его дёргает авто-инициализация)
+  apply-gsd-agent-patches.mjs            # применяет agent+workflow контент-патчи (зовёт /init-session)
+  sync-gsd-context-mode-tool.mjs         # CLI-обёртка tool-grant синка (зовут setup.mjs / init-stack.py)
   hooks/
     deny-curated-claude-md.mjs           # блок правок курируемого CLAUDE.md (любая локация)
     secrets-gate.mjs                     # блок `git commit` при найденных секретах в staged
     db-live-access-gate.mjs              # read-only гейт на живые БД (PreToolUse: Bash|mcp__*)
+    worktree-executor-discipline-advisor.mjs # advisory: дисциплина worktree + backstop больших Read
+    bg-supervision-nudge.mjs             # PreToolUse: нудж обернуть run_in_background в supervise-bg
     graphify-global-sync.mjs             # после `git commit` Claude — фон. обновление global-graph.json
+    gsd-config-patch.mjs                 # PostToolUse: разовые патчи .planning/config.json (модель+воркфлоу)
+    ci-watch-nudge.mjs                   # PostToolUse: после `git push` — нудж `gh run watch`
+    task-lifecycle-probe.mjs             # TaskCreated/TaskCompleted: probe-логгер схемы событий
     lib/
       graphify-global-sync-run.mjs       # общий воркер (зовут и хук выше, и нативный post-commit)
+      context-mode-gsd-agents.mjs        # тихий посессионный tool-grant синк в gsd-*.md
+      gsd-agent-patches.mjs              # review-gated контент-патчи в 30+ gsd-*.md (check/apply)
+      gsd-workflow-patches.mjs           # review-gated контент-патч в execute-phase.md
+      config-update-check-run.mjs        # detached-воркер: проверка новой версии бандла на GitHub
     session-init.mjs                     # SessionStart: разовый бутстрап (+ регистрация в graphify,
                                           #   + установка нативного post-commit хука в проекте)
     lib/
@@ -233,9 +245,11 @@ notepad bootstrap.ps1; .\bootstrap.ps1
     leanmode-executor.md                 # саб-агент для явного per-task lean-опта (см. ниже)
   commands/
     leanmode.md                          # /leanmode — интерактив/--флаг, ставит project-level dial
+    init-session.md                      # /init-session — применить отложенные патчи gsd-*.md агентов
   skills/
     using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Superpowers
     token-usage/SKILL.md                 # /token-usage — сводка по логу расхода токенов
+    update-changelog/SKILL.md            # /update-changelog — git-история → changelog.json (RU-записи)
     stack-markers/SKILL.md               # маппинг файл-маркер->стек, вынесен из CLAUDE.md (см. .claude/_analize/)
     model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, вынесен из CLAUDE.md
   rules-src/                             # источник правил стека — НЕ автозагружается Claude Code;
@@ -506,6 +520,24 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
 опустевшую после этого папку удаляет целиком. Существующим проектам ничего делать не надо:
 первая сессия после обновления не найдёт снапшот и получит инструкцию сборки.
 
+**Что покрыто** (компилятор слоями `base → direction → cross-cutting`; полный список и то, как
+слои резолвятся — в `rules-src/README.md`):
+
+- **Языки/фреймворки (direction):**
+  - **Node** — `node.base` + `nest` / `next` / `react` / `react-native` / `telegram`
+  - **Python** — `python.base` + `cli` / `data` / `django` / `fastapi` / `flask` / `telegram`
+  - **C#** — `csharp.base` + `aspnet` / `cli` / `wpf`
+  - **Kotlin** — `kotlin.base` + `android` / `intellij-plugin`
+  - **Swift** — `swift.base` + `ios`
+  - **Dart** — `dart.base` + `flutter`
+- **Сквозные (cross-cutting, подмешиваются по признакам проекта):** `testing`, `security`,
+  `api-contracts`, `ci`, `docker`, `sql`, `shell`, `mobile`, `monorepo`, а для GSD-проектов
+  (`.planning/`) — ещё `gsd` (роутинг методологии + правила карантина `CLAUDE.md`).
+- **Шаблоны** (`rules-src/templates/`): `next.AGENTS.md`, `graphify.PROJECT.md` — см. выше.
+
+Каждый файл самодокументирован; здесь — только карта охвата, чтобы не дублировать 30+ файлов в
+README (источник истины — сами `rules-src/*.md` и их `README.md`).
+
 Дизайн и обоснование: `docs/superpowers/specs/2026-07-12-stack-rules-design.md` (вне
 дистрибуции); риски — `RISK-STACKRULES-001/002` в `RISK_REGISTER.md`.
 
@@ -530,6 +562,20 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
   распознанный read-only запрос всё равно требует ручного подтверждения через "ask", даже в
   bypass-permissions сессии. Живёт под `PreToolUse` вместе с остальными гейтами — не под
   `SessionStart`, то событие не привязано к вызову инструмента и не сработало бы ни разу.
+- **worktree-executor-discipline-advisor.mjs** (PreToolUse: `Bash|Read`). Чисто **advisory** —
+  никогда не блокирует и не спрашивает, любой путь резолвится в `allow`. Два независимых дешёвых
+  stdin-чека в одном файле (оба — одноразовый проход, делить нечего): **(1) дисциплина
+  параллельных worktree** (только `Bash`, срабатывает лишь когда cwd похож на агентский worktree
+  `.claude/worktrees/agent-*`) — ловит `pnpm/npm/yarn install` (полная переустановка per-worktree;
+  на Windows ещё и EPERM при конкурентных установках даже с общим стором), запуск тест-раннера
+  без видимого флага скоупинга (полный прогон × число worktree — наблюдались десятки минут на
+  воркер) и голый `git status` (висит минутами на большом `node_modules` даже при корректном
+  `.gitignore` — вместо него `git diff --stat HEAD`); подпирает харнесс-нуджем то, что
+  `gsd-executor.md` держит только прозой (см. патчи ниже). **(2) backstop для больших `Read`**
+  (любой сессии, без worktree-гейта) — собственный one-shot-нудж context-mode срабатывает
+  максимум раз за сессию и потом молчит; этот backstop повторяется на каждом большом Read,
+  покрывая то, что одноразовый пропустил. Эвристика, не гарантия: ложные пропуски ожидаемы и
+  нормальны (нудж, не гейт), любой сбой парсинга → тихий passthrough.
 - **graphify-global-sync.mjs** (PostToolUse: `Bash`) + **hooks/lib/graphify-global-sync-run.mjs**
   (общий воркер). После `git commit`, сделанного Claude через Bash-инструмент, в фоне (detached,
   не блокирует сессию) обновляет запись этого проекта в кросс-проектном
@@ -540,6 +586,17 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
   **Ограничение:** хуки Claude Code видят только вызовы инструментов самого Claude — ручной
   `git commit`/`--amend` из терминала или IDE этот хук не увидит в принципе. Это закрывает
   нативный git-хук ниже. Отключить оба: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
+- **gsd-config-patch.mjs** (PostToolUse: `Write|Edit|MultiEdit|Bash`). Когда у проекта есть
+  `.planning/config.json`, разово применяет мои личные дефолты: **tier 1** — перезаписывает
+  ТОЛЬКО `model_profile`/`models`/`model_overrides`; **tier 2** — `DEFAULT_WORKFLOW_CONFIG`
+  (вложенные ключи мёржатся по одному, соседние остаются). Каждый tier после первого применения —
+  вечный no-op для проекта (позже ручные правки побеждают; стейт-ключи в общем с `session-init.mjs`
+  `~/.claude/state/project-init.json`). Слушает все четыре тула, а не `SessionStart`, потому что
+  gsd-core может создать конфиг уже посреди сессии (через Write/Edit Claude или шелл-скриптом) —
+  хук проверяет состояние ФС постфактум; на несвязанных вызовах — дешёвый no-op. Полный
+  по-ключевой лог решений (что патчим и что намеренно НЕ патчим) — `docs/gsd-config-defaults.md`.
+  Тумблеры: `CLAUDE_GSD_CONFIG_AUTOPATCH=0` (оба tier), `CLAUDE_GSD_CONFIG_AUTOPATCH_WORKFLOW=0`
+  (только tier 2).
 - **session-init.mjs** (SessionStart). Бутстрап проекта (см. выше — большинство шагов теперь
   каждую сессию, идемпотентно) +
   **независимый** (не привязан к общему `firstTime`, чтобы сработать и на уже
@@ -617,6 +674,31 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
   один раз была видна строка `SubagentStart:<type> says: <message>` — похоже на другую точку
   рендера `systemMessage` (не родительский поток), а не на противоречие выводу выше.
 
+Семейство «супервизия фоновых задач» (обзор — в «Дополнительные подсистемы» выше; здесь —
+построчно, что делает каждый хук). Общая идея: зависшая фоновая задача НИКОГДА не выходит,
+поэтому `run_in_background` больше не переподнимет меня — превращаем зависание в гарантированное
+событие завершения:
+
+- **bg-supervision-nudge.mjs** (PreToolUse: `Bash`). Когда команда запускается с
+  `run_in_background`, но не обёрнута в супервизор (`supervise-bg.mjs`/`gh run watch`/`timeout`) и
+  не выглядит долгоживущим сервером (`dev`/`serve`/`start`/`--watch`/`nodemon`/`vite`/`next dev` —
+  их watchdog по wall-clock убил бы зря), инжектит неблокирующее напоминание обернуть её в
+  `bin/supervise-bg.mjs` (`--stale`/`--timeout`/`--label`) — тогда застой/таймаут убьёт задачу и
+  вернёт событие завершения. Fail-open: любая ошибка → exit 0.
+- **ci-watch-nudge.mjs** (PostToolUse: `Bash`). После `git push` в репо с GitHub Actions
+  (`.github/workflows` вверх по дереву) напоминает досмотреть CI до конца фоновым
+  `gh run watch <id> --exit-status` — он ВЫХОДИТ, когда CI финиширует (pass/fail), и тем самым
+  переподнимает меня: «прошёл ли CI?» становится гарантированным push-событием, а не тем, что
+  надо помнить и поллить. Разбор git-команды честно учитывает value-флаги `-C`/`-c` и цепочки
+  через `&&`/`||`/`;`/`|`. Fail-open.
+- **task-lifecycle-probe.mjs** (`TaskCreated` + `TaskCompleted`). Оба события есть в публичных
+  доках, но включены ли они в текущем билде харнесса — не подтверждено, поэтому хук НЕ действует
+  на их (неизвестную) схему, а только **пишет по строке** на каждое срабатывание в
+  `~/.claude/logs/task-lifecycle-probe.log` (имя события, ключи payload, усечённый сырой снимок).
+  После рестарта смотришь лог: если строки появляются на создание/завершение фоновой задачи —
+  события реально доходят и их схема захвачена, поверх можно вешать настоящую обработку
+  `TaskCreated`-нуджа / `TaskCompleted`. Fail-open.
+
 Не хук в смысле `hooks.*` (другой механизм `settings.json` — верхнеуровневый ключ `statusLine`,
 не `PreToolUse`/`PostToolUse`/событийные хуки выше), но тот же принцип "скрипт из этого бандла,
 управляет твоим Claude Code" — здесь же для находимости:
@@ -635,6 +717,44 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
 
 ---
 
+## Кросс-инструментные патчи gsd-core (агенты, воркфлоу, tool-grant)
+
+Файлы `~/.claude/agents/gsd-*.md` и `~/.claude/gsd-core/workflows/execute-phase.md` принадлежат
+**отдельному инструменту `gsd-core`** (`npx gsd-core`), не этому бандлу. Набор всё же дообслуживает
+их — best-effort, идемпотентно, версионированными маркерами
+`<!-- gsd-patch:ID vN -->…<!-- /gsd-patch:ID -->` (сравнение по СОДЕРЖИМОМУ, не по наличию: при
+bump версии патча устаревший текст заменяется свежим, а не пропускается). Три механизма с разной
+политикой записи, осознанно:
+
+- **Тихая самолечащаяся синхронизация tool-grant** — `hooks/lib/context-mode-gsd-agents.mjs`.
+  Дописывает MCP-тул context-mode во фронтматтер `tools:` агентов `gsd-*.md`, но ТОЛЬКО если
+  плагин context-mode реально установлен и включён (иначе агент ссылался бы на несуществующий
+  MCP-сервер). Это одна строка фронтматтера, поэтому безопасно гонять КАЖДУЮ сессию — в т.ч.
+  после того, как апдейтер самого gsd-core перезапишет агента и снова уронит тул. Зовётся из
+  `session-init.mjs` и из CLI-обёртки `sync-gsd-context-mode-tool.mjs` (её дёргают `setup.mjs` и
+  `init-stack.py`).
+- **Review-gated контент-патчи** — `hooks/lib/gsd-agent-patches.mjs` (30+ агентов: роутинг на
+  context-mode-тулы, хардненинг `gsd-executor.md`/`gsd-debugger.md`, guardrail против рекурсивного
+  спавна) и `hooks/lib/gsd-workflow-patches.mjs` (шаблон диспетчеризации в `execute-phase.md` —
+  decompose-aware выбор `gsd-executor` vs `gsd-executor-decomposing`). В отличие от tool-grant это
+  **НЕ пишется молча**: патчи инжектят прозу через десятки файлов, поэтому человек сначала смотрит,
+  что применится. `session-init.mjs` каждую сессию проверяет их **read-only** (`checkGsd…Patches`) и,
+  если что-то ждёт, печатает подсказку. Применяет — только явный вызов человека: команда
+  **`/init-session`** (`apply-gsd-agent-patches.mjs`, применяет ОБА набора — agent + workflow —
+  разом) или **шаг 10 `/init-stack`**. После апдейта gsd-core патчи ожидаемо «отваливаются» (их
+  файлы перезаписаны родным апдейтером) — `session-init` это замечает и снова предлагает
+  `/init-session`. Патчи содержательно привязаны к формату конкретной версии gsd-core: маркеры
+  проверены против установленной **1.8.0** (при рефромате блока в будущем релизе патч деградирует
+  в «no anchor found» — пропуск, не порча файла).
+- **Проверка новой версии бандла** — `hooks/lib/config-update-check-run.mjs`. Detached-воркер,
+  которого `session-init.mjs` спавнит и сразу unref'ит (сессию не блокирует). Сверяет SHA из
+  `~/.claude/state/bundle-manifest.json` (что поставил `setup.mjs` в последний раз) с текущим
+  master на GitHub (публичный API, без auth, ничего не отправляется) и сообщает ТОЛЬКО хорошую
+  новость — что доступно обновление; любой сбой (оффлайн, rate-limit, корпоративный прокси)
+  глотается молча, как и все остальные фоновые проверки бандла.
+
+---
+
 ## Требуемые инструменты и fallback
 
 Установщик проверяет и подсказывает команду установки под твою ОС:
@@ -644,6 +764,9 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
   так не выполнится), остальное работает. Установка: `apt/dnf` · `winget`/`choco`/`scoop` · `brew`.
 - **gitleaks** — опционален. Без него работает встроенный regex. Установка: `winget`/`choco` ·
   release-бинарь · `brew`.
+- **gh** (GitHub CLI) — опционален, нужен только `ci-watch-nudge.mjs` для `gh run watch` после
+  `git push`. Без него нудж просто не даёт полезного эффекта (сам хук fail-open, ничего не ломает).
+  Установка: `winget`/`choco`/`scoop` · `brew` · `apt/dnf`.
 
 ---
 

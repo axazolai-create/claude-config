@@ -33,7 +33,7 @@ const PATCH_ID = "execute-phase-decompose-dispatch";
 const PATCH_VERSION = 1;
 
 // Anchor: the literal opening of the per-plan Agent() dispatch template (step 3). Verified
-// against the installed gsd-core@1.7.0-era execute-phase.md at the time this was written -
+// against the installed gsd-core@1.8.0-era execute-phase.md at the time this was written -
 // if a future gsd-core release reformats this block, this patch degrades to "no anchor found"
 // (skipped, never a partial/corrupt write) rather than silently misplacing the insertion.
 const ANCHOR = `   \`\`\`text

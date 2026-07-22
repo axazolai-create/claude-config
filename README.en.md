@@ -20,17 +20,21 @@ After installing — **restart Claude Code** (hooks and settings are only read a
 - [Order of operations](#order-of-operations)
   - [Initial setup (new machine)](#initial-setup-new-machine)
   - [Reconfiguring](#reconfiguring)
+- [Relocating `~/.claude` to another drive](#relocating-claude-to-another-drive)
+- [Additional subsystems (bin/commands/hooks)](#additional-subsystems-bincommandshooks)
 - [Why any of this (problem → solution)](#why-any-of-this-problem-solution)
 - [What goes where](#what-goes-where)
 - [How the installer works (`setup.mjs`)](#how-the-installer-works-setupmjs)
   - [Conflicts (curated text and JSON): merge / replace / skip](#conflicts-curated-text-and-json-merge-replace-skip)
   - [Diff readability](#diff-readability)
   - [Repo layout: `payload/` vs root](#repo-layout-payload-vs-root)
+  - [`gsd-defaults.partial.json` → `~/.gsd/defaults.json`](#gsd-defaultspartialjson-gsddefaultsjson)
   - [Flags (non-interactive / for CI)](#flags-non-interactive-for-ci)
 - [Protection model: the marker, not the path](#protection-model-the-marker-not-the-path)
 - [Project auto-init (SessionStart)](#project-auto-init-sessionstart)
 - [Stack rules (stack-rules): a snapshot instead of auto-loading](#stack-rules-stack-rules-a-snapshot-instead-of-auto-loading)
 - [What each hook does and why](#what-each-hook-does-and-why)
+- [Cross-tool gsd-core patches (agents, workflow, tool-grant)](#cross-tool-gsd-core-patches-agents-workflow-tool-grant)
 - [Required tools and fallback](#required-tools-and-fallback)
 - [PowerShell tool on Windows (optional, manual — not via setup.mjs)](#powershell-tool-on-windows-optional-manual-not-via-setupmjs)
 - [Post-install check](#post-install-check)
@@ -130,6 +134,58 @@ startup, there's no hot-reload.
 
 ---
 
+## Relocating `~/.claude` to another drive
+
+`setup.mjs` and every runtime script/hook read the config directory as
+`process.env.CLAUDE_CONFIG_DIR || ~/.claude`, so the set can be installed into a relocated
+directory **with no code changes**. Two ways (not mutually exclusive):
+
+- **Symlink** `~/.claude` → the target folder (`mklink /D`, needs admin / Developer Mode once).
+  Works at the filesystem level → covers **everything**: the CLI, the VS Code extension, any tool
+  that hardcodes `~/.claude`. The more universal option.
+- **`CLAUDE_CONFIG_DIR`** (`setx CLAUDE_CONFIG_DIR "D:\claude-home"`, no admin). An official but
+  **undocumented, CLI-only** variable: **the VS Code extension ignores it**, and plugin
+  relocation isn't guaranteed (the registry stores absolute paths → a reinstall is possible). It
+  must be persistent and present when Claude Code starts.
+
+At startup `setup.mjs` interactively offers to set/change `CLAUDE_CONFIG_DIR` (defaulting to an
+existing symlink's target); **Enter = don't set it**. The entered path is validated (slash
+normalization; relative paths, bad syntax, network/removable/CD drives, a nonexistent drive, or a
+symlink in the path are rejected) — on an error it re-asks. Setting the variable does **not**
+remove the symlink — it stays as a fallback.
+
+> Every `.mjs` uses a symlink-safe entry-point guard: under a symlinked `~/.claude`, Node
+> realpaths `import.meta.url` but not `argv[1]`, so a naive guard would silently not run `main()`
+> (the hook/script is "dead"). The guard checks the raw **or** realpath'd `argv[1]`.
+
+---
+
+## Additional subsystems (bin/commands/hooks)
+
+Beyond the baseline protection, the set installs a few independent tools (each with its own unit
+tests `*.test.mjs`, run via `node --test`):
+
+- **pnpm phantom-dependency guard** — the `/pnpm-phantom-fix` command + `bin/pnpm-phantom-scan.mjs`
+  + a PostToolUse hook: finds undeclared-but-imported packages (e.g. `@hookform/resolvers`→`zod`)
+  and additively declares them as optional peers in `packageExtensions`, so
+  `enableGlobalVirtualStore` doesn't break them. Installed per-project via `/init-stack` (pnpm only).
+- **Turbopack × global-virtual-store** — `bin/turbopack-gvs-check.mjs` (`/init-stack`, Next+pnpm
+  only): detects the structural conflict of an out-of-tree store with Turbopack (chunks `404`
+  after a hard reload) and prints a recipe (sibling store + `turbopack.root`). Read-only, changes
+  nothing.
+- **Background-task supervision** — `bin/supervise-bg.mjs` wraps a background command in a
+  timeout + staleness watchdog (a hang → an exit event, not a silent stall) + the PreToolUse nudge
+  `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (after `git push` — `gh run watch`) + the
+  `task-lifecycle-probe` probe (checking `TaskCreated`/`TaskCompleted`).
+- **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
+  exports the cross-project graph into Neo4j (details — the graphify section below).
+
+Permissions in `settings.partial.json` are normalized on merge: `Write(x)`/`MultiEdit(x)` →
+`Edit(x)` (+ dedup), since Claude Code now matches all file tools via `Edit(path)`, and
+`MultiEdit` is no longer a tool.
+
+---
+
 ## Why any of this (problem → solution)
 
 The underlying problem: in Claude Code, **a project `CLAUDE.md` overrides the user one**, and
@@ -158,13 +214,24 @@ So this package does three things:
   CLAUDE.md                              # your curated rules (contains the marker line)
   settings.json                          # your file + pre-merged keys (hooks, permissions.deny)
   add-risk.mjs                           # risk-register helper (called by auto-init)
+  apply-gsd-agent-patches.mjs            # applies agent+workflow content patches (called by /init-session)
+  sync-gsd-context-mode-tool.mjs         # CLI wrapper for the tool-grant sync (called by setup.mjs / init-stack.py)
   hooks/
     deny-curated-claude-md.mjs           # blocks edits to a curated CLAUDE.md (any location)
     secrets-gate.mjs                     # blocks `git commit` when secrets are found in staged
     db-live-access-gate.mjs              # read-only gate on live DBs (PreToolUse: Bash|mcp__*)
+    worktree-executor-discipline-advisor.mjs # advisory: worktree discipline + large-Read backstop
+    bg-supervision-nudge.mjs             # PreToolUse: nudge to wrap run_in_background in supervise-bg
     graphify-global-sync.mjs             # after a Claude `git commit` — bg. refresh of global-graph.json
+    gsd-config-patch.mjs                 # PostToolUse: one-time .planning/config.json patches (model+workflow)
+    ci-watch-nudge.mjs                   # PostToolUse: after `git push` — nudge to `gh run watch`
+    task-lifecycle-probe.mjs             # TaskCreated/TaskCompleted: event-schema probe logger
     lib/
       graphify-global-sync-run.mjs       # shared worker (called by the hook above and the native post-commit)
+      context-mode-gsd-agents.mjs        # silent per-session tool-grant sync into gsd-*.md
+      gsd-agent-patches.mjs              # review-gated content patches to 30+ gsd-*.md (check/apply)
+      gsd-workflow-patches.mjs           # review-gated content patch to execute-phase.md
+      config-update-check-run.mjs        # detached worker: bundle release check against GitHub
     session-init.mjs                     # SessionStart: project bootstrap (+ registration in graphify,
                                           #   + installing the native post-commit hook in the project)
     lib/
@@ -185,9 +252,11 @@ So this package does three things:
     leanmode-executor.md                 # subagent for explicit per-task lean opt-in (see below)
   commands/
     leanmode.md                          # /leanmode — interactive/--flag, sets the project-level dial
+    init-session.md                      # /init-session — apply pending gsd-*.md agent patches
   skills/
     using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
     token-usage/SKILL.md                 # /token-usage — token spend log summary
+    update-changelog/SKILL.md            # /update-changelog — git history → changelog.json (RU entries)
     stack-markers/SKILL.md               # file-marker->stack mapping, split out of CLAUDE.md (see .claude/_analize/)
     model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, split out of CLAUDE.md
   rules-src/                             # stack rule sources — NOT auto-loaded by Claude Code;
@@ -286,8 +355,9 @@ The repo is split into two zones:
   → `~/.claude/hooks/foo.mjs`).
 - **Repo root** — the installer's own meta, never copied: `setup.mjs`,
   `bootstrap.sh`/`bootstrap.ps1`, `README.md`, `settings.partial.json`,
-  `RISK_REGISTER.snippet.md`, this repo's own `RISK_REGISTER.md` (not to be confused with the
-  installed `~/.claude/state/...`), `docs/` (design specs/plans, outside distribution).
+  `gsd-defaults.partial.json`, `RISK_REGISTER.snippet.md`, this repo's own `RISK_REGISTER.md`
+  (not to be confused with the installed `~/.claude/state/...`), `docs/` (design specs/plans,
+  outside distribution).
 
 You can just drop your own files/folders into `payload/` — they'll be copied with structure
 preserved (`payload/commands/`, `payload/agents/`, extra `payload/skills/`, any of your own
@@ -298,6 +368,34 @@ copied `.mjs`.
 The `settings.json` file at the archive root (`~/.claude/settings.json`) isn't copied as a
 plain file — it's managed by a separate additive merge based on `settings.partial.json` (see
 below). Hidden files (`.git`, `.DS_Store`, etc.) inside `payload/` are also never copied.
+Likewise, `gsd-defaults.partial.json` doesn't go through the normal diff/merge logic — it has its
+own mirror+merge logic, see the subsection below.
+
+### `gsd-defaults.partial.json` → `~/.gsd/defaults.json`
+
+A curated set of personal GSD defaults (`model_profile`, `models`/`model_overrides`, `workflow`
+toggles, etc.) is synced separately from `settings.json` and is **not conflict-checked** — no
+diff, no dialog, because it's your own bundle, not someone else's config with per-machine values:
+the merge is always additive and can't silently clobber anything.
+
+- `setup.mjs` first copies `gsd-defaults.partial.json` as-is into `~/.claude` (a mirror copy —
+  needed by the CLI below, which after install has no access to the repo root), then calls
+  `syncGsdGlobalDefaults()` (`hooks/lib/gsd-defaults-sync.mjs`): a **deep additive merge** into
+  `~/.gsd/defaults.json` (gsd-core's own machine-global default) — your existing values stay,
+  missing ones are added. Silent, best-effort: a read/write error doesn't halt the install.
+- A specific project's `.planning/config.json` is left untouched by `setup.mjs` — it's not tied to
+  a project. For that there's a separate CLI **`~/.claude/gsd-defaults-sync.mjs`** (installed
+  there, called from `/init-stack`, step 11; also manually:
+  `node ~/.claude/gsd-defaults-sync.mjs [homeDir] [projectDir]`). In one pass it: repeats the same
+  merge into `~/.gsd/defaults.json`; applies a **reference-wins merge** (`mergeReferenceWins`) into
+  the current project's `.planning/config.json` — bundle values overwrite the project's same-named
+  keys, other keys are left alone (skipped if there's no `.planning/` or `config.json` can't be
+  read); and runs the same safe statusLine guard as `setup.mjs` (see above) via
+  `ensureStatuslineOverride()` (`hooks/lib/gsd-statusline-registration.mjs`) — not a shared
+  implementation with `setup.mjs`'s inline block but a second, independent one (the CLI has no
+  interactive diff to fall back on, so the overwrite decision must be unconditionally safe on its
+  own), both deliberately solving the same three-way problem. Handy to re-run in isolation after
+  editing `gsd-defaults.partial.json`, without a full `setup.mjs`.
 
 ### Flags (non-interactive / for CI)
 
@@ -429,6 +527,24 @@ untouched (printing a note — move them into `rules-src/` by hand if the auto-l
 intended), and deletes the folder entirely once it's empty. Existing projects need no action:
 the first session after the upgrade finds no snapshot and gets the build instruction.
 
+**What's covered** (the compiler layers `base → direction → cross-cutting`; the full list and how
+the layers resolve are in `rules-src/README.md`):
+
+- **Languages/frameworks (direction):**
+  - **Node** — `node.base` + `nest` / `next` / `react` / `react-native` / `telegram`
+  - **Python** — `python.base` + `cli` / `data` / `django` / `fastapi` / `flask` / `telegram`
+  - **C#** — `csharp.base` + `aspnet` / `cli` / `wpf`
+  - **Kotlin** — `kotlin.base` + `android` / `intellij-plugin`
+  - **Swift** — `swift.base` + `ios`
+  - **Dart** — `dart.base` + `flutter`
+- **Cross-cutting (mixed in per project signals):** `testing`, `security`, `api-contracts`,
+  `ci`, `docker`, `sql`, `shell`, `mobile`, `monorepo`, and for GSD projects (`.planning/`) —
+  `gsd` (methodology routing + `CLAUDE.md` quarantine rules).
+- **Templates** (`rules-src/templates/`): `next.AGENTS.md`, `graphify.PROJECT.md` — see above.
+
+Each file is self-documenting; this is only a coverage map, so the 30+ files aren't duplicated in
+the README (source of truth: the `rules-src/*.md` themselves and their `README.md`).
+
 Design and rationale: `docs/superpowers/specs/2026-07-12-stack-rules-design.md` (outside the
 distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
 
@@ -453,6 +569,19 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   recognized read-only query still requires manual confirmation via "ask", even in a
   bypass-permissions session. Lives under `PreToolUse` with the other gates — not under
   `SessionStart`, that event isn't tied to a tool call and would never fire.
+- **worktree-executor-discipline-advisor.mjs** (PreToolUse: `Bash|Read`). Purely **advisory** —
+  never blocks or asks, every path resolves to `allow`. Two independent, cheap single-pass stdin
+  checks bundled in one file: **(1) parallel-worktree discipline** (`Bash` only, gated on the cwd
+  looking like an agent worktree `.claude/worktrees/agent-*`) — catches `pnpm/npm/yarn install`
+  (full per-worktree reinstall; on Windows also EPERM under concurrent installs even with the
+  shared store), a test-runner invocation with no visible scoping flag (the full suite × number of
+  worktrees — observed costing tens of minutes per worker), and a bare `git status` (hangs for
+  minutes on a large `node_modules` even with a correct `.gitignore` — use `git diff --stat HEAD`
+  instead); it backs up with a harness-level nudge what `gsd-executor.md` only holds in prose (see
+  patches below). **(2) large-`Read` backstop** (any session, no worktree gate) — context-mode's
+  own one-shot nudge fires at most once per session then goes quiet; this backstop re-fires on
+  every large Read, covering what the one-shot missed. Heuristic, not exhaustive: false negatives
+  are expected and fine (a nudge, not a gate), any parse failure → silent passthrough.
 - **graphify-global-sync.mjs** (PostToolUse: `Bash`) + **hooks/lib/graphify-global-sync-run.mjs**
   (shared worker). After a `git commit` made by Claude via the Bash tool, in the background
   (detached, doesn't block the session), refreshes this project's entry in the cross-project
@@ -463,6 +592,17 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   **Limitation:** Claude Code hooks only see tool calls Claude itself makes — a manual
   `git commit`/`--amend` from a terminal or IDE is invisible to this hook in principle. That's
   what the native git hook below closes. Disable both: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
+- **gsd-config-patch.mjs** (PostToolUse: `Write|Edit|MultiEdit|Bash`). When a project has a
+  `.planning/config.json`, applies my personal defaults once: **tier 1** — overwrites ONLY
+  `model_profile`/`models`/`model_overrides`; **tier 2** — `DEFAULT_WORKFLOW_CONFIG` (nested keys
+  merge key-by-key, siblings stay untouched). After the first apply each tier is a permanent no-op
+  for that project (later manual edits win; state keys shared with `session-init.mjs`'s
+  `~/.claude/state/project-init.json`). It listens on all four tools, not `SessionStart`, because
+  gsd-core may create the config mid-session (via Claude's Write/Edit or a shelled-out script) —
+  so it checks filesystem state after the fact; a cheap no-op on unrelated tool calls. The full
+  per-key decision log (what's patched and what's deliberately NOT) lives in
+  `docs/gsd-config-defaults.md`. Toggles: `CLAUDE_GSD_CONFIG_AUTOPATCH=0` (both tiers),
+  `CLAUDE_GSD_CONFIG_AUTOPATCH_WORKFLOW=0` (tier 2 only).
 - **session-init.mjs** (SessionStart). Project bootstrap (see above — most steps are now
   every-session, idempotent) +
   an **independent** (not tied to the shared `firstTime`, so it also fires on projects
@@ -538,9 +678,83 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   subagent's own expanded transcript (`↓ to expand`) — plausibly a different render location
   for `systemMessage` (not the parent thread), not a contradiction of the finding above.
 
+The "background-task supervision" family. Shared idea: a hung background job NEVER exits, so
+`run_in_background` never re-invokes me — these turn a hang into a guaranteed completion event:
+
+- **bg-supervision-nudge.mjs** (PreToolUse: `Bash`). When a command is launched with
+  `run_in_background` but isn't wrapped in a supervisor (`supervise-bg.mjs`/`gh run watch`/
+  `timeout`) and doesn't look like a long-lived server (`dev`/`serve`/`start`/`--watch`/
+  `nodemon`/`vite`/`next dev` — a wall-clock watchdog would wrongly kill those), injects a
+  non-blocking reminder to wrap it in `bin/supervise-bg.mjs` (`--stale`/`--timeout`/`--label`) —
+  then a stall/timeout kills the job and returns a completion event. Fail-open: any error → exit 0.
+- **ci-watch-nudge.mjs** (PostToolUse: `Bash`). After a `git push` in a repo with GitHub Actions
+  (`.github/workflows` up the tree), reminds me to watch CI to completion with a backgrounded
+  `gh run watch <id> --exit-status` — which EXITS when CI finishes (pass/fail) and thereby
+  re-invokes me: "did CI pass?" becomes a guaranteed push event instead of something I must
+  remember to poll. The git-command parse honestly handles the value-flags `-C`/`-c` and chains
+  via `&&`/`||`/`;`/`|`. Fail-open.
+- **task-lifecycle-probe.mjs** (`TaskCreated` + `TaskCompleted`). Both events are in the public
+  docs, but whether they're wired in the current harness build is unconfirmed, so the hook does
+  NOT act on their (unknown) schema — it only **appends one line** per firing to
+  `~/.claude/logs/task-lifecycle-probe.log` (event name, payload keys, a truncated raw snapshot).
+  After a restart you inspect the log: if lines appear when a background task is created/completed,
+  the events really fire and their schema is captured — real `TaskCreated`-nudge / `TaskCompleted`
+  handling can be wired on top. Fail-open.
+
+Not a hook in the `hooks.*` sense (a different `settings.json` mechanism — the top-level
+`statusLine` key, not the `PreToolUse`/`PostToolUse`/event hooks above), but the same "a script
+from this bundle, driving your Claude Code" principle — here for findability:
+
+- **gsd-context-meter.mjs** (`statusLine.command`, registered — see "How the installer works"
+  above). Wraps gsd-core's own `gsd-statusline.js`: calls it as a black box and rewrites only the
+  context-window progress-bar segment into a textual token counter (`[420k/1000k] 42%`) — the
+  other segments (model/task/milestone bar) always match what the installed gsd-core actually
+  draws, without duplicating its logic. Key property: **it never breaks the statusline** — any
+  error (unreadable input JSON, the original script missing/crashed, metric computation failing)
+  falls back to the original's raw output or an empty string, never an exception out.
+
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or
 line-ending issues.
+
+---
+
+## Cross-tool gsd-core patches (agents, workflow, tool-grant)
+
+The files `~/.claude/agents/gsd-*.md` and `~/.claude/gsd-core/workflows/execute-phase.md` belong
+to the **separate `gsd-core` tool** (`npx gsd-core`), not this bundle. The set still maintains
+them — best-effort, idempotent, with versioned markers
+`<!-- gsd-patch:ID vN -->…<!-- /gsd-patch:ID -->` (content-aware, not presence-aware: on a patch
+version bump the stale text is replaced with the fresh one, not skipped). Three mechanisms with
+different write policies, deliberately:
+
+- **Silent, self-healing tool-grant sync** — `hooks/lib/context-mode-gsd-agents.mjs`. Adds the
+  context-mode MCP tool to the `tools:` frontmatter of `gsd-*.md` agents, but ONLY when the
+  context-mode plugin is actually installed and enabled (otherwise the agent would reference a
+  nonexistent MCP server). It's a single frontmatter line, so it's safe to run EVERY session —
+  including after gsd-core's own updater rewrites an agent and drops the tool again. Called from
+  `session-init.mjs` and from the CLI wrapper `sync-gsd-context-mode-tool.mjs` (invoked by
+  `setup.mjs` and `init-stack.py`).
+- **Review-gated content patches** — `hooks/lib/gsd-agent-patches.mjs` (30+ agents: routing to
+  context-mode tools, hardening `gsd-executor.md`/`gsd-debugger.md`, a guardrail against recursive
+  spawning) and `hooks/lib/gsd-workflow-patches.mjs` (the dispatch template in `execute-phase.md` —
+  decompose-aware choice of `gsd-executor` vs `gsd-executor-decomposing`). Unlike tool-grant this
+  is **not written silently**: the patches inject prose across dozens of files, so a human first
+  reviews what's about to land. `session-init.mjs` checks them **read-only** every session
+  (`checkGsd…Patches`) and prints a hint if something is pending. It's applied only by an explicit
+  human invocation: the **`/init-session`** command (`apply-gsd-agent-patches.mjs`, applies BOTH
+  sets — agent + workflow — at once) or **step 10 of `/init-stack`**. After a gsd-core update the
+  patches expectedly "fall off" (their files were rewritten by the native updater) —
+  `session-init` notices and offers `/init-session` again. The patches are tied to a specific
+  gsd-core version's format: markers verified against the installed **1.8.0** (on a future
+  release reformatting the block, a patch degrades to "no anchor found" — skipped, never a
+  corrupt write).
+- **Bundle release check** — `hooks/lib/config-update-check-run.mjs`. A detached worker that
+  `session-init.mjs` spawns and immediately unrefs (never blocks the session). It compares the SHA
+  in `~/.claude/state/bundle-manifest.json` (what `setup.mjs` last installed) against the current
+  master on GitHub (public API, no auth, nothing sent) and reports ONLY good news — that an update
+  is available; every failure (offline, rate-limit, corporate proxy) is swallowed silently, like
+  every other background bundle check.
 
 ---
 
@@ -554,6 +768,9 @@ The installer checks and suggests the install command for your OS:
   `winget`/`choco`/`scoop` · `brew`.
 - **gitleaks** — optional. Without it, the built-in regex still works. Install:
   `winget`/`choco` · release binary · `brew`.
+- **gh** (GitHub CLI) — optional, needed only by `ci-watch-nudge.mjs` for `gh run watch` after a
+  `git push`. Without it the nudge simply has no useful effect (the hook itself is fail-open,
+  breaks nothing). Install: `winget`/`choco`/`scoop` · `brew` · `apt/dnf`.
 
 ---
 
