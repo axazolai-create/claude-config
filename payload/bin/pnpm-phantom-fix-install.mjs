@@ -11,7 +11,17 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
-const SCAN_CMD = "node ~/.claude/bin/pnpm-phantom-scan.mjs";
+// Cross-shell bootstrap. The old `node ~/.claude/bin/pnpm-phantom-scan.mjs` form failed on
+// Windows because pnpm runs lifecycle scripts through cmd.exe, and cmd does NOT expand `~` —
+// node then couldn't find the module and the postinstall errored out. Here node
+// resolves $HOME itself via os.homedir(), so the same string works verbatim in cmd.exe and POSIX
+// sh alike. existsSync-guarded so it's a silent no-op on a machine without claude-config
+// installed (this postinstall is committed and runs for every clone/CI, not just this machine).
+// Written with only single-quoted JS strings and no $/backtick/% so the one-liner survives both
+// shells' quoting; spawnSync(node) directly — no nested shell, no stdin read — so it can't hang.
+const SCAN_CMD = `node -e "const p=require('path').join(require('os').homedir(),'.claude/bin/pnpm-phantom-scan.mjs');require('fs').existsSync(p)&&require('child_process').spawnSync(process.execPath,[p],{stdio:'inherit'})"`;
+// Recognizes a previously-wired tilde form so an already-broken project gets migrated in place.
+const OLD_TILDE_SCAN_RE = /node\s+~\/\.claude\/bin\/pnpm-phantom-scan\.mjs/;
 const HOOK_PATH = join(CLAUDE_DIR, "hooks", "pnpm-phantom-fix-hook.mjs");
 
 function findUp(start, filename) {
@@ -32,6 +42,12 @@ export function addPostinstall(pkg) {
   const obj = { ...(pkg || {}) };
   obj.scripts = { ...((pkg && pkg.scripts) || {}) };
   const cur = obj.scripts.postinstall || "";
+  // Migrate a previously-wired tilde form (broken under cmd.exe) to the cross-shell bootstrap.
+  if (OLD_TILDE_SCAN_RE.test(cur)) {
+    obj.scripts.postinstall = cur.replace(OLD_TILDE_SCAN_RE, SCAN_CMD);
+    return { changed: true, obj };
+  }
+  // Already on the current form, or some other scan reference is present — leave it alone.
   if (cur.includes("pnpm-phantom-scan.mjs")) return { changed: false, obj };
   obj.scripts.postinstall = cur ? `${cur} && ${SCAN_CMD}` : SCAN_CMD;
   return { changed: true, obj };

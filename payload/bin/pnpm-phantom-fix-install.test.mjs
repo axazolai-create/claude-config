@@ -34,6 +34,27 @@ test("addPostinstall adds when absent, appends when present, no-op when already 
   assert.equal(c.obj.scripts.postinstall, b.obj.scripts.postinstall);
 });
 
+test("addPostinstall emits a cmd-safe command — no bare ~ that cmd.exe can't expand", () => {
+  const { obj } = addPostinstall({ name: "x" });
+  const cmd = obj.scripts.postinstall;
+  // The whole failure mode: `~` is literal in cmd.exe. node must resolve home itself.
+  assert.ok(!/(^|\s)~\//.test(cmd), `postinstall must not contain a bare ~/ path: ${cmd}`);
+  assert.match(cmd, /os'\)\.homedir\(\)/);
+  assert.match(cmd, /existsSync/);
+});
+
+test("addPostinstall migrates a previously-wired broken tilde form in place", () => {
+  const legacy = { name: "x", scripts: { postinstall: "husky install && node ~/.claude/bin/pnpm-phantom-scan.mjs" } };
+  const m = addPostinstall(legacy);
+  assert.equal(m.changed, true);
+  assert.ok(!/~\/\.claude/.test(m.obj.scripts.postinstall), "tilde form must be gone after migration");
+  assert.match(m.obj.scripts.postinstall, /^husky install && /, "sibling scripts preserved");
+  assert.match(m.obj.scripts.postinstall, /homedir\(\)/, "replaced with the cross-shell bootstrap");
+  // And migration is a one-time change — re-running is a no-op.
+  const again = addPostinstall(m.obj);
+  assert.equal(again.changed, false);
+});
+
 test("addHookToSettings adds once and is idempotent", () => {
   const first = addHookToSettings({});
   assert.equal(first.changed, true);
