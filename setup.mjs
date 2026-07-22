@@ -743,7 +743,9 @@ async function main() {
     for (const ev of Object.keys(merged.hooks)) {
       if (ev in partialHooksForVariant) continue;
       merged.hooks[ev] = (merged.hooks[ev] || []).filter(e => !mentionsOurs(e));
-      if (!merged.hooks[ev].length) delete merged.hooks[ev]; // no leftover `Ev: []` (e.g. full->lite)
+      // NOTE: deliberately NOT deleting now-empty event arrays here - delete+later-readd
+      // moves the key to the object tail and breaks the byte-identical full->lite->full
+      // settings.json round trip. An empty `TaskCreated: []` on lite is harmless residue.
     }
 
     merged.permissions = merged.permissions || {};
