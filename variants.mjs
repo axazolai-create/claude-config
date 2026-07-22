@@ -8,10 +8,10 @@ export function loadVariants(repoRoot) {
 
 // Glob → anchored RegExp. Supports ** (any chars incl. /), * (any chars except /), literal rest.
 export function globToRe(glob) {
-  const esc = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, " ")     // placeholder so single-* rule doesn't eat it
+  const esc = glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "\x00")   // placeholder so single-* rule doesn't eat it
     .replace(/\*/g, "[^/]*")
-    .replace(/ /g, ".*");
+    .replace(/\x00/g, ".*");
   return new RegExp(`^${esc}$`);
 }
 

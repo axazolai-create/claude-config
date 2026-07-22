@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadVariants, globToRe, resolveVariant, filterPartialHooks } from "./variants.mjs";
+import { globToRe, resolveVariant } from "./variants.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -12,6 +11,9 @@ test("globToRe: * does not cross /, ** does", () => {
   assert.ok(!globToRe("hooks/*").test("hooks/lib/leanmode-rules.mjs"));
   assert.ok(globToRe("rules-src/**").test("rules-src/templates/next.AGENTS.md"));
   assert.ok(!globToRe("CLAUDE.md").test("payload-lite/CLAUDE.md"));
+  // literal space stays literal, does not become wildcard
+  assert.ok(!globToRe("a b*").test("aXb.mjs"));
+  assert.ok(globToRe("a b*").test("a bc.mjs"));
 });
 
 test("classification: every payload file is covered by include ∪ exclude (lite)", () => {
