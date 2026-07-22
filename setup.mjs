@@ -38,6 +38,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
+import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
@@ -247,9 +248,15 @@ async function proposeConfigDir() {
   if (suggestion) log(`  suggested path: ${suggestion}`);
   log(`  Enter a path to set CLAUDE_CONFIG_DIR${suggestion ? ", or 'y' to use the suggested path" : ""},`);
   log(`  or press Enter to NOT set it (leave unchanged).`);
-  const ans = await askRaw("  > ");
-  if (!ans) { log("  left unchanged (CLAUDE_CONFIG_DIR not set)."); return; }
-  const target = (suggestion && (ans === "y" || ans === "Y")) ? suggestion : ans;
+  let target = "";
+  for (;;) {
+    const ans = await askRaw("  > ");
+    if (!ans) { log("  left unchanged (CLAUDE_CONFIG_DIR not set)."); return; }
+    const cand = (suggestion && (ans === "y" || ans === "Y")) ? suggestion : ans;
+    const v = validateConfigDir(cand);
+    if (v.ok) { target = v.norm; break; }               // v.norm has normalized (fixed) slashes
+    log(`  ! ${v.error} - try again, or press Enter to skip.`);
+  }
   if (target === current) { log(`  already set to ${target} (no change).`); return; }
 
   if (platform() === "win32") {
