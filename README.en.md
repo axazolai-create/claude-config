@@ -21,6 +21,8 @@ After installing — **restart Claude Code** (hooks and settings are only read a
   - [Initial setup (new machine)](#initial-setup-new-machine)
   - [Reconfiguring](#reconfiguring)
 - [Bundle variants (full/lite)](#bundle-variants-fulllite)
+  - [Selecting a variant](#selecting-a-variant)
+  - [Switching variants](#switching-variants)
 - [Relocating `~/.claude` to another drive](#relocating-claude-to-another-drive)
 - [Additional subsystems (bin/commands/hooks)](#additional-subsystems-bincommandshooks)
 - [Why any of this (problem → solution)](#why-any-of-this-problem-solution)
@@ -911,7 +913,7 @@ the top level. Details: [PowerShell tool](https://code.claude.com/docs/en/tools-
 - `/hooks` — the list should show two PreToolUse entries and one SessionStart.
 - Ask Claude to edit your marked `CLAUDE.md` → should be denied.
 - In a repo with an unmarked `.planning/CLAUDE.md` and a `RISK_REGISTER.md`, the first session
-  should add the per-project exclude and a risk line.
+  should add the per-project exclude and a risk line. (full variant only, see "Bundle variants")
 - Stage a file with an obviously hardcoded key (a line like `api_key = "<16 hex chars>"`) and
   ask Claude to `git commit` → denied; a clean change goes through.
 
