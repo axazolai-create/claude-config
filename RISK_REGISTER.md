@@ -351,14 +351,21 @@
   `...@claude-plugins-official` ids) rather than read from a live `claude plugin list`; the
   documented fallback if it turns out wrong is the same shape, `gsd@claude-plugins-official`.
 - **Mitigation:** reconciliation never applies silently — `buildPluginPlan()`'s full plan
-  (install/uninstall/enable/disable per plugin) is always printed before any `claude plugin ...`
-  call, and every run (interactive or bulk-flag) requires confirmation (`apply N plugin
-  action(s)? (y/N)`) before executing; a wrong id surfaces immediately as a failed `claude plugin
-  install` (`plugin-install-FAILED`) rather than a silent no-op, and
-  `CLAUDE_SETUP_SKIP_PLUGINS=1` lets the rest of setup proceed while skipping execution entirely
-  if the printed plan looks wrong.
+  (install/uninstall/enable/disable per plugin) is always printed before anything runs. The two
+  execution paths differ deliberately (spec § 4): **interactive** run asks one aggregate y/N
+  (`apply N plugin action(s)? (y/N)`) and, on yes, executes everything, including `claude plugin
+  install/uninstall`. **Non-interactive / bulk-flag** (`--replace-all`/`--merge-all`) auto-applies
+  only the `enabledPlugins` JSON edits (local, additive, reversible — same trust model as the
+  rest of the settings-merge); `install`/`uninstall` are never auto-executed there — each is
+  printed as a ready-to-run manual command (`run manually: claude plugin <type> <id>`) and
+  recorded in the summary as `plugin-<type>-manual <id>`. **Dry-run / hermetic**
+  (`--dry-run`, or `CLAUDE_SETUP_SKIP_PLUGINS=1`) executes nothing at all. A wrong id surfaces
+  immediately as a failed `claude plugin install` (`plugin-install-FAILED`) on the interactive
+  path rather than a silent no-op.
 - **Residual:** until someone re-verifies `gsd`'s id against a live marketplace listing (`claude
   plugin list`/`claude plugin search` on a machine with `gsd` actually installed), a full-variant
-  install/switch that needs to newly *install* `gsd` could fail at that one step; everything else
-  in `setup.mjs` (file copy, hooks, settings merge) still completes. Accepted; revisit by
+  install/switch that needs to newly *install* `gsd` could fail at that one step on the
+  interactive path; everything else in `setup.mjs` (file copy, hooks, settings merge) still
+  completes. On the bulk path the same wrong id would instead surface as a printed manual command
+  the user runs by hand, catching the failure before it executes. Accepted; revisit by
   confirming the id on a machine that has `gsd` installed via the marketplace.
