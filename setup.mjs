@@ -743,6 +743,7 @@ async function main() {
     for (const ev of Object.keys(merged.hooks)) {
       if (ev in partialHooksForVariant) continue;
       merged.hooks[ev] = (merged.hooks[ev] || []).filter(e => !mentionsOurs(e));
+      if (!merged.hooks[ev].length) delete merged.hooks[ev]; // no leftover `Ev: []` (e.g. full->lite)
     }
 
     merged.permissions = merged.permissions || {};
@@ -832,20 +833,31 @@ async function main() {
     if (actions.length || notes.length) {
       log("\n--- plugin reconciliation ---");
       log(formatPlan(actions, notes));
-      let go = false;
+      // `go` = apply the enable/disable (enabledPlugins JSON) side. `execInstall` = ALSO actually
+      // run `claude plugin install/uninstall`. These are split on purpose (spec § 4): under BULK
+      // (non-interactive, e.g. the documented --replace-all bootstrap path) install/uninstall must
+      // never auto-execute - only the local, reversible enabledPlugins edit does. Interactive
+      // aggregate y/N still executes everything, unchanged.
+      let go = false, execInstall = false;
       if (DRY) log("  (dry-run: no plugin changes)");
       else if (process.env.CLAUDE_SETUP_SKIP_PLUGINS === "1") log("  (skipped: CLAUDE_SETUP_SKIP_PLUGINS=1)");
       else if (BULK === "skip") log("  (--skip-all: no plugin changes)");
-      else if (BULK) go = true;
-      else if (INTERACTIVE) { const a = await ask(`    apply ${actions.length} plugin action(s)? (y/N) > `); go = a[0] === "y"; }
+      else if (BULK) go = true;   // enabledPlugins edits only; install/uninstall printed as manual commands below
+      else if (INTERACTIVE) { const a = await ask(`    apply ${actions.length} plugin action(s)? (y/N) > `); go = execInstall = a[0] === "y"; }
       else log("  (non-interactive: printed only - re-run in a terminal or with --replace-all)");
       if (go) {
         const s = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
         s.enabledPlugins = s.enabledPlugins || {};
         for (const a of actions) {
           if (a.type === "install" || a.type === "uninstall") {
-            const r = spawnSync("claude", ["plugin", a.type, a.id], { encoding: "utf8", stdio: "inherit" });
-            summary.push(`${r.status === 0 ? "plugin-" + a.type : "plugin-" + a.type + "-FAILED"} ${a.id}`);
+            if (execInstall) {
+              const r = spawnSync("claude", ["plugin", a.type, a.id], { encoding: "utf8", stdio: "inherit" });
+              summary.push(`${r.status === 0 ? "plugin-" + a.type : "plugin-" + a.type + "-FAILED"} ${a.id}`);
+            } else {
+              log(`  run manually: claude plugin ${a.type} ${a.id}`);
+              summary.push(`plugin-${a.type}-manual ${a.id}`);
+            }
+            continue;
           }
           if (a.type === "enable") s.enabledPlugins[a.id] = true;
           if (a.type === "disable") delete s.enabledPlugins[a.id];
@@ -1009,9 +1021,9 @@ async function main() {
   log("");
   log("Step 2 - Open a Claude Code session in the project. On its FIRST session there,");
   log("         a SessionStart hook configures it AUTOMATICALLY - nothing to run:");
+  log("           - marks an unmarked root CLAUDE.md as curated (skipped if it looks");
+  log("             GSD-generated)");
   if (VARIANT === "full") {
-    log("           - marks an unmarked root CLAUDE.md as curated (skipped if it looks");
-    log("             GSD-generated)");
     log("           - excludes a GSD-owned .planning/CLAUDE.md from auto-load (per project)");
     log("           - appends the GSD-clobber risk to an existing RISK_REGISTER.md (every");
     log("             session, not just the first)");
