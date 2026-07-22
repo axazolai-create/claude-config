@@ -40,6 +40,7 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants } from "./variants.mjs";
+import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
@@ -811,6 +812,43 @@ async function main() {
       else {
         if (write(SETTINGS, mergedStr + "\n"))
           summary.push(`${act === "replace" ? "replaced" : "merged"} ${SETTINGS}${act === "replace" ? " (no backup - see diff above)" : " (additive; your keys preserved)"}`);
+      }
+    }
+  }
+
+  /* ---------- plugin reconciliation (spec § 4): only managedPlugins are ever touched ---------- */
+  {
+    const managed = loadVariants(REPO_ROOT).managedPlugins;
+    const cliProbe = spawnSync("claude", ["plugin", "list", "--json"], { encoding: "utf8" });
+    const installedIds = cliProbe.status === 0
+      ? (safe(() => JSON.parse(cliProbe.stdout)) || []).map((p) => p.id || p.name).filter(Boolean)
+      : null;   // CLI unavailable or errored -> fallback notes
+    const curSettings = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
+    const { actions, notes } = buildPluginPlan({
+      required: V.plugins, managed, enabledPlugins: curSettings.enabledPlugins, installedIds });
+    if (actions.length || notes.length) {
+      log("\n--- plugin reconciliation ---");
+      log(formatPlan(actions, notes));
+      let go = false;
+      if (DRY) log("  (dry-run: no plugin changes)");
+      else if (process.env.CLAUDE_SETUP_SKIP_PLUGINS === "1") log("  (skipped: CLAUDE_SETUP_SKIP_PLUGINS=1)");
+      else if (BULK === "skip") log("  (--skip-all: no plugin changes)");
+      else if (BULK) go = true;
+      else if (INTERACTIVE) { const a = await ask(`    apply ${actions.length} plugin action(s)? (y/N) > `); go = a[0] === "y"; }
+      else log("  (non-interactive: printed only - re-run in a terminal or with --replace-all)");
+      if (go) {
+        const s = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
+        s.enabledPlugins = s.enabledPlugins || {};
+        for (const a of actions) {
+          if (a.type === "install" || a.type === "uninstall") {
+            const r = spawnSync("claude", ["plugin", a.type, a.id], { encoding: "utf8", stdio: "inherit" });
+            summary.push(`${r.status === 0 ? "plugin-" + a.type : "plugin-" + a.type + "-FAILED"} ${a.id}`);
+          }
+          if (a.type === "enable") s.enabledPlugins[a.id] = true;
+          if (a.type === "disable") delete s.enabledPlugins[a.id];
+        }
+        if (write(SETTINGS, JSON.stringify(s, null, 2) + "\n")) summary.push(`updated  ${SETTINGS} (enabledPlugins reconciled)`);
+        log("  NOTE: restart Claude Code - enabledPlugins does not hot-reload.");
       }
     }
   }
