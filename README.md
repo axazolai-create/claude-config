@@ -20,6 +20,8 @@ node setup.mjs
 - [Порядок действий](#порядок-действий)
   - [Первичная настройка (новый ПК)](#первичная-настройка-новый-пк)
   - [Перенастройка](#перенастройка)
+- [Перенос `~/.claude` на другой диск](#перенос-claude-на-другой-диск)
+- [Дополнительные подсистемы (bin/команды/хуки)](#дополнительные-подсистемы-binкомандыхуки)
 - [Зачем это всё (проблема → решение)](#зачем-это-всё-проблема-решение)
 - [Что куда ставится](#что-куда-ставится)
 - [Как работает установщик (`setup.mjs`)](#как-работает-установщик-setupmjs)
@@ -123,6 +125,57 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 После ЛЮБОГО из этих шагов, где менялся `settings.json` (пользовательский или проектный) —
 **перезапусти Claude Code**: хуки, user-`CLAUDE.md` и `enabledPlugins` резолвятся только при
 старте, hot-reload нет.
+
+---
+
+## Перенос `~/.claude` на другой диск
+
+`setup.mjs` и все runtime-скрипты/хуки читают конфиг-директорию как
+`process.env.CLAUDE_CONFIG_DIR || ~/.claude`, поэтому набор можно установить в перенесённую
+директорию **без правки кода**. Два способа (не взаимоисключающие):
+
+- **Симлинк** `~/.claude` → целевая папка (`mklink /D`, разово нужен админ / Developer Mode).
+  Работает на файловом уровне → покрывает **всё**: CLI, VS Code-расширение, любой инструмент,
+  что хардкодит `~/.claude`. Более универсальный вариант.
+- **`CLAUDE_CONFIG_DIR`** (`setx CLAUDE_CONFIG_DIR "D:\claude-home"`, без админа). Официальная,
+  но **недокументированная и CLI-only** переменная: **VS Code-расширение её игнорирует**,
+  релокация плагинов не гарантирована (реестр хранит абсолютные пути → возможен reinstall).
+  Должна быть persistent и присутствовать при запуске Claude Code.
+
+`setup.mjs` при старте интерактивно предлагает установить/изменить `CLAUDE_CONFIG_DIR`
+(по умолчанию — target существующего симлинка); **Enter = не ставить**. Введённый путь
+валидируется (нормализация «косых»; отклоняются относительные пути, неверный синтаксис,
+сетевые/съёмные/CD-диски, несуществующий диск, симлинк в пути) — при ошибке переспрашивает.
+Симлинк при установке переменной **не удаляется** — остаётся фолбэком.
+
+> Все `.mjs` используют symlink-safe entry-point guard: под симлинкнутым `~/.claude` Node
+> realpath'ит `import.meta.url`, а `argv[1]` — нет, поэтому наивный guard молча не запускал бы
+> `main()` (хук/скрипт «мёртв»). Guard сверяет raw **или** realpath'нутый `argv[1]`.
+
+---
+
+## Дополнительные подсистемы (bin/команды/хуки)
+
+Помимо базовой защиты набор ставит несколько независимых инструментов (каждый со своими
+юнит-тестами `*.test.mjs`, гоняются `node --test`):
+
+- **pnpm phantom-dependency guard** — команда `/pnpm-phantom-fix` + `bin/pnpm-phantom-scan.mjs`
+  + PostToolUse-хук: находит undeclared-but-imported пакеты (напр. `@hookform/resolvers`→`zod`)
+  и additively объявляет их optional-peer в `packageExtensions`, чтобы `enableGlobalVirtualStore`
+  их не ломал. Ставится per-project через `/init-stack` (только pnpm).
+- **Turbopack × global-virtual-store** — `bin/turbopack-gvs-check.mjs` (`/init-stack`, только
+  Next+pnpm): детектит структурный конфликт out-of-tree стора с Turbopack (чанки `404` после
+  hard-reload) и печатает рецепт (sibling-store + `turbopack.root`). Read-only, ничего не правит.
+- **Супервизия фоновых задач** — `bin/supervise-bg.mjs` оборачивает фоновую команду в
+  timeout + staleness-watchdog (зависание → exit-событие, а не тихий столл) + PreToolUse-нудж
+  `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (после `git push` — `gh run watch`) +
+  probe `task-lifecycle-probe` (проверка `TaskCreated`/`TaskCompleted`).
+- **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
+  выгрузка кросс-проектного графа в Neo4j (подробнее — раздел про graphify ниже).
+
+Права в `settings.partial.json` нормализуются при мёрже: `Write(x)`/`MultiEdit(x)` → `Edit(x)`
+(+ dedup), т.к. Claude Code теперь матчит все file-tools через `Edit(path)`, а `MultiEdit` —
+больше не инструмент.
 
 ---
 
