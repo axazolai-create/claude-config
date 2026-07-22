@@ -7,6 +7,19 @@ import { globToRe, resolveVariant } from "./variants.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
+// Static import specifiers (relative only). Dynamic import() is intentionally NOT matched:
+// full-only code loads excluded libs via gated dynamic imports, which is legal in lite.
+// Matches: import "specifier" or import ... from "specifier", including multiline forms.
+function staticImportRels(text) {
+  const out = [];
+  // Pattern: import keyword + anything (including newlines) + quoted specifier + semicolon.
+  // The semicolon ensures we don't match quoted strings in other statements (e.g., const x = "...").
+  for (const m of text.matchAll(/^[ \t]*import\s[\s\S]*?["'](\.[^"']+)["'];/gm)) {
+    out.push(m[1]);
+  }
+  return out;
+}
+
 test("globToRe: * does not cross /, ** does", () => {
   assert.ok(globToRe("hooks/lib/leanmode-*").test("hooks/lib/leanmode-rules.mjs"));
   assert.ok(!globToRe("hooks/*").test("hooks/lib/leanmode-rules.mjs"));
@@ -62,14 +75,29 @@ test("purity: resolved lite rules-src + overlay docs carry no forbidden tokens",
 test("import graph: no static import in the lite set resolves to an excluded file", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   const relSet = new Set(v.rels);
+
+  // Regression: multiline imports must be detected (e.g., payload/hooks/token-usage-log.mjs)
+  const tuLog = readFileSync(v.srcFor("hooks/token-usage-log.mjs"), "utf8");
+  assert.ok(
+    staticImportRels(tuLog).includes("./lib/token-usage-shared.mjs"),
+    "multiline import form must be detected"
+  );
+
+  // Sanity check: dynamic import() must NOT be matched
+  assert.deepEqual(
+    staticImportRels('import {\n a,\n} from "./x.mjs";\nconst y = await import("./z.mjs");'),
+    ["./x.mjs"],
+    "dynamic import() must not be matched"
+  );
+
   const bad = [];
   for (const rel of v.rels) {
     if (!rel.endsWith(".mjs")) continue;
     const text = readFileSync(v.srcFor(rel), "utf8");
-    // static imports only: `import ... from "./x.mjs"` / `import "./x.mjs"` at line start
-    for (const m of text.matchAll(/^\s*import\s+(?:[^"'\n]+\s+from\s+)?["'](\.[^"']+)["']/gm)) {
-      const target = new URL(m[1], `file:///${rel}`).pathname.replace(/^\//, "");
-      if (!relSet.has(target)) bad.push(`${rel} -> ${m[1]}`);
+    // static imports only: handles multiline forms via staticImportRels
+    for (const specifier of staticImportRels(text)) {
+      const target = new URL(specifier, `file:///${rel}`).pathname.replace(/^\//, "");
+      if (!relSet.has(target)) bad.push(`${rel} -> ${specifier}`);
     }
   }
   assert.deepEqual(bad, [], bad.join("\n"));
