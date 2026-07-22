@@ -5,6 +5,8 @@
 // completion event instead of an invisible stall. Never blocks. Fail-open: any error => exit 0.
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 // Already bounded/supervised — no nudge needed.
 const SUPERVISED = [/supervise-bg\.mjs/, /\bgh\s+run\s+watch\b/, /\btimeout\s+\d/];
@@ -25,9 +27,13 @@ function main() {
   try { d = JSON.parse(readFileSync(0, "utf8") || "{}"); } catch { return; }
   const { nudge } = shouldSuperviseBg(d.tool_input || {});
   if (!nudge) return;
+  // Absolute, forward-slash path — a literal `~` is NOT expanded for native-command arguments in
+  // PowerShell (or cmd.exe), and the config dir may be relocated via CLAUDE_CONFIG_DIR; the model
+  // may paste this into any shell, so the hook resolves the path itself.
+  const wrapper = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "bin", "supervise-bg.mjs").replace(/\\/g, "/");
   const msg =
     "This background job has no hang guard. Wrap bounded jobs so a stall becomes a completion " +
-    "event: node ~/.claude/bin/supervise-bg.mjs --stale 300 --timeout 1800 --label <name> -- '<command>'. " +
+    `event: node "${wrapper}" --stale 300 --timeout 1800 --label <name> -- '<command>'. ` +
     "(A hung job never exits, so run_in_background never re-invokes me — the wrapper's timeout/staleness " +
     "watchdog kills it and exits, restoring the notification.)";
   process.stdout.write(JSON.stringify({
