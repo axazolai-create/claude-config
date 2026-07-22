@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { globToRe, resolveVariant } from "./variants.mjs";
@@ -38,4 +39,22 @@ test("full variant is identity over payload/", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
   assert.equal(v.excludedSet.size, 0);
+});
+
+const FORBIDDEN = [
+  "gsd", "init-stack.py", "setting-templates", "neo4j", "pnpm-phantom",
+  "db-live-access", "ci-watch", "schedulewakeup", "stack-markers",
+  "worktree-executor-discipline", "bg-supervision", "supervise-bg",
+  "task-lifecycle-probe", "init-mcp",
+];
+
+test("purity: resolved lite rules-src + overlay docs carry no forbidden tokens", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  const scope = v.rels.filter((r) => r.startsWith("rules-src/") || r === "CLAUDE.md" || r === "commands/init-stack.md");
+  const bad = [];
+  for (const rel of scope) {
+    const text = readFileSync(v.srcFor(rel), "utf8").toLowerCase();
+    for (const tok of FORBIDDEN) if (text.includes(tok)) bad.push(`${rel}: ${tok}`);
+  }
+  assert.deepEqual(bad, [], bad.join("\n"));
 });
