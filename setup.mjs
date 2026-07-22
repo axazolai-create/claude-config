@@ -819,10 +819,11 @@ async function main() {
   /* ---------- plugin reconciliation (spec § 4): only managedPlugins are ever touched ---------- */
   {
     const managed = loadVariants(REPO_ROOT).managedPlugins;
-    const cliProbe = spawnSync("claude", ["plugin", "list", "--json"], { encoding: "utf8" });
-    const installedIds = cliProbe.status === 0
-      ? (safe(() => JSON.parse(cliProbe.stdout)) || []).map((p) => p.id || p.name).filter(Boolean)
-      : null;   // CLI unavailable or errored -> fallback notes
+    const cliProbe = safe(() => spawnSync("claude", ["plugin", "list", "--json"], { encoding: "utf8" }));
+    const parsedList = cliProbe && cliProbe.status === 0 ? safe(() => JSON.parse(cliProbe.stdout)) : undefined;
+    const installedIds = Array.isArray(parsedList)
+      ? parsedList.map((p) => p.id || p.name).filter(Boolean)
+      : null;   // CLI unavailable, errored, or emitted non-array/invalid JSON -> fallback notes
     const curSettings = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
     const { actions, notes } = buildPluginPlan({
       required: V.plugins, managed, enabledPlugins: curSettings.enabledPlugins, installedIds });
