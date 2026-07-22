@@ -8,6 +8,7 @@ export function buildPluginPlan({ required, managed, enabledPlugins, installedId
     if (!id) continue;
     if (cli && !installedIds.includes(id)) actions.push({ type: "install", name, id });
     else if (!cli && !(id in enabled)) notes.push(`if not installed yet, run: claude plugin install ${id}`);
+    else if (!cli) notes.push(`cannot verify install of ${id} (claude CLI unavailable) - if missing, run: claude plugin install ${id}`);
     if (!(id in enabled)) actions.push({ type: "enable", name, id });
   }
   for (const name of Object.keys(managed)) {

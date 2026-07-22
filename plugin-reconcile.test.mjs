@@ -40,3 +40,18 @@ test("unknown user plugins untouched; empty enabledPlugins object preserved sema
     installedIds: ["my-own@x", "superpowers@m", "cm@m", "c7@m"] });
   assert.deepEqual(actions, []);   // my-own@x invisible; nothing to do
 });
+
+test("CLI unavailable: enabled-but-unverifiable required plugin still gets a note", () => {
+  const { actions, notes } = buildPluginPlan({ required: LITE, managed: MANAGED,
+    enabledPlugins: { "superpowers@m": true, "cm@m": true, "c7@m": true }, installedIds: null });
+  assert.deepEqual(actions, []);   // everything enabled, nothing to edit
+  assert.equal(notes.filter((n) => n.includes("cannot verify install")).length, 3);
+});
+
+test("required name absent from managed is skipped safely", () => {
+  const { actions, notes } = buildPluginPlan({ required: ["ghost", ...LITE], managed: MANAGED,
+    enabledPlugins: { "superpowers@m": true, "cm@m": true, "c7@m": true },
+    installedIds: ["superpowers@m", "cm@m", "c7@m"] });
+  assert.ok(actions.every((a) => a.name !== "ghost"));
+  assert.ok(notes.every((n) => !n.includes("ghost")));
+});
