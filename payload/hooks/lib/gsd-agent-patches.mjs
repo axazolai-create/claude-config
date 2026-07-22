@@ -106,11 +106,28 @@ function applyOrUpgradePatch(content, patch) {
 
 /* ---------- block bodies ---------- */
 
+// v1 body, kept verbatim ONLY for legacyMatch/priorBlocks migration of a pre-v2 application.
+const CONTEXT_MODE_ROUTING_BLOCK_V1 = `<context_mode_routing>
+Route exploratory / data-derivation Bash and Read calls (JSON parsing, path/config lookups,
+file summarization) through \`ctx_batch_execute\` / \`ctx_execute\` / \`ctx_execute_file\` instead
+of raw \`Bash\`/\`Read\` when the result would otherwise dump large or intermediate output into
+context.
+
+Do NOT reroute \`gsd_run()\` / \`gsd-tools.cjs\` calls (gate checks, commit validation, drift
+precheck, worktree checks) through the sandbox — GSD drives its own control flow off their
+literal exit codes/stdout, and the sandbox would strip that signal.
+</context_mode_routing>`;
+
 const CONTEXT_MODE_ROUTING_BLOCK = `<context_mode_routing>
 Route exploratory / data-derivation Bash and Read calls (JSON parsing, path/config lookups,
 file summarization) through \`ctx_batch_execute\` / \`ctx_execute\` / \`ctx_execute_file\` instead
 of raw \`Bash\`/\`Read\` when the result would otherwise dump large or intermediate output into
 context.
+
+If a \`ctx_*\` (or any other MCP) tool errors as not-found / invalid parameters, its schema is
+deferred — load it once via ToolSearch (\`select:<full tool name>\`, e.g.
+\`select:mcp__plugin_context-mode_context-mode__ctx_execute_file\`) and retry. Never fall back
+to the raw tool just because the first call errored.
 
 Do NOT reroute \`gsd_run()\` / \`gsd-tools.cjs\` calls (gate checks, commit validation, drift
 precheck, worktree checks) through the sandbox — GSD drives its own control flow off their
@@ -412,7 +429,13 @@ export const PATCHES = [
   },
   {
     id: "context-mode-routing-block",
-    version: 1,
+    version: 2,
+    // v2 (2026-07-22): added the deferred-schema recovery paragraph. Observed live: an agent
+    // obeyed "use ctx_execute_file instead", called it directly, got "Invalid tool parameters"
+    // (deferred MCP schema, callable only after ToolSearch loads it) and had no path forward -
+    // subagents never see the user-scope CLAUDE.md where that recovery rule lives, so the block
+    // itself must carry it. One mention per file is enough: executor's read-discipline block
+    // (same file, same anchor) deliberately does NOT repeat it.
     // Same file set + same exclusion reasoning as context-mode-gsd-agents.mjs's tool grant
     // (EXCLUDED_AGENTS there: narrow single-purpose agents that don't do large-output
     // research/analysis work) - the routing prose is meaningless without the tool grant, and
@@ -422,6 +445,7 @@ export const PATCHES = [
     appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md")
       && !EXCLUDED_AGENTS.has(name) && isContextModeActive(claudeDir),
     block: CONTEXT_MODE_ROUTING_BLOCK,
+    priorBlocks: [CONTEXT_MODE_ROUTING_BLOCK_V1],
     insertAnchor: "</role>", insertMode: "after",
   },
   {
