@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { globToRe, resolveVariant } from "./variants.mjs";
+import { globToRe, resolveVariant, filterPartialHooks } from "./variants.mjs";
+import { join } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -101,4 +102,21 @@ test("import graph: no static import in the lite set resolves to an excluded fil
     }
   }
   assert.deepEqual(bad, [], bad.join("\n"));
+});
+
+test("hook registrations: lite keeps exactly the 6 lite hooks and no statusLine", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
+  const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
+  const filtered = filterPartialHooks(partial.hooks, basenames);
+  const scripts = new Set();
+  for (const entries of Object.values(filtered))
+    for (const e of entries) for (const h of (e.hooks || []))
+      for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
+  assert.deepEqual([...scripts].sort(), [
+    "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "leanmode-subagent.mjs",
+    "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
+  ]);
+  // statusLine script must NOT be in the lite set (Task 5 uses this fact to drop statusLine)
+  assert.ok(!basenames.has("gsd-context-meter.mjs"));
 });

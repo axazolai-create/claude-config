@@ -39,6 +39,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
+import { resolveVariant, filterPartialHooks, loadVariants } from "./variants.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
@@ -69,10 +70,17 @@ const BULK = argv.has("--replace-all") ? "replace"
           : argv.has("--merge-all")   ? "merge"
           : argv.has("--skip-all")    ? "skip" : null;
 const DRY = argv.has("--dry-run");
+const VARIANT_ARG = (() => {
+  const a = [...argv].find((x) => x.startsWith("--variant="));
+  return a ? a.slice("--variant=".length) : null;
+})();
 const ENABLE_UPDATE_CHECK_FLAG = argv.has("--enable-update-check");
 const INTERACTIVE = !BULK && process.stdin.isTTY;
 const MD = argv.has("--md");
 const COLOR = !MD && !argv.has("--no-color") && !process.env.NO_COLOR && process.stdout.isTTY;
+// Resolved variant, hoisted to module scope so pruneStale()/settings-merge (later tasks) can see
+// them without threading through function args. Assigned (not re-declared) inside main().
+let VARIANT = null, V = null;
 
 const log = (s = "") => process.stdout.write(s + "\n");
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
@@ -294,9 +302,9 @@ function* walkBundle(dir, rel = "") {
 
 const summary = [];
 const manifestNow = [];   // {rel, hash} for every file THIS bundle ships - persisted for next run's prune
-async function placeFile(rel) {
+async function placeFile(rel, srcPath) {
   const parts = rel.split("/");
-  const src = join(SRC, ...parts);
+  const src = srcPath || join(SRC, ...parts);
   const dst = join(CDIR, ...parts);
   const srcContent = read(src);
   if (srcContent === undefined) { summary.push(`MISSING in bundle: ${rel}`); return; }
@@ -517,13 +525,33 @@ async function resolveInstalledSha() {
 
 async function main() {
   await proposeConfigDir();
+
+  // ---------- variant selection (spec § 9) ----------
+  const oldManifestEarly = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8")));
+  const installedVariant = oldManifestEarly ? (oldManifestEarly.variant || "full") : null;
+  VARIANT = VARIANT_ARG;
+  if (VARIANT && !loadVariants(REPO_ROOT).variants[VARIANT]) {
+    log(`Unknown --variant=${VARIANT}. Known: ${Object.keys(loadVariants(REPO_ROOT).variants).join(", ")}`);
+    process.exit(1);
+  }
+  if (!VARIANT && INTERACTIVE) {
+    const def = installedVariant || "full";
+    const a = (await ask(`  bundle variant [full/lite] (Enter = ${def}) > `)).trim().toLowerCase();
+    VARIANT = a === "lite" || a === "full" ? a : def;
+  }
+  if (!VARIANT) VARIANT = installedVariant || "full";   // non-TTY: detected, or full on fresh
+  V = resolveVariant({ repoRoot: REPO_ROOT, variant: VARIANT });
+  if (installedVariant && installedVariant !== VARIANT)
+    log(`Switching variant: ${installedVariant} -> ${VARIANT} (surplus files listed for removal below)`);
+  log(`Variant: ${VARIANT} (${V.rels.length} files)`);
+
   log(`Installing into ${CDIR}${DRY ? "  [DRY RUN]" : ""}`);
   mkdirSync(CDIR, { recursive: true });
 
-  // Mirror the WHOLE archive tree into ~/.claude (minus installer-meta). This means any files or
-  // folders you add to the bundle are copied too: new ones are created, existing .mjs are
+  // Mirror the resolved variant's file set into ~/.claude (minus installer-meta). This means any
+  // files or folders the variant covers are copied too: new ones are created, existing .mjs are
   // refreshed, other existing files are conflict-checked via diff.
-  for (const rel of walkBundle(SRC)) await placeFile(rel);
+  for (const rel of V.rels) await placeFile(rel, V.srcFor(rel));
 
   // best-effort exec bits on POSIX for every script we copied (ignored on Windows)
   if (platform() !== "win32" && !DRY)
@@ -857,7 +885,7 @@ async function main() {
   await pruneStale();
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
-    const manifestPayload = { files: manifestNow };
+    const manifestPayload = { files: manifestNow, variant: VARIANT };
     if (installedSha) {
       manifestPayload.installedSha = installedSha;
       manifestPayload.installedAt = new Date().toISOString();
