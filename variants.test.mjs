@@ -58,3 +58,19 @@ test("purity: resolved lite rules-src + overlay docs carry no forbidden tokens",
   }
   assert.deepEqual(bad, [], bad.join("\n"));
 });
+
+test("import graph: no static import in the lite set resolves to an excluded file", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  const relSet = new Set(v.rels);
+  const bad = [];
+  for (const rel of v.rels) {
+    if (!rel.endsWith(".mjs")) continue;
+    const text = readFileSync(v.srcFor(rel), "utf8");
+    // static imports only: `import ... from "./x.mjs"` / `import "./x.mjs"` at line start
+    for (const m of text.matchAll(/^\s*import\s+(?:[^"'\n]+\s+from\s+)?["'](\.[^"']+)["']/gm)) {
+      const target = new URL(m[1], `file:///${rel}`).pathname.replace(/^\//, "");
+      if (!relSet.has(target)) bad.push(`${rel} -> ${m[1]}`);
+    }
+  }
+  assert.deepEqual(bad, [], bad.join("\n"));
+});

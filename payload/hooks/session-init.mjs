@@ -43,11 +43,16 @@ import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
-import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
-import { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./lib/gsd-agent-patches.mjs";
-import { checkGsdWorkflowPatches } from "./lib/gsd-workflow-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+
+// Bundle variant (spec: docs/superpowers/specs/2026-07-22-lite-variant-design.md § 5).
+// Manifest without the field = pre-variant bundle = full. Lite skips every GSD step below.
+const VARIANT = (() => {
+  try { return JSON.parse(readFileSync(join(CLAUDE_DIR, "state", "bundle-manifest.json"), "utf8")).variant || "full"; }
+  catch { return "full"; }
+})();
+const FULL = VARIANT === "full";
 
 const MARKER = "CURATED:NOEDIT";
 // Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
@@ -148,7 +153,7 @@ const gsdProject = existsSync(join(root, ".planning"));
 // ALWAYS (every session, idempotent): ensure the GSD risk is in the shallowest register(s).
 // Only spawns add-risk.mjs when a register actually lacks the entry, so steady state is cheap.
 let riskAdded = 0;
-if (gsdProject && pendingRegisters(root).length) {
+if (FULL && gsdProject && pendingRegisters(root).length) {
   const addRisk = join(dirname(fileURLToPath(import.meta.url)), "..", "add-risk.mjs");
   if (existsSync(addRisk)) {
     const r = spawnSync(process.execPath, [addRisk, "--no-create", "--root", root], { encoding: "utf8" });
@@ -197,7 +202,7 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && process.env.CLAUDE_GRAPHIFY_
 
 // 1) GSD-owned (unmarked) .planning/CLAUDE.md -> per-project exclude
 const planningClaude = join(root, ".planning", "CLAUDE.md");
-if (existsSync(planningClaude) && !isMarked(planningClaude)) {
+if (FULL && existsSync(planningClaude) && !isMarked(planningClaude)) {
   const sp = join(root, ".claude", "settings.json");
   const s = existsSync(sp) ? safe(() => JSON.parse(readFileSync(sp, "utf8"))) : {};
   if (s) {
@@ -365,7 +370,7 @@ if (process.env.CLAUDE_STACK_RULES !== "0") {
 // EVERY session on purpose: git init / a DB dependency can appear later, and a one-time flag would
 // miss it - instead it stops on its own once the matching MCP is configured. Web search is
 // on-demand (no passive signal) - mentioned as an option. Opt out: CLAUDE_MCP_SUGGEST=0.
-if (process.env.CLAUDE_MCP_SUGGEST !== "0") {
+if (FULL && process.env.CLAUDE_MCP_SUGGEST !== "0") {
   const rd = (p) => safe(() => readFileSync(join(root, p), "utf8")) || "";
   const cfg = (rd(".claude/settings.json") + "\n" + rd(".mcp.json")).toLowerCase();  // already-wired MCPs
   const has = (k) => cfg.includes(`"${k}"`);
@@ -444,62 +449,76 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
   }
 }
 
-// ---- gsd-* agents: add the context-mode MCP tool, only if that plugin is active ----
-// Machine-wide, not project-scoped (gsd-* agents live in ~/.claude/agents/, owned by the
-// separate gsd-core tool - not this bundle), so it runs regardless of whether THIS session's
-// project is a GSD project. Every session, idempotent and self-healing: if context-mode isn't
-// installed/enabled it's a no-op, and if gsd-core's own updater later rewrites an agent file and
-// drops the tool, this puts it back on the next session. Opt out: CLAUDE_GSD_CONTEXTMODE_SYNC=0.
-if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
-  const claudeDir = join(CLAUDE_DIR);
-  const r = safe(() => syncGsdAgentsContextMode({ claudeDir }));
-  if (r && r.active && r.updated.length)
-    actions.push(`added context-mode MCP tool to ${r.updated.length} gsd-* agent(s)`);
-}
+// ---- gsd-* agents: context-mode tool sync + pending content-patch checks ----
+// FULL-only: the lite variant deletes hooks/lib/context-mode-gsd-agents.mjs,
+// hooks/lib/gsd-agent-patches.mjs and hooks/lib/gsd-workflow-patches.mjs from disk (variants.mjs),
+// so these are dynamic imports gated behind FULL, wrapped in try/catch so a half-installed
+// state (e.g. mid-upgrade) skips the step instead of crashing the SessionStart hook.
+if (FULL) {
+  try {
+    const { syncGsdAgentsContextMode } = await import("./lib/context-mode-gsd-agents.mjs");
+    const { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } =
+      await import("./lib/gsd-agent-patches.mjs");
+    const { checkGsdWorkflowPatches } = await import("./lib/gsd-workflow-patches.mjs");
 
-// ---- gsd-* agents: check (never write) for pending content patches ----
-// Deliberately CHECK-ONLY, unlike the tool-grant sync just above: hooks/lib/gsd-agent-patches.mjs
-// injects prose across 30+ files, so it's review-gated behind an explicit invocation (step 10 of
-// payload/commands/init-stack.md, or standalone via /init-session) instead of silently
-// rewriting every session. Every session, idempotent - cheap (file reads only), stops
-// surfacing on its own once the patches have been applied and nothing is pending.
-// Opt out: CLAUDE_GSD_AGENT_PATCHES_CHECK=0.
-if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
-  const claudeDir = join(CLAUDE_DIR);
-  const pending = safe(() => checkGsdAgentPatches({ claudeDir })) || {};
-  const files = Object.keys(pending);
-  if (files.length)
-    notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
-      `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
-      `(step 10 applies these) or /init-session to apply.`);
+    // ---- gsd-* agents: add the context-mode MCP tool, only if that plugin is active ----
+    // Machine-wide, not project-scoped (gsd-* agents live in ~/.claude/agents/, owned by the
+    // separate gsd-core tool - not this bundle), so it runs regardless of whether THIS session's
+    // project is a GSD project. Every session, idempotent and self-healing: if context-mode isn't
+    // installed/enabled it's a no-op, and if gsd-core's own updater later rewrites an agent file
+    // and drops the tool, this puts it back on the next session. Opt out: CLAUDE_GSD_CONTEXTMODE_SYNC=0.
+    if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
+      const claudeDir = join(CLAUDE_DIR);
+      const r = safe(() => syncGsdAgentsContextMode({ claudeDir }));
+      if (r && r.active && r.updated.length)
+        actions.push(`added context-mode MCP tool to ${r.updated.length} gsd-* agent(s)`);
+    }
 
-  // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
-  // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale
-  // content nothing else ever cleans up, since gsd-* agents aren't rewritten by this bundle.
-  const retiredPending = safe(() => checkRetiredGsdAgentPatches({ claudeDir })) || {};
-  const retiredFiles = Object.keys(retiredPending);
-  if (retiredFiles.length)
-    notes.push(`gsd-* agent file(s) still carry text from ${retiredFiles.length} retired patch ` +
-      `target(s) (${retiredFiles.slice(0, 5).join(", ")}${retiredFiles.length > 5 ? ", ..." : ""}) ` +
-      `- run /init-stack (step 10) or /init-session to clean up.`);
+    // ---- gsd-* agents: check (never write) for pending content patches ----
+    // Deliberately CHECK-ONLY, unlike the tool-grant sync just above: hooks/lib/gsd-agent-patches.mjs
+    // injects prose across 30+ files, so it's review-gated behind an explicit invocation (step 10 of
+    // payload/commands/init-stack.md, or standalone via /init-session) instead of silently
+    // rewriting every session. Every session, idempotent - cheap (file reads only), stops
+    // surfacing on its own once the patches have been applied and nothing is pending.
+    // Opt out: CLAUDE_GSD_AGENT_PATCHES_CHECK=0.
+    if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
+      const claudeDir = join(CLAUDE_DIR);
+      const pending = safe(() => checkGsdAgentPatches({ claudeDir })) || {};
+      const files = Object.keys(pending);
+      if (files.length)
+        notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
+          `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
+          `(step 10 applies these) or /init-session to apply.`);
 
-  // Same check-only/apply-gated split, for gsd-core's own execute-phase.md dispatch template
-  // (not an agents/*.md file, so tracked separately - see gsd-workflow-patches.mjs).
-  const wfPending = safe(() => checkGsdWorkflowPatches({ claudeDir })) || {};
-  const wfFiles = Object.keys(wfPending);
-  if (wfFiles.length)
-    notes.push(`gsd-core workflow patch pending for ${wfFiles.join(", ")} ` +
-      `(routes verify_isolated="true" plans to gsd-executor-decomposing) - run /init-stack ` +
-      `(step 10 applies this) or /init-session to apply.`);
+      // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
+      // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale
+      // content nothing else ever cleans up, since gsd-* agents aren't rewritten by this bundle.
+      const retiredPending = safe(() => checkRetiredGsdAgentPatches({ claudeDir })) || {};
+      const retiredFiles = Object.keys(retiredPending);
+      if (retiredFiles.length)
+        notes.push(`gsd-* agent file(s) still carry text from ${retiredFiles.length} retired patch ` +
+          `target(s) (${retiredFiles.slice(0, 5).join(", ")}${retiredFiles.length > 5 ? ", ..." : ""}) ` +
+          `- run /init-stack (step 10) or /init-session to clean up.`);
 
-  // Standing invariant, not a pending patch: an agent granting `Agent` with no anti-recursion
-  // guardrail caused refusals/silent stuck states in the 2026-07 recursive-delegation test
-  // series (see gsd.md's "Depth boundary" section). No auto-fix - flag for human review.
-  const unguarded = safe(() => checkRecursiveAgentSpawnGuardrail({ claudeDir })) || [];
-  if (unguarded.length)
-    notes.push(`WARNING: ${unguarded.length} gsd-* agent(s) grant the Agent tool with no ` +
-      `anti-recursion guardrail (${unguarded.slice(0, 5).join(", ")}${unguarded.length > 5 ? ", ..." : ""}) ` +
-      `- review by hand before shipping; this combination is a known refusal/stuck-state trigger.`);
+      // Same check-only/apply-gated split, for gsd-core's own execute-phase.md dispatch template
+      // (not an agents/*.md file, so tracked separately - see gsd-workflow-patches.mjs).
+      const wfPending = safe(() => checkGsdWorkflowPatches({ claudeDir })) || {};
+      const wfFiles = Object.keys(wfPending);
+      if (wfFiles.length)
+        notes.push(`gsd-core workflow patch pending for ${wfFiles.join(", ")} ` +
+          `(routes verify_isolated="true" plans to gsd-executor-decomposing) - run /init-stack ` +
+          `(step 10 applies this) or /init-session to apply.`);
+
+      // Standing invariant, not a pending patch: an agent granting `Agent` with no anti-recursion
+      // guardrail caused refusals/silent stuck states in the 2026-07 recursive-delegation test
+      // series (see gsd.md's "Depth boundary" section). No auto-fix - flag for human review.
+      const unguarded = safe(() => checkRecursiveAgentSpawnGuardrail({ claudeDir })) || [];
+      if (unguarded.length)
+        notes.push(`WARNING: ${unguarded.length} gsd-* agent(s) grant the Agent tool with no ` +
+          `anti-recursion guardrail (${unguarded.slice(0, 5).join(", ")}${unguarded.length > 5 ? ", ..." : ""}) ` +
+          `- review by hand before shipping; this combination is a known refusal/stuck-state trigger.`);
+    }
+  } catch { /* half-install: skip GSD maintenance, never block the session */ }
 }
 
 // ---- token-usage global log pruning: SessionStart only ----
