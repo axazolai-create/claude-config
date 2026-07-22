@@ -31,6 +31,12 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/bg-supervision-nudge.mjs"] }
         ]
+      },
+      {
+        "matcher": "ScheduleWakeup",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/schedulewakeup-loop-only-nudge.mjs"] }
+        ]
       }
     ],
     "PostToolUse": [
