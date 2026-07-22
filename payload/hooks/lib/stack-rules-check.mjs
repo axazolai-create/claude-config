@@ -8,6 +8,7 @@
 // prints JSON: { status, sourceHash, stackFingerprint, markers, snapshotPath }.
 // Design: docs/superpowers/specs/2026-07-12-stack-rules-design.md.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
@@ -99,7 +100,17 @@ export function checkStackRules(root, srcDir = join(CLAUDE_DIR, "rules-src")) {
 }
 
 // CLI mode
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Symlink-robust entry-point check (match raw OR realpath'd argv[1]; Node realpaths
+// import.meta.url, so under a symlinked ~/.claude the naive compare is false and main dies).
+function isMainModule() {
+  const a = process.argv[1];
+  if (!a) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (resolve(a) === self) return true;
+  try { return realpathSync(a) === self; } catch { return false; }
+}
+
+if (isMainModule()) {
   const root = resolve(process.argv[2] || process.cwd());
   const result = checkStackRules(root);
   console.log(JSON.stringify({ ...result, markers: detectMarkers(root) }, null, 2));
