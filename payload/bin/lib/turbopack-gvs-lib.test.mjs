@@ -1,7 +1,7 @@
 // payload/bin/lib/turbopack-gvs-lib.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { usesTurbopack, parseGvsFlag, parseVirtualStoreDir, configTargetForPnpm, relUp, detectConfigFormat, nextConfigSnippet, buildRecipe } from "./turbopack-gvs-lib.mjs";
+import { usesTurbopack, parseGvsFlag, parseVirtualStoreDir, configTargetForPnpm, relUp, parseWidenedRoot, isPathUnder, detectConfigFormat, nextConfigSnippet, buildRecipe } from "./turbopack-gvs-lib.mjs";
 
 test("usesTurbopack: Next >=15 default, <15 only with --turbopack", () => {
   assert.equal(usesTurbopack({ dependencies: { next: "^16.2.9" } }), true);
@@ -43,6 +43,30 @@ test("nextConfigSnippet: monorepo hop is deepened, both fields, both formats", (
   assert.match(esm, /outputFileTracingRoot: path\.join\(__dirname, '\.\.\/\.\.\/\.\.'\)/);
   const cjs = nextConfigSnippet("cjs", "../../..");
   assert.match(cjs, /turbopack: \{ root: path\.join\(__dirname, '\.\.\/\.\.\/\.\.'\) \}/);
+});
+
+test("parseWidenedRoot: reads an existing turbopack.root widening from next.config source", () => {
+  // The exact hand-applied form from the RISK-016 deployment: multi-arg, double quotes.
+  const ts = `export default { turbopack: { root: path.join(__dirname, "..", "..", "..") }, outputFileTracingRoot: path.join(__dirname, "..", "..", "..") }`;
+  assert.equal(parseWidenedRoot(ts), "../../..");
+  // Single-string hop, single quotes, path.resolve.
+  assert.equal(parseWidenedRoot("module.exports = { turbopack: { root: path.resolve(__dirname, '../..') } }"), "../..");
+  // outputFileTracingRoot alone still counts as a widening signal.
+  assert.equal(parseWidenedRoot("export default { outputFileTracingRoot: path.join(__dirname, '..') }"), "..");
+  // turbopack.root wins over outputFileTracingRoot when both are present but differ.
+  const mixed = `export default { outputFileTracingRoot: path.join(__dirname, '..'), turbopack: { root: path.join(__dirname, '../../..') } }`;
+  assert.equal(parseWidenedRoot(mixed), "../../..");
+  // No widening at all.
+  assert.equal(parseWidenedRoot("export default {}"), null);
+  assert.equal(parseWidenedRoot(""), null);
+});
+
+test("isPathUnder: prefix semantics, separators and case normalised", () => {
+  assert.equal(isPathUnder("D:/_Next", "D:/_Next/.pnpm-store"), true);
+  assert.equal(isPathUnder("D:/_Next", "d:\\_next\\pik.mes\\apps\\web"), true);
+  assert.equal(isPathUnder("D:/_Next", "D:/_Next"), true);
+  assert.equal(isPathUnder("D:/_Next", "D:/_Nextother/store"), false);
+  assert.equal(isPathUnder("D:/_Next/pik.mes", "D:/_Next"), false);
 });
 
 test("relUp: one dotdot per level, '.' when equal, fallback for non-ancestor", () => {

@@ -11,7 +11,7 @@ import { readFileSync, existsSync, lstatSync, readlinkSync, realpathSync } from 
 import { join, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { usesTurbopack, parseGvsFlag, parseVirtualStoreDir, configTargetForPnpm, detectConfigFormat, buildRecipe } from "./lib/turbopack-gvs-lib.mjs";
+import { usesTurbopack, parseGvsFlag, parseVirtualStoreDir, configTargetForPnpm, parseWidenedRoot, isPathUnder, detectConfigFormat, buildRecipe } from "./lib/turbopack-gvs-lib.mjs";
 
 function readIf(p) { try { return existsSync(p) ? readFileSync(p, "utf8") : ""; } catch { return ""; } }
 
@@ -32,15 +32,18 @@ const CONFIG_NAMES = ["next.config.js", "next.config.mjs", "next.config.ts", "ne
 // `.pnpm` AND an explicit `virtualStoreDir`/`virtual-store-dir` (either config file) pointing out
 // of tree — the latter is how Strategy B relocates the store WITHOUT the enableGlobalVirtualStore
 // flag, which the bare-flag check alone would miss (a re-run would falsely report "no conflict").
-function storeOutOfTree(root, wsYaml, npmrc) {
+function pnpmSymlinkTarget(root) {
   const pnpmDir = join(root, "node_modules", ".pnpm");
   try {
     const st = lstatSync(pnpmDir);
-    if (st.isSymbolicLink()) {
-      const target = resolve(dirname(pnpmDir), readlinkSync(pnpmDir));
-      if (!target.startsWith(resolve(root))) return true;
-    }
+    if (st.isSymbolicLink()) return resolve(dirname(pnpmDir), readlinkSync(pnpmDir));
   } catch { /* .pnpm absent */ }
+  return null;
+}
+
+function storeOutOfTree(root, wsYaml, npmrc) {
+  const target = pnpmSymlinkTarget(root);
+  if (target && !target.startsWith(resolve(root))) return true;
   const vsd = parseVirtualStoreDir(wsYaml, npmrc);
   if (vsd) { const abs = resolve(root, vsd); if (!abs.startsWith(resolve(root))) return true; }
   return false;
@@ -96,6 +99,25 @@ function main() {
 
   const nextCfgName = CONFIG_NAMES.find((n) => existsSync(join(root, n))) || "next.config.js";
   const format = detectConfigFormat(nextCfgName, pkg.type);
+
+  // Already mitigated by hand? If next.config ALREADY widens turbopack.root and the widened root
+  // covers the actual store location (explicit virtualStoreDir — resolved against the workspace
+  // root, pnpm's reference point — or the live `.pnpm` symlink target), Strategy B is in place and
+  // re-reporting a CONFLICT forever would be a false positive. A gVS=true TRUE-global store with
+  // no explicit virtualStoreDir stays a CONFLICT: its machine-wide path can't be known covered.
+  const widenHop = parseWidenedRoot(readIf(join(root, nextCfgName)));
+  const explicitVsd = parseVirtualStoreDir(wsYaml, npmrc);
+  const storeActual = explicitVsd ? resolve(workspaceRoot, explicitVsd) : pnpmSymlinkTarget(root);
+  if (widenHop && storeActual) {
+    const widened = resolve(root, widenHop);
+    if (isPathUnder(widened, storeActual) && isPathUnder(widened, root)) {
+      console.log("Turbopack + out-of-tree pnpm store — Strategy B already in place:");
+      console.log(`  store          → ${storeActual}`);
+      console.log(`  turbopack.root → ${widened} (path.join(__dirname, '${widenHop}') in ${nextCfgName}) — covers both.`);
+      console.log("No action needed. Confirm once with a live `next dev` + hard reload (chunks respond 200).");
+      return;
+    }
+  }
 
   const pnpmMajor = detectPnpmMajor();
   // Undetectable pnpm → assume >=11 (pnpm-workspace.yaml): a silently-ignored .npmrc (the pnpm>=11
