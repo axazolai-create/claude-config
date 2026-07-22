@@ -819,7 +819,9 @@ async function main() {
   /* ---------- plugin reconciliation (spec § 4): only managedPlugins are ever touched ---------- */
   {
     const managed = loadVariants(REPO_ROOT).managedPlugins;
-    const cliProbe = safe(() => spawnSync("claude", ["plugin", "list", "--json"], { encoding: "utf8" }));
+    const cliProbe = process.env.CLAUDE_SETUP_SKIP_PLUGINS === "1"
+      ? undefined   // hermetic mode (tests): no shell-out; falls to the notes path below
+      : safe(() => spawnSync("claude", ["plugin", "list", "--json"], { encoding: "utf8" }));
     const parsedList = cliProbe && cliProbe.status === 0 ? safe(() => JSON.parse(cliProbe.stdout)) : undefined;
     const installedIds = Array.isArray(parsedList)
       ? parsedList.map((p) => p.id || p.name).filter(Boolean)

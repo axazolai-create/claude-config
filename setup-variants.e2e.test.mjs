@@ -25,17 +25,6 @@ function plantForeign(dir) {
   for (const f of FOREIGN) { mkdirSync(join(dir, dirname(f)), { recursive: true }); writeFileSync(join(dir, f), `foreign:${f}`); }
 }
 
-// Accommodation (documented in task-8-report.md): setup.mjs's plugin-reconciliation "cliProbe"
-// (`spawnSync("claude", ["plugin", "list", "--json"])`) runs unconditionally, BEFORE the
-// DRY/CLAUDE_SETUP_SKIP_PLUGINS gates that guard the install/uninstall actions further down.
-// The real, machine-installed `claude` binary bootstraps its own top-level `.claude.json` (+ a
-// `backups/*.backup.*` copy) into whatever CLAUDE_CONFIG_DIR it's invoked with, as a side effect
-// entirely outside this repo's control - reproducible directly: `CLAUDE_CONFIG_DIR=<empty dir>
-// claude plugin list --json` writes both files into an otherwise-empty dir. This is a
-// product-level gap (dry-run and CLAUDE_SETUP_SKIP_PLUGINS don't fully suppress it - see
-// task-8-report.md), not a test bug; excluded here rather than papered over silently.
-const CLI_SIDE_EFFECT = (rel) => rel === ".claude.json" || rel.startsWith("backups/");
-
 test("lite install: exact tree, 6 hooks, no statusLine, manifest.variant", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-lite-"));
   plantForeign(dir);
@@ -45,7 +34,7 @@ test("lite install: exact tree, 6 hooks, no statusLine, manifest.variant", () =>
   const installed = new Set(walk(dir));
   for (const rel of v.rels) assert.ok(installed.has(rel), `missing: ${rel}`);
   for (const rel of installed)
-    if (!rel.startsWith("state/") && rel !== "settings.json" && !FOREIGN.includes(rel) && !CLI_SIDE_EFFECT(rel))
+    if (!rel.startsWith("state/") && rel !== "settings.json" && !FOREIGN.includes(rel))
       assert.ok(v.rels.includes(rel), `unexpected: ${rel}`);
   const settings = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
   const scripts = new Set();
@@ -95,9 +84,7 @@ test("--dry-run writes nothing for both variants", () => {
     const dir = mkdtempSync(join(tmpdir(), "cc-dry-"));
     const r = run(dir, [`--variant=${variant}`, "--dry-run", "--skip-all"]);
     assert.equal(r.status, 0, r.stderr);
-    // CLI_SIDE_EFFECT: see accommodation note above plantForeign() - the real `claude` binary's
-    // own bootstrap files, not writes performed by setup.mjs's own --dry-run-gated write() path.
-    assert.deepEqual(walk(dir).filter((rel) => !CLI_SIDE_EFFECT(rel)), [], `dry-run wrote files (${variant})`);
+    assert.deepEqual(walk(dir), [], `dry-run wrote files (${variant})`);
     rmSync(dir, { recursive: true, force: true });
   }
 });
