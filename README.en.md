@@ -168,11 +168,16 @@ tests `*.test.mjs`, run via `node --test`):
 - **pnpm phantom-dependency guard** — the `/pnpm-phantom-fix` command + `bin/pnpm-phantom-scan.mjs`
   + a PostToolUse hook: finds undeclared-but-imported packages (e.g. `@hookform/resolvers`→`zod`)
   and additively declares them as optional peers in `packageExtensions`, so
-  `enableGlobalVirtualStore` doesn't break them. Installed per-project via `/init-stack` (pnpm only).
+  `enableGlobalVirtualStore` doesn't break them. Installed per-project via `/init-stack` (pnpm only);
+  the root `postinstall` is cross-shell — node resolves `$HOME` itself, so it works under cmd.exe
+  (where `~` isn't expanded) and POSIX alike, and is a silent no-op on a machine without claude-config.
 - **Turbopack × global-virtual-store** — `bin/turbopack-gvs-check.mjs` (`/init-stack`, Next+pnpm
   only): detects the structural conflict of an out-of-tree store with Turbopack (chunks `404`
-  after a hard reload) and prints a recipe (sibling store + `turbopack.root`). Read-only, changes
-  nothing.
+  after a hard reload) and prints a recipe. The recipe is version-aware and monorepo-aware: for
+  pnpm ≥11 it writes `virtualStoreDir` to `pnpm-workspace.yaml` (camelCase), for <11 to `.npmrc`
+  (kebab); the store is anchored on the workspace root (and, for a git worktree, on the canonical
+  main worktree so every worktree of one repo shares one `<repo>-store`), and `turbopack.root` is
+  widened to the correct depth for a nested app. Read-only, changes nothing.
 - **Background-task supervision** — `bin/supervise-bg.mjs` wraps a background command in a
   timeout + staleness watchdog (a hang → an exit event, not a silent stall) + the PreToolUse nudge
   `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (after `git push` — `gh run watch`) + the
@@ -737,7 +742,9 @@ different write policies, deliberately:
   `setup.mjs` and `init-stack.py`).
 - **Review-gated content patches** — `hooks/lib/gsd-agent-patches.mjs` (30+ agents: routing to
   context-mode tools, hardening `gsd-executor.md`/`gsd-debugger.md`, a guardrail against recursive
-  spawning) and `hooks/lib/gsd-workflow-patches.mjs` (the dispatch template in `execute-phase.md` —
+  spawning — including a bounded-Agent guardrail for `gsd-debug-session-manager.md`, the one agent
+  that keeps `Agent` (to spawn `gsd-debugger`), where instead of a ban it truthfully documents the
+  depth-2 cap) and `hooks/lib/gsd-workflow-patches.mjs` (the dispatch template in `execute-phase.md` —
   decompose-aware choice of `gsd-executor` vs `gsd-executor-decomposing`). Unlike tool-grant this
   is **not written silently**: the patches inject prose across dozens of files, so a human first
   reviews what's about to land. `session-init.mjs` checks them **read-only** every session
