@@ -106,6 +106,18 @@ test("adopts a pre-existing unmarked hand-written block in place (no duplicate)"
   }
 });
 
+test("context-mode routing block v2 carries the deferred-schema recovery and can upgrade v1", () => {
+  const p = PATCHES.find((x) => x.id === "context-mode-routing-block");
+  assert.equal(p.version, 2, "text change must be accompanied by a version bump");
+  assert.ok(p.block.includes("ToolSearch"), "v2 must name the deferred-schema recovery path");
+  assert.ok(p.block.includes("select:mcp__plugin_context-mode_context-mode__ctx_execute_file"));
+  // priorBlocks must carry the exact v1 body (no recovery paragraph) so an unmarked
+  // pre-versioning application still gets found and upgraded in place.
+  assert.ok(Array.isArray(p.priorBlocks) && p.priorBlocks.length === 1);
+  assert.ok(!p.priorBlocks[0].includes("ToolSearch"));
+  assert.ok(p.priorBlocks[0].includes("<context_mode_routing>"));
+});
+
 test("patch is scoped to debug-session-manager only", () => {
   const patch = PATCHES.find((p) => p.id === PATCH_ID);
   assert.equal(patch.appliesTo("gsd-planner.md"), false);
