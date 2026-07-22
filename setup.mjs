@@ -389,7 +389,7 @@ async function placeFile(rel, srcPath) {
  * imply cleanup). */
 function bundleAllText() {
   let t = "";
-  for (const rel of walkBundle(SRC)) t += "\n" + (read(join(SRC, ...rel.split("/"))) || "");
+  for (const rel of V.rels) t += "\n" + (read(V.srcFor(rel)) || "");
   return t;
 }
 /* ---------- setting-templates/: full folder overwrite (delete anything not in the bundle) ----------
@@ -466,6 +466,7 @@ async function pruneStale() {
   const candidates = new Set();
   for (const rel of oldByRel.keys()) if (!currentRels.has(rel)) candidates.add(rel);
   for (const rel of SEED_REMOVED) if (!currentRels.has(rel)) candidates.add(rel);
+  if (VARIANT !== "full") candidates.add("gsd-defaults.partial.json"); // full-only mirror, never manifest-tracked
   if (!candidates.size) return;
 
   const allText = bundleAllText();
@@ -475,7 +476,8 @@ async function pruneStale() {
     if (!existsSync(dst)) continue;                                  // already gone
     const cur = read(dst);
     if (typeof cur === "string" && isCurated(cur)) { kept.push([rel, "curated"]); continue; }
-    if (allText.includes(rel.split("/").pop())) { kept.push([rel, "still referenced in bundle"]); continue; }
+    const variantExcluded = V.excludedSet.has(rel) || (rel === "gsd-defaults.partial.json" && VARIANT !== "full");
+    if (!variantExcluded && allText.includes(rel.split("/").pop())) { kept.push([rel, "still referenced in bundle"]); continue; }
     const oldHash = oldByRel.get(rel);
     if (oldHash && cur !== undefined && sha(cur) !== oldHash) { kept.push([rel, "modified since install"]); continue; }
     del.push({ rel, dst });
@@ -584,7 +586,7 @@ async function main() {
    * bundle - this is best-effort cross-tool maintenance, same idea as the graphify CLAUDE.md
    * step in session-init.mjs. Imports the just-installed copy of the lib (not the repo's own
    * payload/ copy) so behavior always matches what actually landed in ~/.claude this run. */
-  if (!DRY) {
+  if (VARIANT === "full" && !DRY) {
     const libPath = join(CDIR, "hooks", "lib", "context-mode-gsd-agents.mjs");
     if (existsSync(libPath)) {
       try {
@@ -602,7 +604,7 @@ async function main() {
    * ~/.claude so /init-stack's standalone CLI (payload/gsd-defaults-sync.mjs, which has no
    * access to REPO_ROOT once installed) can re-read it later - so this step always
    * overwrites the installed mirror copy, then applies it via the just-installed lib. */
-  if (!DRY) {
+  if (VARIANT === "full" && !DRY) {
     const partialDefaultsRaw = read(join(REPO_ROOT, "gsd-defaults.partial.json"));
     if (partialDefaultsRaw !== undefined) {
       const mirrorPath = join(CDIR, "gsd-defaults.partial.json");
@@ -642,49 +644,51 @@ async function main() {
   //     the patch survived at least one full run untouched since it was applied, so the backup
   //     has done its job. Deliberately NOT removed in the same run that just created it
   //     (patched > 0) - that would defeat the point of having a same-run rollback option.
-  const prunePatchBackups = (name, files) => {
-    let removed = 0;
-    for (const f of files) {
-      const backup = join(gsdCoreDir, ...f.rel.split("/")) + `.pre-${name}`;
-      if (!existsSync(backup)) continue;
-      try { rmSync(backup, { force: true }); removed++; summary.push(`pruned   ${backup} (patch backup no longer needed)`); }
-      catch { summary.push(`prune-failed ${backup}`); }
-    }
-    return removed;
-  };
-  const gsdCoreDir = join(CDIR, "gsd-core");
-  if (!DRY) {
-    const patchesRoot = join(REPO_ROOT, "gsd-core-patches");
-    if (existsSync(gsdCoreDir) && existsSync(patchesRoot)) {
-      const patchNames = readdirSync(patchesRoot, { withFileTypes: true })
-        .filter((e) => e.isDirectory()).map((e) => e.name);
-      for (const name of patchNames) {
-        const patchDir = join(patchesRoot, name);
-        const manifest = safe(() => JSON.parse(readFileSync(join(patchDir, "manifest.json"), "utf8")));
-        if (!manifest) continue;
-        const label = manifest.issue ? `#${manifest.issue}` : name;
-        const installedVersion = (read(join(gsdCoreDir, "VERSION")) || "").trim();
-        if (installedVersion !== manifest.targetVersion) {
-          summary.push(`skipped  gsd-core ${label} patch (installed version "${installedVersion || "unknown"}", patch targets "${manifest.targetVersion}")`);
-          prunePatchBackups(name, manifest.files);
-          continue;
+  if (VARIANT === "full") {
+    const prunePatchBackups = (name, files) => {
+      let removed = 0;
+      for (const f of files) {
+        const backup = join(gsdCoreDir, ...f.rel.split("/")) + `.pre-${name}`;
+        if (!existsSync(backup)) continue;
+        try { rmSync(backup, { force: true }); removed++; summary.push(`pruned   ${backup} (patch backup no longer needed)`); }
+        catch { summary.push(`prune-failed ${backup}`); }
+      }
+      return removed;
+    };
+    const gsdCoreDir = join(CDIR, "gsd-core");
+    if (!DRY) {
+      const patchesRoot = join(REPO_ROOT, "gsd-core-patches");
+      if (existsSync(gsdCoreDir) && existsSync(patchesRoot)) {
+        const patchNames = readdirSync(patchesRoot, { withFileTypes: true })
+          .filter((e) => e.isDirectory()).map((e) => e.name);
+        for (const name of patchNames) {
+          const patchDir = join(patchesRoot, name);
+          const manifest = safe(() => JSON.parse(readFileSync(join(patchDir, "manifest.json"), "utf8")));
+          if (!manifest) continue;
+          const label = manifest.issue ? `#${manifest.issue}` : name;
+          const installedVersion = (read(join(gsdCoreDir, "VERSION")) || "").trim();
+          if (installedVersion !== manifest.targetVersion) {
+            summary.push(`skipped  gsd-core ${label} patch (installed version "${installedVersion || "unknown"}", patch targets "${manifest.targetVersion}")`);
+            prunePatchBackups(name, manifest.files);
+            continue;
+          }
+          let patched = 0, alreadyDone = 0, diverged = 0;
+          for (const f of manifest.files) {
+            const dst = join(gsdCoreDir, ...f.rel.split("/"));
+            const cur = read(dst);
+            if (cur === undefined) { diverged++; continue; }
+            const curHash = sha(cur);
+            if (curHash === f.afterSha256) { alreadyDone++; continue; }
+            if (curHash !== f.beforeSha256) { diverged++; continue; }
+            const afterContent = read(join(patchDir, "after", ...f.rel.split("/")));
+            if (afterContent === undefined) { diverged++; continue; }
+            write(dst + `.pre-${name}`, cur); // backup original, once, before first overwrite
+            if (write(dst, afterContent)) patched++;
+          }
+          if (patched) summary.push(`patched  gsd-core ${label} (${patched} file(s) in ${gsdCoreDir}; originals saved as *.pre-${name})`);
+          else if (alreadyDone === manifest.files.length) { summary.push(`unchanged gsd-core ${label} patch (already applied)`); prunePatchBackups(name, manifest.files); }
+          else if (diverged) summary.push(`skipped  gsd-core ${label} patch (${diverged} file(s) diverge from the known ${manifest.targetVersion} baseline - not touching)`);
         }
-        let patched = 0, alreadyDone = 0, diverged = 0;
-        for (const f of manifest.files) {
-          const dst = join(gsdCoreDir, ...f.rel.split("/"));
-          const cur = read(dst);
-          if (cur === undefined) { diverged++; continue; }
-          const curHash = sha(cur);
-          if (curHash === f.afterSha256) { alreadyDone++; continue; }
-          if (curHash !== f.beforeSha256) { diverged++; continue; }
-          const afterContent = read(join(patchDir, "after", ...f.rel.split("/")));
-          if (afterContent === undefined) { diverged++; continue; }
-          write(dst + `.pre-${name}`, cur); // backup original, once, before first overwrite
-          if (write(dst, afterContent)) patched++;
-        }
-        if (patched) summary.push(`patched  gsd-core ${label} (${patched} file(s) in ${gsdCoreDir}; originals saved as *.pre-${name})`);
-        else if (alreadyDone === manifest.files.length) { summary.push(`unchanged gsd-core ${label} patch (already applied)`); prunePatchBackups(name, manifest.files); }
-        else if (diverged) summary.push(`skipped  gsd-core ${label} patch (${diverged} file(s) diverge from the known ${manifest.targetVersion} baseline - not touching)`);
       }
     }
   }
@@ -719,7 +723,12 @@ async function main() {
         for (const a of (h.args || [])) ourFiles.add(String(a).split(/[\\/]/).pop());
     const mentionsOurs = (e) => (e.hooks || []).some(h => (h.args || []).some(a => ourFiles.has(String(a).split(/[\\/]/).pop())));
 
-    for (const [ev, entries] of Object.entries(partial.hooks || {})) {
+    // Re-add side is variant-filtered: a lite install must not re-add gsd-only hook entries even
+    // though they're still present in the FULL partial used above to strip stale entries.
+    const variantBasenames = new Set(V.rels.map((r) => r.split("/").pop()));
+    const partialHooksForVariant = filterPartialHooks(partial.hooks, variantBasenames);
+
+    for (const [ev, entries] of Object.entries(partialHooksForVariant)) {
       // claim our slots: drop any prior entry that references one of our hook files (stale paths,
       // old .sh, wrong home, or an event type it used to live under) - this both repairs the
       // "cannot find module" loader error on re-run and prevents duplicates when a hook's event
@@ -731,7 +740,7 @@ async function main() {
     // Also strip our entries from any event the partial no longer declares them under (handles a
     // hook moving OUT of an event entirely, not just being re-added to a different one above).
     for (const ev of Object.keys(merged.hooks)) {
-      if (partial.hooks && ev in partial.hooks) continue;
+      if (ev in partialHooksForVariant) continue;
       merged.hooks[ev] = (merged.hooks[ev] || []).filter(e => !mentionsOurs(e));
     }
 
@@ -765,7 +774,7 @@ async function main() {
     // (gsd-statusline.js) - this path IS shown to the user via the diff+prompt below, so
     // (unlike the non-interactive CLI's ensureStatuslineOverride) it's safe to compute the
     // desired value unconditionally and let the existing diff make the change visible.
-    if (partial.statusLine) {
+    if (partial.statusLine && VARIANT === "full") {
       const curCmd = merged.statusLine && merged.statusLine.command;
       const isOurs = typeof curCmd === "string" && curCmd.includes("gsd-context-meter");
       const isGsdCoreDefault = typeof curCmd === "string" && curCmd.includes("gsd-statusline.js");
@@ -776,6 +785,11 @@ async function main() {
         const scriptPath = join(CDIR, "hooks", "gsd-context-meter.mjs").replace(/\\/g, "/");
         merged.statusLine = { ...partial.statusLine, command: `node "${scriptPath}"` };
       }
+    } else if (VARIANT !== "full") {
+      // lite excludes gsd-context-meter.mjs entirely (spec § 2.1) - drop a prior full-variant
+      // takeover of statusLine, but leave the user's own custom statusLine untouched.
+      const curCmd = merged.statusLine && merged.statusLine.command;
+      if (typeof curCmd === "string" && curCmd.includes("gsd-context-meter")) delete merged.statusLine;
     }
 
     const curStr = JSON.stringify(cur, null, 2);
@@ -843,7 +857,7 @@ async function main() {
   // Same "decide once, record in settings.json.env, never re-ask" idiom as the update-check
   // block above. Non-secret decision recorded in settings.json.env; the password is written
   // ONLY to ~/.graphify/neo4j.env (chmod 600), never into the repo or settings.json.
-  if (!DRY) {
+  if (VARIANT === "full" && !DRY) {
     let neo4jSettings = {};
     try { neo4jSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { neo4jSettings = {}; }
     const neo4jDecided = neo4jSettings.env && "GRAPHIFY_NEO4J" in neo4jSettings.env;
@@ -935,6 +949,7 @@ async function main() {
   }
 
   log(`\n${DRY ? "DRY RUN complete (no files written)." : "Done."} Restart Claude Code (hooks load at startup).`);
+  log(`Variant: ${VARIANT}`);
   const hookCounts = partial && partial.hooks
     ? Object.entries(partial.hooks).map(([ev, entries]) => `${ev} x${entries.length}`).join(", ")
     : "see settings.partial.json";
@@ -953,35 +968,44 @@ async function main() {
   log("");
   log("Step 2 - Open a Claude Code session in the project. On its FIRST session there,");
   log("         a SessionStart hook configures it AUTOMATICALLY - nothing to run:");
-  log("           - marks an unmarked root CLAUDE.md as curated (skipped if it looks");
-  log("             GSD-generated)");
-  log("           - excludes a GSD-owned .planning/CLAUDE.md from auto-load (per project)");
-  log("           - appends the GSD-clobber risk to an existing RISK_REGISTER.md (every");
-  log("             session, not just the first)");
+  if (VARIANT === "full") {
+    log("           - marks an unmarked root CLAUDE.md as curated (skipped if it looks");
+    log("             GSD-generated)");
+    log("           - excludes a GSD-owned .planning/CLAUDE.md from auto-load (per project)");
+    log("           - appends the GSD-clobber risk to an existing RISK_REGISTER.md (every");
+    log("             session, not just the first)");
+  }
   log("           - if graphify is installed: registers the project in the global graph,");
   log("             installs a native post-commit hook, and (once) runs");
   log("             'graphify claude install' for its own CLAUDE.md section");
   log("           - checks whether the compiled rules snapshot (.claude/stack-rules.md)");
   log("             exists; if not, suggests running /init-stack to generate it (no");
   log("             automatic staleness check - opt out: CLAUDE_STACK_RULES=0)");
-  log("           - if the git remote is GitHub/GitLab or a DB dependency is detected");
-  log("             with no matching MCP wired: suggests /init-mcp (suggestion only,");
-  log("             installs nothing, rechecked every session)");
-  log("           - for GSD projects (.planning/ present): patches model_profile to your");
-  log("             personal default (once), and flags config gaps (e.g. fallow enabled");
-  log("             but not installed) every session");
+  if (VARIANT === "full") {
+    log("           - if the git remote is GitHub/GitLab or a DB dependency is detected");
+    log("             with no matching MCP wired: suggests /init-mcp (suggestion only,");
+    log("             installs nothing, rechecked every session)");
+    log("           - for GSD projects (.planning/ present): patches model_profile to your");
+    log("             personal default (once), and flags config gaps (e.g. fallow enabled");
+    log("             but not installed) every session");
+  }
   log("         Toggles: CLAUDE_CURATED_AUTOINIT=0 (disables all of the above),");
   log("         CLAUDE_CURATED_AUTOMARK_ROOT=0, CLAUDE_MCP_SUGGEST=0,");
   log("         CLAUDE_GRAPHIFY_AUTOSYNC=0.");
   log("");
-  log("Step 3 - ONLY if the project needs stack-specific plugins (React, FastAPI, ...) -");
-  log("         this does NOT happen automatically. Run /init-stack in that project's");
-  log("         Claude Code session. It detects the stack, then asks you to run");
-  log("         'python3 ~/.claude/bin/init-stack.py -i' yourself in a real terminal");
-  log("         (interactive checklist) to install and enable the matching plugins.");
-  log("");
-  log("Step 4 - RESTART Claude Code again after /init-stack writes settings.json -");
-  log("         enabledPlugins resolves at startup too, same as step 1.");
+  if (VARIANT === "full") {
+    log("Step 3 - ONLY if the project needs stack-specific plugins (React, FastAPI, ...) -");
+    log("         this does NOT happen automatically. Run /init-stack in that project's");
+    log("         Claude Code session. It detects the stack, then asks you to run");
+    log("         'python3 ~/.claude/bin/init-stack.py -i' yourself in a real terminal");
+    log("         (interactive checklist) to install and enable the matching plugins.");
+    log("");
+    log("Step 4 - RESTART Claude Code again after /init-stack writes settings.json -");
+    log("         enabledPlugins resolves at startup too, same as step 1.");
+  } else {
+    log("Step 3 - For per-project stack rules run /init-stack in that project's session");
+    log("         (compiles .claude/stack-rules.md; no plugin machinery in lite).");
+  }
   log("");
   log("Full reference (including the reconfigure/update table): README.md, section");
   log("'Order of operations'.");
