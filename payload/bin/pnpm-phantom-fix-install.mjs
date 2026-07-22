@@ -9,9 +9,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, realpathSync } from
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const SCAN_CMD = "node ~/.claude/bin/pnpm-phantom-scan.mjs";
-const HOOK_PATH = join(homedir(), ".claude", "hooks", "pnpm-phantom-fix-hook.mjs");
+const HOOK_PATH = join(CLAUDE_DIR, "hooks", "pnpm-phantom-fix-hook.mjs");
 
 function findUp(start, filename) {
   let dir = resolve(start);

@@ -47,6 +47,7 @@ import { syncGsdAgentsContextMode } from "./lib/context-mode-gsd-agents.mjs";
 import { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./lib/gsd-agent-patches.mjs";
 import { checkGsdWorkflowPatches } from "./lib/gsd-workflow-patches.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const MARKER = "CURATED:NOEDIT";
 // Whole-line match only (never a substring inside a longer line, so prose that just NAMES the
@@ -94,7 +95,7 @@ function findRoot(start) {
 const root = findRoot(startDir);
 
 // per-user state registry - keeps project trees clean; "unknown on THIS machine"
-const stateFile = join(homedir(), ".claude", "state", "project-init.json");
+const stateFile = join(CLAUDE_DIR, "state", "project-init.json");
 let state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
 const firstTime = !state[root]; // do not early-exit: the risk-register step must retry every session
 if (!state[root]) state[root] = {}; // ensure the record exists so later independent one-time flags can attach
@@ -310,7 +311,7 @@ const KNOWN_TOOLS = [
 ];
 if (process.env.CLAUDE_TOOL_AUTOUPGRADE !== "0") {
   const UPGRADE_THROTTLE_MS = 24 * 60 * 60 * 1000; // 24h
-  const toolStateFile = join(homedir(), ".claude", "state", "tool-upgrade.json");
+  const toolStateFile = join(CLAUDE_DIR, "state", "tool-upgrade.json");
   let toolState = existsSync(toolStateFile) ? (safe(() => JSON.parse(readFileSync(toolStateFile, "utf8"))) || {}) : {};
   let toolStateChanged = false;
 
@@ -450,7 +451,7 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
 // installed/enabled it's a no-op, and if gsd-core's own updater later rewrites an agent file and
 // drops the tool, this puts it back on the next session. Opt out: CLAUDE_GSD_CONTEXTMODE_SYNC=0.
 if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
-  const claudeDir = join(homedir(), ".claude");
+  const claudeDir = join(CLAUDE_DIR);
   const r = safe(() => syncGsdAgentsContextMode({ claudeDir }));
   if (r && r.active && r.updated.length)
     actions.push(`added context-mode MCP tool to ${r.updated.length} gsd-* agent(s)`);
@@ -464,7 +465,7 @@ if (process.env.CLAUDE_GSD_CONTEXTMODE_SYNC !== "0") {
 // surfacing on its own once the patches have been applied and nothing is pending.
 // Opt out: CLAUDE_GSD_AGENT_PATCHES_CHECK=0.
 if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
-  const claudeDir = join(homedir(), ".claude");
+  const claudeDir = join(CLAUDE_DIR);
   const pending = safe(() => checkGsdAgentPatches({ claudeDir })) || {};
   const files = Object.keys(pending);
   if (files.length)
@@ -511,8 +512,8 @@ if (process.env.CLAUDE_GSD_AGENT_PATCHES_CHECK !== "0") {
 // 24h throttle (state file), so calling it every session is still a cheap no-op most of the
 // time. Toggle: CLAUDE_TOKEN_USAGE_PRUNE=0 (checked inside the function itself).
 if (process.env.CLAUDE_TOKEN_USAGE_LOG !== "0") {
-  const globalLog = join(homedir(), ".claude", "state", "token-usage.jsonl");
-  const pruneStateFile = join(homedir(), ".claude", "state", "token-usage-prune.json");
+  const globalLog = join(CLAUDE_DIR, "state", "token-usage.jsonl");
+  const pruneStateFile = join(CLAUDE_DIR, "state", "token-usage-prune.json");
   safe(() => pruneGlobalLogIfDue(globalLog, pruneStateFile));
 }
 

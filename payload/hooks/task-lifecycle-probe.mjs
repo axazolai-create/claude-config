@@ -11,6 +11,7 @@ import { readFileSync, appendFileSync, mkdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 export function probeRecord(d, nowIso) {
   const event = d && typeof d === "object" && d.hook_event_name ? d.hook_event_name : "unknown";
@@ -23,7 +24,7 @@ function main() {
   try { d = JSON.parse(readFileSync(0, "utf8") || "{}"); } catch { return; }
   const rec = probeRecord(d, new Date().toISOString());
   try {
-    const dir = join(homedir(), ".claude", "logs");
+    const dir = join(CLAUDE_DIR, "logs");
     mkdirSync(dir, { recursive: true });
     appendFileSync(
       join(dir, "task-lifecycle-probe.log"),

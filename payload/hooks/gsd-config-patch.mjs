@@ -18,6 +18,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const writeFile = (p, content) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, content); return true; } catch { return false; } };
@@ -61,7 +62,7 @@ if (!existsSync(configPath)) process.exit(0); // no config yet - nothing to do, 
 
 // Shared per-root state file with session-init.mjs - same namespace, same `state[root]` object,
 // just new independent flag keys so the two hooks (and the two tiers below) never collide.
-const stateFile = join(homedir(), ".claude", "state", "project-init.json");
+const stateFile = join(CLAUDE_DIR, "state", "project-init.json");
 let state = existsSync(stateFile) ? (safe(() => readJSON(stateFile)) || {}) : {};
 const tier1Done = !!(state[root] && state[root].gsdModelConfigPatched);
 const tier2Done = !!(state[root] && state[root].gsdWorkflowConfigPatched);

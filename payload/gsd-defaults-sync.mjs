@@ -30,5 +30,6 @@ console.log(p.skipped
     ? `Updated ${p.path} (reference values applied; other keys untouched).`
     : `${p.path}: already up to date.`);
 
-const s = ensureStatuslineOverride({ claudeDir: join(homeDir, ".claude") });
+const claudeDir = process.argv[2] ? join(homeDir, ".claude") : (process.env.CLAUDE_CONFIG_DIR || join(homeDir, ".claude"));
+const s = ensureStatuslineOverride({ claudeDir });
 console.log(s.changed ? `statusLine: ${s.reason}.` : `statusLine: no change (${s.reason}).`);

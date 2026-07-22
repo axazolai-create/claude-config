@@ -49,7 +49,10 @@ import { createInterface } from "node:readline";
 const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(REPO_ROOT, "payload");
 const HOME = homedir();
-const CDIR = join(HOME, ".claude");
+// Config dir honors CLAUDE_CONFIG_DIR (the official Claude Code relocation env var); falls back
+// to ~/.claude. This lets the whole bundle be installed into a relocated config dir without a
+// symlink. Runtime scripts/hooks below use the same fallback.
+const CDIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
 const HOOKS = join(CDIR, "hooks");
 const SKILL = join(CDIR, "skills", "using-git-worktrees");
 const SETTINGS = join(CDIR, "settings.json");
@@ -603,7 +606,9 @@ async function main() {
   }
   const partialRaw = read(join(REPO_ROOT, "settings.partial.json"));
   const partial = partialRaw === undefined ? null
-    : safe(() => JSON.parse(partialRaw.split("<HOME>").join(JSON.stringify(HOME).slice(1, -1))));
+    : safe(() => JSON.parse(partialRaw
+        .split("<HOME>/.claude").join(JSON.stringify(CDIR).slice(1, -1))
+        .split("<HOME>").join(JSON.stringify(HOME).slice(1, -1))));
   if (partialRaw !== undefined && partial === null) summary.push("settings.partial.json: failed to parse - settings.json hooks left untouched");
 
   if (cur !== null && partial !== null) {
@@ -644,6 +649,21 @@ async function main() {
       } else if (!(k in merged.permissions)) {
         merged.permissions[k] = v;
       }
+    }
+    // Normalize file-permission rules: Claude Code now matches ALL file-editing tools via the
+    // Edit(path) form, so Write(x)/MultiEdit(x) path rules are ignored ("not matched by file
+    // permission checks") and MultiEdit is no longer a known tool. Rewrite those to Edit(x) and
+    // dedup, migrating stale rules (from older bundles or hand-added settings) that would
+    // otherwise keep emitting startup warnings. Non-file rules (Bash(...), mcp__*, …) untouched.
+    for (const k of Object.keys(merged.permissions)) {
+      if (!Array.isArray(merged.permissions[k])) continue;
+      const seen = new Set();
+      merged.permissions[k] = merged.permissions[k].reduce((acc, r) => {
+        const nr = typeof r === "string" ? r.replace(/^(?:Write|MultiEdit)\(/, "Edit(") : r;
+        const key = typeof nr === "string" ? nr : JSON.stringify(nr);
+        if (!seen.has(key)) { seen.add(key); acc.push(nr); }
+        return acc;
+      }, []);
     }
 
     // statusLine: only take over from an absent value or from gsd-core's own default

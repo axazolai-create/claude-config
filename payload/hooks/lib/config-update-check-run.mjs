@@ -17,9 +17,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
-const CDIR = join(homedir(), ".claude");
+const CDIR = join(CLAUDE_DIR);
 const MANIFEST = join(CDIR, "state", "bundle-manifest.json");
 const STATE = join(CDIR, "state", "update-check.json");
 

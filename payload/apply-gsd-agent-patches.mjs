@@ -11,8 +11,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { applyGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./hooks/lib/gsd-agent-patches.mjs";
 import { applyGsdWorkflowPatches } from "./hooks/lib/gsd-workflow-patches.mjs";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
-const claudeDir = process.argv[2] || join(homedir(), ".claude");
+const claudeDir = process.argv[2] || join(CLAUDE_DIR);
 const result = applyGsdAgentPatches({ claudeDir });
 const wfResult = applyGsdWorkflowPatches({ claudeDir });
 

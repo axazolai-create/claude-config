@@ -33,6 +33,7 @@ import { existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const STALE_LOCK_MS = 10 * 60 * 1000; // guards against a crashed prior run
 const IS_WIN = platform() === "win32";
@@ -57,7 +58,7 @@ if (!gv || gv.error || gv.status !== 0) process.exit(0);
 // PID/mtime lock so overlapping triggers (Claude's PostToolUse hook AND the native
 // git hook firing for the same commit, or rapid consecutive commits) don't pile up
 // concurrent extractions of the same project. A stale lock is ignored after TTL.
-const stateDir = join(homedir(), ".claude", "state");
+const stateDir = join(CLAUDE_DIR, "state");
 safe(() => mkdirSync(stateDir, { recursive: true }));
 const lock = join(stateDir, `graphify-sync-${name}.lock`);
 if (existsSync(lock)) {
