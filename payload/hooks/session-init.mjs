@@ -442,8 +442,8 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
         notes.push("GSD settings gap: code_quality.fallow.enabled=true but the `fallow` " +
           "binary isn't installed - the next /gsd-code-review or /gsd-ship will hard-fail, " +
           `not skip gracefully. Install it yourself (\`${installCmd}\`, run at the repo root ` +
-          "where .planning/ lives) or run /init-stack (step 8) to do it interactively, or " +
-          "explicitly set code_quality.fallow.enabled: false for this project.");
+          "where .planning/ lives)" + (FULL ? " or run /init-stack (step 8) to do it interactively," : "") +
+          " or explicitly set code_quality.fallow.enabled: false for this project.");
       }
     }
   }
