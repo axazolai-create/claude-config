@@ -100,6 +100,34 @@ export function relUp(fromDir, toDir) {
   return "..";
 }
 
+// The relative hop a next.config ALREADY widens Turbopack's root by — from
+// `turbopack: { root: path.join(__dirname, '..', '..') }` / `path.resolve(__dirname, '../..')`
+// (outputFileTracingRoot accepted as a fallback signal). Joined into one relative string
+// ("../../..") or null when no such widening is present. Lets the CLI recognise a repo where
+// Strategy B was already applied by hand instead of re-reporting a CONFLICT forever.
+export function parseWidenedRoot(configSource) {
+  const src = String(configSource || "");
+  const re = /([A-Za-z]*[Rr]oot)\s*:\s*path\.(?:join|resolve)\(\s*__dirname\s*,\s*([^)]+)\)/g;
+  let fallback = null;
+  for (let m; (m = re.exec(src)); ) {
+    const segs = [...m[2].matchAll(/['"]([^'"]+)['"]/g)].map((q) => q[1]);
+    if (!segs.length) continue;
+    const hop = segs.join("/");
+    if (m[1] === "root") return hop;          // turbopack.root — the one that gates serving
+    if (!fallback) fallback = hop;             // outputFileTracingRoot etc.
+  }
+  return fallback;
+}
+
+// Is `child` inside (or equal to) `parentDir`? Normalised, case-insensitive on the drive-letter
+// style Windows paths this repo deals in — a pure prefix check, no filesystem access.
+export function isPathUnder(parentDir, child) {
+  const norm = (p) => String(p).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const a = norm(parentDir);
+  const b = norm(child);
+  return b === a || b.startsWith(a + "/");
+}
+
 // Compute the Strategy-B recipe. `repoRoot` must be the store ANCHOR — the workspace/repo root
 // (where pnpm-workspace.yaml lives), or, for a git worktree, the canonical MAIN-worktree root so
 // every worktree of one repo resolves to the same store. The CLI resolves that before calling here.
