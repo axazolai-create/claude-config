@@ -68,6 +68,18 @@ irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/boots
 Forwarding flags to `setup.mjs` (e.g. a non-interactive replace): POSIX — `… | bash -s -- --replace-all`;
 Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
+**Windows: bootstrap + gsd agent patches in one go.** `setup.mjs` deliberately does NOT apply
+the review-gated gsd-agent content patches (see "gsd-core") — after an install/update they are
+normally applied separately (`/init-session` or step 10 of `/init-stack`). A ready PowerShell
+block that does both at once (honours a `CLAUDE_CONFIG_DIR` relocation; on a fresh machine
+without gsd-core the third step is a harmless no-op):
+
+```powershell
+irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+$cc = $env:CLAUDE_CONFIG_DIR; if (-not $cc) { $cc = Join-Path $HOME '.claude' }
+node (Join-Path $cc 'apply-gsd-agent-patches.mjs')
+```
+
 > Note: with `curl|bash` on Linux/macOS, `setup.mjs` runs non-interactively (stdin is occupied
 > by the pipe) — on an already-configured `~/.claude`, conflicts are resolved with an additive
 > merge (no loss, with backups/sidecars); to force a replace, add `-- --replace-all`. On a clean
@@ -181,7 +193,9 @@ tests `*.test.mjs`, run via `node --test`):
 - **Background-task supervision** — `bin/supervise-bg.mjs` wraps a background command in a
   timeout + staleness watchdog (a hang → an exit event, not a silent stall) + the PreToolUse nudge
   `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (after `git push` — `gh run watch`) + the
-  `task-lifecycle-probe` probe (checking `TaskCreated`/`TaskCompleted`).
+  `task-lifecycle-probe` probe (checking `TaskCreated`/`TaskCompleted`) + the PreToolUse nudge
+  `schedulewakeup-loop-only-nudge` (ScheduleWakeup is for /loop pacing only; a tracked background
+  task's completion re-invokes the model by itself, so polling wakeups are pure waste).
 - **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
   exports the cross-project graph into Neo4j (details — the graphify section below).
 

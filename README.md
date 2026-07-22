@@ -67,6 +67,18 @@ irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/boots
 Проброс флагов в `setup.mjs` (напр. неинтерактивная замена): POSIX — `… | bash -s -- --replace-all`;
 Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
+**Windows: bootstrap + gsd-агент-патчи за один заход.** `setup.mjs` сознательно НЕ применяет
+review-gated контент-патчи gsd-агентов (см. «gsd-core») — после установки/обновления их обычно
+применяют отдельно (`/init-session` или шаг 10 `/init-stack`). Готовый PowerShell-блок, который
+делает и то и другое сразу (учитывает релокацию через `CLAUDE_CONFIG_DIR`; на чистой машине без
+gsd-core третий шаг — безвредный no-op):
+
+```powershell
+irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+$cc = $env:CLAUDE_CONFIG_DIR; if (-not $cc) { $cc = Join-Path $HOME '.claude' }
+node (Join-Path $cc 'apply-gsd-agent-patches.mjs')
+```
+
 > Примечание: при `curl|bash` на Linux/macOS `setup.mjs` запускается неинтерактивно (stdin занят
 > пайпом) — на уже настроенном `~/.claude` конфликты решаются аддитивным merge (без потерь, с
 > бэкапами/сайдкарами); для явной замены добавь `-- --replace-all`. На чистом ПК разницы нет.
@@ -176,7 +188,9 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 - **Супервизия фоновых задач** — `bin/supervise-bg.mjs` оборачивает фоновую команду в
   timeout + staleness-watchdog (зависание → exit-событие, а не тихий столл) + PreToolUse-нудж
   `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (после `git push` — `gh run watch`) +
-  probe `task-lifecycle-probe` (проверка `TaskCreated`/`TaskCompleted`).
+  probe `task-lifecycle-probe` (проверка `TaskCreated`/`TaskCompleted`) + PreToolUse-нудж
+  `schedulewakeup-loop-only-nudge` (ScheduleWakeup — только для /loop-пейсинга; завершение
+  отслеживаемой фоновой задачи ре-инвокает модель само, wakeup-поллинг — впустую).
 - **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
   выгрузка кросс-проектного графа в Neo4j (подробнее — раздел про graphify ниже).
 
