@@ -470,17 +470,25 @@
 - **Residual:** between an upstream rename and the next `/init-stack`/update cycle the hook could be
   stale. Low (Impeccable's script layout has been stable at v3.3.1); accepted.
 
-## RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths
+## RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill
 
-- **Status:** Resolved (by subset choice)
+- **Status:** Resolved (subset choice + provenance-based prune)
 - **Context:** the `uipro init` suite includes a `design` skill that hardcodes global
   `~/.claude/skills/design/` paths, which breaks when the skill is copied project-local; `brand`,
-  `banner-design`, `slides` reference absent premium skills.
+  `banner-design`, `slides` reference absent premium skills. A first design pruned these by a
+  **hardcoded name list**, which would have silently deleted a user's own pre-existing skill that
+  happened to be named `design`/`brand`/`slides` (generic names) — real user-data loss.
 - **Mitigation:** the D3 subset keeps only `ui-ux-pro-max` + `ui-styling` + `design-system`; the
-  orchestrator **prunes** every other suite skill (incl. `design`) after `uipro init`, so the
-  footgun skill is never present in a project.
-- **Residual:** none — the offending skills are removed. If a future `uipro` renames a kept skill
-  the prune allowlist needs updating; surfaced by the end-state test.
+  orchestrator prunes via **provenance**, not names — it snapshots `<root>/.claude/skills` right
+  before running `uipro init` and prunes only dirs the install **created** that aren't in
+  `keepSkills` (`pruneProMaxSkills(..., { protect: <before-snapshot> })`). A pre-existing skill of
+  ANY name is in the before-snapshot and is never deleted; the footgun `design`/etc. that uipro
+  creates fresh is pruned. Verified live 2026-07-27: `uipro init` does create a `design` dir, and
+  the provenance test proves a pre-existing user `design` survives while install-created extras are
+  removed.
+- **Residual:** if `uipro` is run OUTSIDE the orchestrator first (extras pre-exist the orchestrator's
+  snapshot) they are treated as user content and left in place — acceptable (the orchestrator only
+  prunes what it installs). Accepted.
 
 ## RISK-DESIGNSTACK-006 — Pinned npm package ids can drift or rename
 
@@ -493,6 +501,24 @@
   without aborting `/init-stack`.
 - **Residual:** a silent rename leaves the components un-updated until the ids are corrected;
   detection is manual. Accepted / low.
+
+## RISK-INITSTACK-001 — Pre-existing stale `/init-stack` step-number cross-references
+
+- **Status:** Open (accepted / pre-existing) — surfaced 2026-07-27 during Phase 3 Task 7.
+- **Context:** the Phase-3 design-stack insertion into `payload/commands/init-stack.md` (new step 5,
+  Finish→6, Mark completion→7) triggered a RISK-FALLOW-001-style cross-reference sweep. The sweep
+  found `step 6/8/9/10/11` references in ~8 files (`session-init.mjs`, `rules-src/gsd.md`,
+  `gsd-agent-patches.mjs`, `gsd-workflow-patches.mjs`, `leanmode-rules.mjs`, `mark-initstack-done.mjs`,
+  `apply-gsd-agent-patches.mjs`, `gsd-defaults-sync.mjs`, `README*.md`) plus `docs/gsd-config-defaults.md`
+  (`step 5`) that point at step numbers which **match no real heading** in the current 7-step
+  `init-stack.md` (it has never had steps 8-11). These are leftovers from an older, larger version of
+  the command and are the same drift class as RISK-FALLOW-001, at wider scope.
+- **Mitigation:** independently verified (Phase-3 Task 7 review) that the Phase-3 insertion invalidated
+  **no** previously-valid reference — every stale reference was already stale beforehand. Phase 3 left
+  them untouched rather than guessing their intended targets.
+- **Residual:** the stale references remain and will be rediscovered on the next `init-stack.md`
+  renumber. A dedicated pass should re-map each to its real current step (or delete it) and, ideally,
+  tie the text to the command's actual `## N.` headings. Deferred — out of Phase 3's scope. Accepted.
 
 ## RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 

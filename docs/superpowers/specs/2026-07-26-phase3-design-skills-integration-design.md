@@ -118,8 +118,11 @@ export function runInstaller(cmd, args, { root }) {
 Idempotency: (a)/(b) skip if `<root>/.claude/skills/{impeccable,ui-ux-pro-max}` already present;
 (c) skip if the hook entry already registered; (d) re-applies the graft only if the sentinel is
 missing; every step is wrapped so a single failure warns and continues (init-stack never aborts on
-a design-stack hiccup). Prune (b): after `uipro init`, delete every `<root>/.claude/skills/<dir>`
-not in `keepSkills` ∪ {already-present unrelated skills}.
+a design-stack hiccup). Prune (b) is **provenance-based**: snapshot `<root>/.claude/skills`
+immediately before `uipro init`, and after it delete only the dirs the install **created** that
+aren't in `keepSkills` (pass the before-snapshot as `protect`). A pre-existing skill of any name
+(even one named `design`) is never deleted — this closes the user-data-loss hole a hardcoded
+extras-name list would open (DS-005).
 
 **Rationale.** A dedicated CLI matches the repo idiom (`apply-gsd-agent-patches.mjs`,
 `sync-gsd-context-mode-tool.mjs`, `graphify-setup.mjs`) and isolates all design-stack complexity in
@@ -252,8 +255,10 @@ exception inside any probe is swallowed and the worker still writes state.
 - **DS-004** Registered hook path couples to `.claude/skills/impeccable/scripts/hook.mjs`; an
   upstream rename breaks firing. *Mitigation:* the updater's `afterUpdate`/next `/init-stack`
   re-verifies + re-registers the path.
-- **DS-005** Pro Max `design` sub-skill hardcodes global `~/.claude/skills/design` paths.
-  *Mitigation:* excluded from the D3 subset (pruned).
+- **DS-005** Pro Max `design` sub-skill hardcodes global `~/.claude/skills/design` paths; a
+  name-based prune would also delete a user's own pre-existing skill named `design`/`brand`/etc.
+  *Mitigation:* provenance-based prune (snapshot before/after `uipro init`, remove only
+  install-created non-kept dirs) — pre-existing user skills of any name are protected.
 - **DS-006** Pinned npm ids (`impeccable`, `ui-ux-pro-max-cli`) can drift/rename. *Mitigation:*
   `check()` is best-effort, fail-soft; a wrong id surfaces as a failed probe, never a crash.
 
