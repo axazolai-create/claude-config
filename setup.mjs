@@ -1008,6 +1008,28 @@ async function main() {
     }
   }
 
+  /* ---------- ensure graphify is installed (underpins the global graph + the Neo4j driver below) ---------- */
+  // graphify itself is a PyPI tool, not bundle content. If it is missing, offer to install it now via
+  // the bundled graphify-setup.mjs, BEFORE the Neo4j block so ensureNeo4jDriver() below has a python
+  // to install the driver into. Already installed -> skip silently (the freshness nudge near the end
+  // handles upgrades). Interactive + non-DRY only: the &&-short-circuit means CI / e2e (non-TTY) runs
+  // never even probe for graphify, let alone shell out to uv/pip.
+  if (!DRY && INTERACTIVE && !findGraphifyPython()) {
+    const a = await ask("\ngraphify (code knowledge graph) is not installed - it powers the global graph " +
+      "and the Neo4j driver. Install it now? [Y/n] > ");
+    if (a[0] !== "n") {
+      const gsetup = join(CDIR, "bin", "graphify-setup.mjs");
+      if (existsSync(gsetup)) {
+        log("  installing graphify (this can take a minute) ...");
+        const r = spawnSync(process.execPath, [gsetup, "--yes"], { stdio: "inherit" });
+        if (r.status === 0 && findGraphifyPython()) summary.push("installed graphify (code knowledge graph)");
+        else log("  graphify install did not finish - open a NEW shell and run 'node ~/.claude/bin/graphify-setup.mjs'.");
+      } else {
+        log("  (graphify-setup.mjs is not part of this profile - skipping)");
+      }
+    }
+  }
+
   /* ---------- opt-in: one-time, machine-wide graphify -> Neo4j (LAN) ---------- */
   // Same "decide once, record in settings.json.env, never re-ask" idiom as the update-check
   // block above. Non-secret decision recorded in settings.json.env; the password is written
