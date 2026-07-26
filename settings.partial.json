@@ -37,6 +37,12 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/schedulewakeup-loop-only-nudge.mjs"] }
         ]
+      },
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/graphify-grep-nudge.mjs"] }
+        ]
       }
     ],
     "PostToolUse": [

@@ -19,7 +19,7 @@
         "commands/init-stack.md", "commands/leanmode.md", "commands/aidev.md",
         "hooks/secrets-gate.mjs", "hooks/deny-curated-claude-md.mjs",
         "hooks/token-usage-log.mjs", "hooks/session-init.mjs",
-        "hooks/graphify-global-sync.mjs", "hooks/inject-axes*",
+        "hooks/graphify-global-sync.mjs", "hooks/graphify-grep-nudge*", "hooks/inject-axes*",
         "hooks/settings-injector.test.mjs",
         "hooks/lib/config-update-check-run.mjs", "hooks/lib/graphify-global-sync-run.mjs",
         "hooks/lib/inject-axes.mjs",

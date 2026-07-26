@@ -151,7 +151,7 @@ test("optional groups are a no-op on full (already identity)", () => {
   assert.equal(v.excludedSet.size, 0);
 });
 
-test("hook registrations: lite keeps exactly the 6 lite hooks and no statusLine", () => {
+test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
   const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
@@ -161,7 +161,7 @@ test("hook registrations: lite keeps exactly the 6 lite hooks and no statusLine"
     for (const e of entries) for (const h of (e.hooks || []))
       for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
   assert.deepEqual([...scripts].sort(), [
-    "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "inject-axes.mjs",
+    "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "graphify-grep-nudge.mjs", "inject-axes.mjs",
     "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
   ]);
   // statusLine script must NOT be in the lite set (Task 5 uses this fact to drop statusLine)
