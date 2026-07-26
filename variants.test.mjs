@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { globToRe, resolveVariant, filterPartialHooks } from "./variants.mjs";
+import { globToRe, resolveVariant, filterPartialHooks, resolvedExclude, profilesOf } from "./variants.mjs";
 import { join } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -49,10 +49,12 @@ test("lite set has no excluded families", () => {
   }
 });
 
-test("full variant is identity over payload/", () => {
+test("full variant is identity over payload/ (minus alwaysExclude)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
-  assert.equal(v.excludedSet.size, 0);
+  // full ships everything except the alwaysExclude families (e.g. task-lifecycle-probe*).
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r)),
+    `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
 
 const FORBIDDEN = [
@@ -148,7 +150,9 @@ test("optional neo4j: unknown group name is a no-op, not a throw", () => {
 test("optional groups are a no-op on full (already identity)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
   assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
-  assert.equal(v.excludedSet.size, 0);
+  // full ships everything except the alwaysExclude families (e.g. task-lifecycle-probe*).
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r)),
+    `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
 
 test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine", () => {
@@ -166,4 +170,28 @@ test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine"
   ]);
   // statusLine script must NOT be in the lite set (Task 5 uses this fact to drop statusLine)
   assert.ok(!basenames.has("gsd-context-meter.mjs"));
+});
+
+const FIXTURE = { profiles: {
+  full: { plugins: [] },
+  base: { exclude: ["a/*", "b/*"] },
+  lite: { extends: "base", exclude: ["c/*"] },
+}};
+
+test("profilesOf: prefers profiles, falls back to variants", () => {
+  assert.equal(profilesOf({ profiles: { x: 1 } }).x, 1);
+  assert.equal(profilesOf({ variants: { y: 2 } }).y, 2);
+  assert.deepEqual(profilesOf({}), {});
+});
+
+test("resolvedExclude: unions the extends chain, child last", () => {
+  assert.deepEqual(resolvedExclude(FIXTURE, "full"), []);
+  assert.deepEqual(resolvedExclude(FIXTURE, "base"), ["a/*", "b/*"]);
+  assert.deepEqual(resolvedExclude(FIXTURE, "lite"), ["a/*", "b/*", "c/*"]);
+});
+
+test("full identity honors alwaysExclude (task-lifecycle-probe not shipped in any profile)", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
+  assert.ok(!v.rels.some((r) => /task-lifecycle-probe/.test(r)),
+    "task-lifecycle-probe must be excluded even from full");
 });

@@ -1,5 +1,6 @@
 {
   "$comment": "Variant definitions for setup.mjs. Globs are relative to payload/. exclude wins over include.",
+  "alwaysExclude": ["hooks/task-lifecycle-probe*"],
   "managedPlugins": {
     "superpowers":  "superpowers@claude-plugins-official",
     "gsd":          "gsd@claude-plugins-official",
