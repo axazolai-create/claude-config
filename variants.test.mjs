@@ -31,10 +31,13 @@ test("globToRe: * does not cross /, ** does", () => {
   assert.ok(globToRe("a b*").test("a bc.mjs"));
 });
 
-test("classification: every payload file is covered by include ∪ exclude (lite)", () => {
-  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
-  assert.deepEqual(v.uncovered, [], `unclassified payload files: ${v.uncovered.join(", ")}`);
-});
+// Retired: "classification: every payload file is covered by include ∪ exclude (lite)".
+// Under the denylist model (Task 1-2) `uncovered` is hardcoded to [] on every non-legacy
+// resolution path (see resolveVariant in variants.mjs) so that assertion was vacuously true
+// regardless of what the resolver actually did. The orphan-overlay guard below and the
+// family-purity guards further down are the denylist-appropriate replacements: they exercise
+// resolver output that can actually vary (overlay files that never landed a base target;
+// GSD/full-only basenames leaking into a profile that must not ship them).
 
 test("overlay: no orphan files in payload-lite/", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
@@ -212,6 +215,32 @@ test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine"
   ]);
   // statusLine script must NOT be in the lite set (Task 5 uses this fact to drop statusLine)
   assert.ok(!basenames.has("gsd-context-meter.mjs"));
+});
+
+test("base hook registrations resolve to base's file set", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "base" });
+  const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
+  const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
+  const filtered = filterPartialHooks(partial.hooks, basenames);
+  const scripts = new Set();
+  for (const entries of Object.values(filtered))
+    for (const e of entries) for (const h of (e.hooks || []))
+      for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
+  // base MUST include its globally-registered OI-4 keep-set hooks:
+  for (const s of ["bg-supervision-nudge.mjs", "schedulewakeup-loop-only-nudge.mjs"])
+    assert.ok(scripts.has(s), `base settings must register ${s}`);
+  // full-only / GSD infra MUST NOT be registered for base:
+  for (const s of ["db-live-access-gate.mjs", "ci-watch-nudge.mjs", "gsd-context-meter.mjs", "task-lifecycle-probe.mjs"])
+    assert.ok(!scripts.has(s), `base settings must NOT register ${s}`);
+  // pnpm-phantom-fix-hook.mjs is deliberately NEVER globally registered in settings.partial.json
+  // (docs/superpowers/specs/2026-07-21-pnpm-phantom-fix-design.md, decision C2: "settings.partial.json
+  // is NOT changed — the hook is never globally registered"; it's wired per-project, pnpm-gated, by
+  // pnpm-phantom-fix-install.mjs at /init-stack time). It ships in base's FILE SET — asserted
+  // separately by "base drops all GSD, keeps neo4j opt-in and design/infra keep-set" — but this
+  // filtered-registration view must stay empty for it, or the guard above (which forbids full-only
+  // hooks from appearing here) would be trivially satisfiable by never registering anything at all.
+  assert.ok(!scripts.has("pnpm-phantom-fix-hook.mjs"),
+    "pnpm-phantom-fix-hook.mjs must stay out of the GLOBAL settings.partial.json registration");
 });
 
 const FIXTURE = { profiles: {
