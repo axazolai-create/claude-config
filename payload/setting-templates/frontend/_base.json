@@ -4,7 +4,6 @@
   "merge": {
     "enabledPlugins": {
       "typescript-lsp@claude-plugins-official": true,
-      "frontend-design@claude-plugins-official": true,
       "playwright@claude-plugins-official": true,
       "accesslint@accesslint": true,
       "chrome-devtools-mcp@claude-plugins-official": true
@@ -28,25 +27,6 @@
         "cmd": "claude plugin install typescript-lsp@claude-plugins-official --scope project",
         "bash": "claude plugin install typescript-lsp@claude-plugins-official --scope project",
         "slash": "/plugin install typescript-lsp@claude-plugins-official"
-      }
-    },
-    {
-      "id": "frontend-design@claude-plugins-official",
-      "description": "Guidance for distinctive, intentional UI visual design (typography, aesthetic direction, non-templated choices). Anthropic-authored, free.",
-      "check": {
-        "installed_file": "~/.claude/plugins/installed_plugins.json",
-        "cmd": "claude plugin list",
-        "bash": "jq -e '.plugins[\"frontend-design@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
-        "slash": "/plugin list"
-      },
-      "install": {
-        "marketplace_add": {
-          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
-          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
-        },
-        "cmd": "claude plugin install frontend-design@claude-plugins-official --scope project",
-        "bash": "claude plugin install frontend-design@claude-plugins-official --scope project",
-        "slash": "/plugin install frontend-design@claude-plugins-official"
       }
     },
     {
@@ -109,6 +89,14 @@
       }
     }
   ],
+  "designStack": {
+    "description": "Impeccable (deterministic design detector) + grafted UI-UX-Pro-Max search DB. Installed per-project on frontend detect via bin/install-design-stack.mjs.",
+    "impeccable": { "install": "npx impeccable install --providers=claude --scope=project --no-hooks" },
+    "proMax": {
+      "install": "uipro init --ai claude --offline",
+      "keepSkills": ["ui-ux-pro-max", "ui-styling", "design-system"]
+    }
+  },
   "skills": [
     {
       "id": "shadcn",
