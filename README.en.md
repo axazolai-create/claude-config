@@ -115,13 +115,15 @@ changes).
 ### Initial setup (new machine)
 
 1. `node setup.mjs` (or bootstrap — see above) — installs `~/.claude`, including
-   `~/.claude/bin/init-stack.py`, which step 3 uses.
+   `~/.claude/bin/init-stack.mjs`, which step 3 uses.
 2. **Restart Claude Code** (hooks and `settings.json` are only read at startup).
 3. In every PROJECT that needs stack-specific plugins — open a Claude Code session there and
    run `/init-stack`. It:
-   - runs `python3 ~/.claude/bin/init-stack.py` itself (stack detection + report, writes
+   - runs `node ~/.claude/bin/init-stack.mjs` itself (stack detection + report, writes
      nothing);
-   - asks you to run `python3 ~/.claude/bin/init-stack.py -i` yourself, in YOUR OWN terminal —
+   - the file/dep marker → stack-id mapping and `STACK_PATHS` now live in one shared source,
+     `~/.claude/bin/lib/stack-markers.mjs` (replaces the old `stack-markers` skill);
+   - asks you to run `node ~/.claude/bin/init-stack.mjs -i` yourself, in YOUR OWN terminal —
      the interactive checklist (arrow-key UI) can't be driven through Claude; on confirmation
      it installs the missing plugins itself (`claude plugin install`) and writes
      `./.claude/settings.json`;
@@ -134,8 +136,8 @@ Bottom line for a new machine: `setup.mjs` — once, `/init-stack` — per proje
 cloning the repo, or whenever it first needs plugins).
 
 > Step 3 and the whole "Reconfiguring" table below describe the **full**-variant `/init-stack`
-> (the Python script + plugin machinery). In the **lite** variant, `/init-stack` is not the same
-> thing: it only detects the stack and assembles `.claude/stack-rules.md`, with no Python and no
+> (the Node script + plugin machinery). In the **lite** variant, `/init-stack` is not the same
+> thing: it only detects the stack and assembles `.claude/stack-rules.md`, with no
 > plugin install/enable step at all. Details and how to pick/switch the variant — "Bundle
 > variants" below.
 
@@ -146,8 +148,8 @@ cloning the repo, or whenever it first needs plugins).
 | A new version of this repo shipped (hooks/rules/skills updated) | `node setup.mjs` (conflict flags — see above; `--dry-run` to preview without touching anything) | whenever the package updates |
 | `PreToolUse hook error` / broken paths in `~/.claude/settings.json` | `node setup.mjs --doctor`, then `node setup.mjs` | by symptom (see diagnostics below) |
 | The project's stack changed/gained a new one (new framework, monorepo, etc.) | `/init-stack` again — already-enabled plugins are pre-checked + the new stack's auto-set is added | on a stack change |
-| Toggle one specific plugin without a full `/init-stack` run | `python3 ~/.claude/bin/init-stack.py -i` directly (same checklist, but without the report and without `/init-stack`'s GSD steps 6 and 8) | as needed |
-| Just check current plugin status, changing nothing | `python3 ~/.claude/bin/init-stack.py` (no args, writes nothing) | as needed |
+| Toggle one specific plugin without a full `/init-stack` run | `node ~/.claude/bin/init-stack.mjs -i` directly (same checklist, but without the report and without `/init-stack`'s GSD steps 6 and 8) | as needed |
+| Just check current plugin status, changing nothing | `node ~/.claude/bin/init-stack.mjs` (no args, writes nothing) | as needed |
 
 After ANY of these steps that touched `settings.json` (user-level or project-level) —
 **restart Claude Code**: hooks, the user `CLAUDE.md`, and `enabledPlugins` only resolve at
@@ -176,8 +178,7 @@ switch at any time by re-running `setup.mjs`.
     per the `include`/`exclude` lists in `variants.json` (exclude wins over include);
   - **NOT included**: `gsd` agents and hooks, `db-live-access-gate`, `ci-watch-nudge`, the
     `schedulewakeup` nudge, the pnpm-phantom guard, bg-supervision (`supervise-bg.mjs`),
-    `task-lifecycle-probe`, the `/init-mcp` command, the `stack-markers` skill, the
-    `using-git-worktrees` shadow skill.
+    `task-lifecycle-probe`, the `/init-mcp` command, the `using-git-worktrees` shadow skill.
 
 ### Selecting a variant
 
@@ -311,7 +312,7 @@ So this package does three things:
   settings.json                          # your file + pre-merged keys (hooks, permissions.deny)
   add-risk.mjs                           # risk-register helper (called by auto-init)
   apply-gsd-agent-patches.mjs            # applies agent+workflow content patches (called by /init-session)
-  sync-gsd-context-mode-tool.mjs         # CLI wrapper for the tool-grant sync (called by setup.mjs / init-stack.py)
+  sync-gsd-context-mode-tool.mjs         # CLI wrapper for the tool-grant sync (called by setup.mjs / init-stack.mjs)
   hooks/
     deny-curated-claude-md.mjs           # blocks edits to a curated CLAUDE.md (any location)
     secrets-gate.mjs                     # blocks `git commit` when secrets are found in staged
@@ -353,7 +354,6 @@ So this package does three things:
     using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
     token-usage/SKILL.md                 # /token-usage — token spend log summary
     update-changelog/SKILL.md            # /update-changelog — git history → changelog.json (RU entries)
-    stack-markers/SKILL.md               # file-marker->stack mapping, split out of CLAUDE.md (see .claude/_analize/)
     model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, split out of CLAUDE.md
   rules-src/                             # stack rule sources — NOT auto-loaded by Claude Code;
                                           #   compiled into <project>/.claude/stack-rules.md (see below)
@@ -370,7 +370,7 @@ So this package does three things:
 - Copies all files into `~/.claude` (creates folders), sets +x on `.mjs` under POSIX.
 - **Scope — `~/.claude` only** (hooks, `rules-src/`, `skills/`, `CLAUDE.md`, `settings.json`).
   Project plugins are NOT part of this — that's a separate, independent mechanism,
-  `/init-stack` (see below), with its own script (`bin/init-stack.py`) and its own output. If
+  `/init-stack` (see below), with its own script (`bin/init-stack.mjs`) and its own output. If
   after running `setup.mjs` the output only shows plugin-related messages — `/init-stack` was
   probably run instead of `setup.mjs`: they don't call each other and know nothing about each
   other.
@@ -833,7 +833,7 @@ different write policies, deliberately:
   nonexistent MCP server). It's a single frontmatter line, so it's safe to run EVERY session —
   including after gsd-core's own updater rewrites an agent and drops the tool again. Called from
   `session-init.mjs` and from the CLI wrapper `sync-gsd-context-mode-tool.mjs` (invoked by
-  `setup.mjs` and `init-stack.py`).
+  `setup.mjs` and `init-stack.mjs`).
 - **Review-gated content patches** — `hooks/lib/gsd-agent-patches.mjs` (30+ agents: routing to
   context-mode tools, hardening `gsd-executor.md`/`gsd-debugger.md`, a guardrail against recursive
   spawning — including a bounded-Agent guardrail for `gsd-debug-session-manager.md`, the one agent

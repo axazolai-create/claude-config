@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { globToRe, resolveVariant, filterPartialHooks } from "./variants.mjs";
+import { globToRe, resolveVariant, filterPartialHooks, resolvedExclude, profilesOf } from "./variants.mjs";
 import { join } from "node:path";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -31,10 +31,13 @@ test("globToRe: * does not cross /, ** does", () => {
   assert.ok(globToRe("a b*").test("a bc.mjs"));
 });
 
-test("classification: every payload file is covered by include ∪ exclude (lite)", () => {
-  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
-  assert.deepEqual(v.uncovered, [], `unclassified payload files: ${v.uncovered.join(", ")}`);
-});
+// Retired: "classification: every payload file is covered by include ∪ exclude (lite)".
+// Under the denylist model (Task 1-2) `uncovered` is hardcoded to [] on every non-legacy
+// resolution path (see resolveVariant in variants.mjs) so that assertion was vacuously true
+// regardless of what the resolver actually did. The orphan-overlay guard below and the
+// family-purity guards further down are the denylist-appropriate replacements: they exercise
+// resolver output that can actually vary (overlay files that never landed a base target;
+// GSD/full-only basenames leaking into a profile that must not ship them).
 
 test("overlay: no orphan files in payload-lite/", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
@@ -44,19 +47,75 @@ test("overlay: no orphan files in payload-lite/", () => {
 test("lite set has no excluded families", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   for (const rel of v.rels) {
-    assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-|references\/|setting-templates\/)/.test(rel), rel);
+    // setting-templates/** is deliberately NOT in this list: templates ship in every profile
+    // (spec §1) - lite filters plugins by maxPluginTier: "core" at install time, not by
+    // excluding template files.
+    assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-|references\/)/.test(rel), rel);
     assert.notEqual(rel, "rules-src/gsd.md");
   }
 });
 
-test("full variant is identity over payload/", () => {
-  const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
-  assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
-  assert.equal(v.excludedSet.size, 0);
+test("profile chain is a strict subset: lite ⊂ base ⊂ full", () => {
+  const full = new Set(resolveVariant({ repoRoot: ROOT, variant: "full" }).rels);
+  const base = new Set(resolveVariant({ repoRoot: ROOT, variant: "base" }).rels);
+  const lite = new Set(resolveVariant({ repoRoot: ROOT, variant: "lite" }).rels);
+  for (const r of base) assert.ok(full.has(r), `base file not in full: ${r}`);
+  for (const r of lite) assert.ok(base.has(r), `lite file not in base: ${r}`);
+  assert.ok(base.size < full.size && lite.size < base.size, "each step must be a proper subset");
 });
 
+test("base drops all GSD, keeps neo4j opt-in and design/infra keep-set", () => {
+  const base = resolveVariant({ repoRoot: ROOT, variant: "base" });
+  for (const r of base.rels) {
+    assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-)/.test(r), `GSD leaked into base: ${r}`);
+    assert.notEqual(r, "rules-src/gsd.md");
+  }
+  const baseWithNeo = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
+  assert.ok(baseWithNeo.rels.includes("bin/lib/neo4j-config.mjs"), "base neo4j promotable");
+  assert.ok(!base.rels.includes("bin/lib/neo4j-config.mjs"), "base neo4j excluded by default");
+  // OI-4 keep-set present in base:
+  for (const f of ["hooks/bg-supervision-nudge.mjs", "commands/init-mcp.md",
+                   "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs"])
+    assert.ok(base.rels.includes(f), `base must keep ${f}`);
+  // full-only infra absent from base:
+  for (const f of ["hooks/db-live-access-gate.mjs", "hooks/ci-watch-nudge.mjs"])
+    assert.ok(!base.rels.includes(f), `full-only infra leaked into base: ${f}`);
+});
+
+test("lite drops base's universal infra + neo4j", () => {
+  const lite = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  for (const f of ["hooks/bg-supervision-nudge.mjs", "commands/init-mcp.md",
+                   "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs",
+                   "bin/lib/neo4j-config.mjs"])
+    assert.ok(!lite.rels.includes(f), `lite must drop ${f}`);
+  // lite offers no neo4j opt-in at all (moved to base): opting in on lite yields nothing.
+  const liteWithNeo = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  assert.ok(!liteWithNeo.rels.includes("bin/lib/neo4j-config.mjs"), "lite has no neo4j opt-in");
+});
+
+test("full variant is identity over payload/ (minus alwaysExclude)", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
+  assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
+  // full ships everything except the alwaysExclude families: the 2 task-lifecycle-probe
+  // entries (.mjs + .test.mjs) and every claude-md/ fragment (build input for
+  // assemble-claude-md.mjs — CLAUDE.md itself is assembled by setup.mjs, never copied as a
+  // payload rel). Nothing else leaks in.
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
+    `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
+  assert.ok([...v.excludedSet].some((r) => /task-lifecycle-probe/.test(r)), "task-lifecycle-probe must still be excluded");
+  assert.ok([...v.excludedSet].some((r) => r.startsWith("claude-md/")), "claude-md/ fragments must be excluded from full too");
+});
+
+// "setting-templates" was dropped from this list under three-profile unification (Task 6):
+// setting-templates/ now ships in EVERY profile (variant-agnostic stack templates; which
+// plugins a profile is willing to enable is the tier filter, not file exclusion - see
+// docs/superpowers/specs/2026-07-26-three-profile-unification-design.md §2.1/§4), and the now-
+// unified payload/commands/init-stack.md legitimately references
+// `~/.claude/setting-templates/` for every profile, including lite. "init-stack.py" stays
+// forbidden: the Python implementation is deleted, so the unified doc invokes
+// `node ~/.claude/bin/init-stack.mjs` only.
 const FORBIDDEN = [
-  "gsd", "init-stack.py", "setting-templates", "neo4j", "pnpm-phantom",
+  "gsd", "init-stack.py", "neo4j", "pnpm-phantom",
   "db-live-access", "ci-watch", "schedulewakeup", "stack-markers",
   "worktree-executor-discipline", "bg-supervision", "supervise-bg",
   "task-lifecycle-probe", "init-mcp",
@@ -113,19 +172,17 @@ test("import graph: no static import in the lite set resolves to an excluded fil
 });
 
 test("optional neo4j: opted in, ecosystem files are included and no longer excluded", () => {
-  const off = resolveVariant({ repoRoot: ROOT, variant: "lite" });
-  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  const off = resolveVariant({ repoRoot: ROOT, variant: "base" });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
   const neo = "bin/lib/neo4j-config.mjs";
   assert.ok(!off.rels.includes(neo) && off.excludedSet.has(neo), "default: excluded");
   assert.ok(on.rels.includes(neo) && !on.excludedSet.has(neo), "opted-in: included, not excluded");
   assert.ok(on.rels.includes("bin/graphify-neo4j-push.mjs"), "push wrapper included");
   assert.ok(on.rels.includes("graphify-neo4j.cypher"), "cypher cookbook included");
-  assert.ok(on.rels.includes("commands/init-mcp.md"), "read-MCP doc included");
-  assert.deepEqual(on.uncovered, [], "still fully classified when opted in");
 });
 
 test("optional neo4j: opted-in set is import-closed (no dangling static import)", () => {
-  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
   const relSet = new Set(on.rels);
   const bad = [];
   for (const rel of on.rels) {
@@ -140,15 +197,22 @@ test("optional neo4j: opted-in set is import-closed (no dangling static import)"
 });
 
 test("optional neo4j: unknown group name is a no-op, not a throw", () => {
-  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["does-not-exist"] });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["does-not-exist"] });
   assert.ok(!on.rels.includes("bin/lib/neo4j-config.mjs"));
-  assert.deepEqual(on.uncovered, []);
 });
 
 test("optional groups are a no-op on full (already identity)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
   assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
-  assert.equal(v.excludedSet.size, 0);
+  // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
+  // .test.mjs) and the claude-md/ fragments (build input, see the test above), nothing else
+  // leaks in. Non-vacuous: also assert the excluded set is non-empty and both families are
+  // actually present (not just "everything present passes an all-() over an empty set").
+  assert.ok(v.excludedSet.size > 0, "excludedSet must not be empty");
+  assert.ok([...v.excludedSet].some((r) => /task-lifecycle-probe/.test(r)), "task-lifecycle-probe must still be excluded");
+  assert.ok([...v.excludedSet].some((r) => r.startsWith("claude-md/")), "claude-md/ fragments must be excluded from full too");
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
+    `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
 
 test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine", () => {
@@ -166,4 +230,54 @@ test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine"
   ]);
   // statusLine script must NOT be in the lite set (Task 5 uses this fact to drop statusLine)
   assert.ok(!basenames.has("gsd-context-meter.mjs"));
+});
+
+test("base hook registrations resolve to base's file set", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "base" });
+  const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
+  const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
+  const filtered = filterPartialHooks(partial.hooks, basenames);
+  const scripts = new Set();
+  for (const entries of Object.values(filtered))
+    for (const e of entries) for (const h of (e.hooks || []))
+      for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
+  // base MUST include its globally-registered OI-4 keep-set hooks:
+  for (const s of ["bg-supervision-nudge.mjs", "schedulewakeup-loop-only-nudge.mjs"])
+    assert.ok(scripts.has(s), `base settings must register ${s}`);
+  // full-only / GSD infra MUST NOT be registered for base:
+  for (const s of ["db-live-access-gate.mjs", "ci-watch-nudge.mjs", "gsd-context-meter.mjs", "task-lifecycle-probe.mjs"])
+    assert.ok(!scripts.has(s), `base settings must NOT register ${s}`);
+  // pnpm-phantom-fix-hook.mjs is deliberately NEVER globally registered in settings.partial.json
+  // (docs/superpowers/specs/2026-07-21-pnpm-phantom-fix-design.md, decision C2: "settings.partial.json
+  // is NOT changed — the hook is never globally registered"; it's wired per-project, pnpm-gated, by
+  // pnpm-phantom-fix-install.mjs at /init-stack time). It ships in base's FILE SET — asserted
+  // separately by "base drops all GSD, keeps neo4j opt-in and design/infra keep-set" — but this
+  // filtered-registration view must stay empty for it, or the guard above (which forbids full-only
+  // hooks from appearing here) would be trivially satisfiable by never registering anything at all.
+  assert.ok(!scripts.has("pnpm-phantom-fix-hook.mjs"),
+    "pnpm-phantom-fix-hook.mjs must stay out of the GLOBAL settings.partial.json registration");
+});
+
+const FIXTURE = { profiles: {
+  full: { plugins: [] },
+  base: { exclude: ["a/*", "b/*"] },
+  lite: { extends: "base", exclude: ["c/*"] },
+}};
+
+test("profilesOf: prefers profiles, falls back to variants", () => {
+  assert.equal(profilesOf({ profiles: { x: 1 } }).x, 1);
+  assert.equal(profilesOf({ variants: { y: 2 } }).y, 2);
+  assert.deepEqual(profilesOf({}), {});
+});
+
+test("resolvedExclude: unions the extends chain, child last", () => {
+  assert.deepEqual(resolvedExclude(FIXTURE, "full"), []);
+  assert.deepEqual(resolvedExclude(FIXTURE, "base"), ["a/*", "b/*"]);
+  assert.deepEqual(resolvedExclude(FIXTURE, "lite"), ["a/*", "b/*", "c/*"]);
+});
+
+test("full identity honors alwaysExclude (task-lifecycle-probe not shipped in any profile)", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
+  assert.ok(!v.rels.some((r) => /task-lifecycle-probe/.test(r)),
+    "task-lifecycle-probe must be excluded even from full");
 });

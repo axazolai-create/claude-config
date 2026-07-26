@@ -1,61 +1,45 @@
 {
-  "$comment": "Variant definitions for setup.mjs. Globs are relative to payload/. exclude wins over include.",
+  "$comment": "Profile definitions for setup.mjs. Globs relative to payload/. exclude wins over include; extends unions the parent chain's exclude first. optional groups are promoted over exclude when active.",
+  "alwaysExclude": ["hooks/task-lifecycle-probe*", "claude-md/**"],
   "managedPlugins": {
     "superpowers":  "superpowers@claude-plugins-official",
     "gsd":          "gsd@claude-plugins-official",
     "context-mode": "context-mode@context-mode",
     "context7":     "context7@claude-plugins-official"
   },
-  "variants": {
+  "profiles": {
     "full": { "plugins": ["superpowers", "gsd", "context-mode", "context7"] },
-    "lite": {
+
+    "base": {
       "plugins": ["superpowers", "context-mode", "context7"],
-      "overlay": "payload-lite",
-      "include": [
-        "CLAUDE.md", "add-risk.mjs", "graphify-sync-all.mjs",
-        "agents/leanmode-executor.md",
-        "bin/graphify-freshness*", "bin/graphify-setup.mjs",
-        "bin/lib/config-dir-validate*", "bin/lib/entrypoint-guard.test.mjs",
-        "commands/init-stack.md", "commands/leanmode.md", "commands/aidev.md",
-        "hooks/secrets-gate.mjs", "hooks/deny-curated-claude-md.mjs",
-        "hooks/token-usage-log.mjs", "hooks/session-init.mjs",
-        "hooks/graphify-global-sync.mjs", "hooks/graphify-grep-nudge*", "hooks/inject-axes*",
-        "hooks/settings-injector.test.mjs",
-        "hooks/lib/config-update-check-run.mjs", "hooks/lib/graphify-global-sync-run.mjs",
-        "hooks/lib/inject-axes.mjs",
-        "hooks/lib/leanmode-*", "hooks/lib/mark-initstack-done.mjs",
-        "hooks/lib/verbosity-*",
-        "hooks/lib/stack-rules-check.mjs", "hooks/lib/token-usage-*",
-        "rules-src/**",
-        "skills/model-selection-policy/**", "skills/token-usage/**", "skills/update-changelog/**"
-      ],
       "exclude": [
         "agents/gsd-*.md", "apply-gsd-agent-patches.mjs", "gsd-defaults-sync.mjs",
-        "sync-gsd-context-mode-tool.mjs",
-        "graphify-neo4j.cypher",
-        "bin/init-stack.py", "bin/test_init_stack.py", "bin/__pycache__/**",
-        "bin/graphify-neo4j-*", "bin/lib/neo4j-config*",
-        "bin/lib/pnpm-*", "bin/lib/turbopack-gvs-*",
-        "bin/pnpm-phantom-*", "bin/turbopack-gvs-check.mjs",
-        "bin/supervise-bg.mjs", "bin/lib/supervise-lib*",
-        "commands/init-mcp.md", "commands/init-session.md", "commands/pnpm-phantom-fix.md",
-        "hooks/db-live-access-gate.mjs", "hooks/ci-watch-nudge*",
-        "hooks/schedulewakeup-loop-only-nudge*",
-        "hooks/bg-supervision-nudge*", "hooks/task-lifecycle-probe*",
-        "hooks/gsd-*", "hooks/lib/gsd-*",
-        "hooks/lib/context-mode-gsd-agents.mjs",
-        "hooks/pnpm-phantom-fix-hook*",
+        "sync-gsd-context-mode-tool.mjs", "commands/init-session.md",
+        "hooks/gsd-*", "hooks/lib/gsd-*", "hooks/lib/context-mode-gsd-agents.mjs",
         "hooks/worktree-executor-discipline-advisor.mjs",
-        "references/**", "rules-src/gsd.md",
-        "skills/stack-markers/**", "skills/using-git-worktrees/**",
-        "setting-templates/**"
+        "rules-src/gsd.md", "skills/using-git-worktrees/**",
+        "references/**",
+        "hooks/db-live-access-gate.mjs", "hooks/ci-watch-nudge*",
+        "bin/lib/neo4j-config*", "bin/graphify-neo4j-*", "graphify-neo4j.cypher"
       ],
       "optional": {
-        "$comment": "Excluded by default but promotable at install time via setup.mjs activeOptional. When a group is active its globs win over exclude; the files are then installed (and, being in the manifest, pruned again on opt-out).",
-        "neo4j": [
-          "bin/lib/neo4j-config*", "bin/graphify-neo4j-*", "graphify-neo4j.cypher", "commands/init-mcp.md"
-        ]
+        "$comment": "Excluded by default, promotable at install time via setup.mjs. When active, globs win over exclude and files are installed (pruned again on opt-out).",
+        "neo4j": ["bin/lib/neo4j-config*", "bin/graphify-neo4j-*", "graphify-neo4j.cypher"]
       }
+    },
+
+    "lite": {
+      "extends": "base",
+      "plugins": ["superpowers", "context-mode", "context7"],
+      "overlay": "payload-lite",
+      "maxPluginTier": "core",
+      "exclude": [
+        "hooks/bg-supervision-nudge*", "bin/supervise-bg.mjs", "bin/lib/supervise-lib*",
+        "commands/init-mcp.md",
+        "hooks/schedulewakeup-loop-only-nudge*",
+        "hooks/pnpm-phantom-fix-hook*", "bin/pnpm-phantom-*", "bin/lib/pnpm-*",
+        "bin/turbopack-gvs-check.mjs", "bin/lib/turbopack-gvs-*", "commands/pnpm-phantom-fix.md"
+      ]
     }
   }
 }

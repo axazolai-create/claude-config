@@ -56,7 +56,7 @@ setting-templates/
 `/init-stack` detects the project's stack(s) (`react`, `next`, `react-native`, `nest`, `node`,
 `django`, `fastapi`, `flask`, `python`, `android`, `swift`, `dart`, `kotlin`, `sql`, `turbo`, `nx`,
 `telegram-node`, `telegram-python`, `csharp`, `aspnet`, `csharp-cli`, `wpf`), looks up each one's
-file via the `STACK_PATHS` table in `bin/init-stack.py`,
+file via the `STACK_PATHS` table in `bin/init-stack.mjs`,
 resolves its full inheritance chain, checks each declared plugin, and merges the `merge` block
 into the project's `.claude/settings.json`. It also surfaces any `skills[]` a template declares
 (npx-installed Agent Skills) and, in `-i`, offers to `npx skills add` the missing ones - skills are
@@ -92,8 +92,8 @@ fire together (e.g. a Django project detects `django` only, not `django` + `pyth
   partial inheritance; the field exists as a deliberate extension point).
 - Resolution order for a given template: vertical ancestors (root-most first) -> each `extends`
   target (in declared order, `pick`-filtered if applicable) -> the template's own content, LAST -
-  so its own plugins/merge are what a diff would show as "added on top". See `_resolve_chain()`
-  in `bin/init-stack.py`.
+  so its own plugins/merge are what a diff would show as "added on top". See `resolveChain()`
+  in `bin/init-stack.mjs`.
 
 ## Schema
 

@@ -30,31 +30,68 @@ function walkRels(dir, rel = "") {
   return out;
 }
 
-export function resolveVariant({ repoRoot, variant, activeOptional = [] }) {
-  const cfg = loadVariants(repoRoot);
-  const def = cfg.variants[variant];
-  if (!def) throw new Error(`unknown variant "${variant}" (known: ${Object.keys(cfg.variants).join(", ")})`);
+export function profilesOf(cfg) { return cfg.profiles || cfg.variants || {}; }
+
+export function resolvedExclude(cfg, name) {
+  const def = profilesOf(cfg)[name] || {};
+  const parent = def.extends ? resolvedExclude(cfg, def.extends) : [];
+  return [...parent, ...(def.exclude || [])];
+}
+
+export function resolveVariant({ repoRoot, variant, activeOptional = [], cfg = null }) {
+  cfg = cfg || loadVariants(repoRoot);
+  const profiles = profilesOf(cfg);
+  const def = profiles[variant];
+  if (!def) throw new Error(`unknown profile "${variant}" (known: ${Object.keys(profiles).join(", ")})`);
   const payloadDir = join(repoRoot, "payload");
   const payloadRels = walkRels(payloadDir);
+  const alwaysRes = (cfg.alwaysExclude || []).map(globToRe);
+  const isAlways = (rel) => matchAny(rel, alwaysRes);
+  const srcForPayload = (rel) => join(payloadDir, ...rel.split("/"));
 
-  if (!def.include) { // full: identity (already ships everything; optional groups are a no-op)
-    return { name: variant, rels: payloadRels, srcFor: (rel) => join(payloadDir, ...rel.split("/")),
-             excludedSet: new Set(), uncovered: [], orphanOverlay: [], plugins: def.plugins };
+  // identity (full): ship everything except alwaysExclude
+  if (!def.include && !def.exclude && !def.extends) {
+    const rels = payloadRels.filter((r) => !isAlways(r));
+    return { name: variant, rels, srcFor: srcForPayload,
+      excludedSet: new Set(payloadRels.filter(isAlways)), uncovered: [], orphanOverlay: [], plugins: def.plugins };
   }
-  const incRes = def.include.map(globToRe);
-  const excRes = def.exclude.map(globToRe);
+
   // Active optional groups are promoted OVER exclude: their globs are installed this run and,
   // being in the manifest, get pruned again automatically on a later opt-out. Unknown group
   // names contribute nothing (no throw) so a stale flag can never break resolution.
   const optGlobs = (activeOptional || []).flatMap((g) => (def.optional && def.optional[g]) || []);
   const optRes = optGlobs.map(globToRe);
+
+  // denylist (base/lite via extends): everything not excluded; optional-active wins over exclude
+  if (!def.include) {
+    const excRes = resolvedExclude(cfg, variant).map(globToRe);
+    const rels = [], excluded = [];
+    for (const rel of payloadRels) {
+      if (isAlways(rel)) { excluded.push(rel); continue; }
+      if (matchAny(rel, optRes)) { rels.push(rel); continue; }   // optional promoted over exclude
+      if (matchAny(rel, excRes)) { excluded.push(rel); continue; }
+      rels.push(rel);
+    }
+    return finalizeResolved({ variant, def, repoRoot, payloadDir, rels, excluded, plugins: def.plugins });
+  }
+
+  // legacy allowlist (kept one release for back-compat) — existing include/exclude/optional body,
+  // wrapped to also drop alwaysExclude and route through finalizeResolved().
+  const incRes = def.include.map(globToRe);
+  const excRes = def.exclude.map(globToRe);
   const rels = [], excluded = [], uncovered = [];
   for (const rel of payloadRels) {
+    if (isAlways(rel)) { excluded.push(rel); continue; }
     if (matchAny(rel, optRes)) rels.push(rel);           // active optional wins over exclude
     else if (matchAny(rel, excRes)) excluded.push(rel);  // exclude wins over include
     else if (matchAny(rel, incRes)) rels.push(rel);
     else uncovered.push(rel);
   }
+  return finalizeResolved({ variant, def, repoRoot, payloadDir, rels, excluded, uncovered, plugins: def.plugins });
+}
+
+// shared overlay/srcFor/orphan handling (was inline in the old allowlist path)
+function finalizeResolved({ variant, def, repoRoot, payloadDir, rels, excluded, uncovered = [], plugins }) {
   const overlayDir = def.overlay ? join(repoRoot, def.overlay) : null;
   const overlayRels = overlayDir ? walkRels(overlayDir) : [];
   const relSet = new Set(rels);
@@ -63,7 +100,7 @@ export function resolveVariant({ repoRoot, variant, activeOptional = [] }) {
   const srcFor = (rel) => overlaySet.has(rel)
     ? join(overlayDir, ...rel.split("/"))
     : join(payloadDir, ...rel.split("/"));
-  return { name: variant, rels, srcFor, excludedSet: new Set(excluded), uncovered, orphanOverlay, plugins: def.plugins };
+  return { name: variant, rels, srcFor, excludedSet: new Set(excluded), uncovered, orphanOverlay, plugins };
 }
 
 // Drop hook entries whose script basenames are not all inside the variant set; drop empty events.

@@ -40,16 +40,19 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
-import { resolveVariant, filterPartialHooks, loadVariants } from "./variants.mjs";
+import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
+import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
 // SRC = REPO_ROOT/payload - everything that actually gets installed into ~/.claude
 // (hooks/, skills/, rules-src/, commands/, setting-templates/, bin/, add-risk.mjs,
-// graphify-sync-all.mjs, CLAUDE.md). Kept as two separate constants (not one) because
+// graphify-sync-all.mjs). Kept as two separate constants (not one) because
 // settings.partial.json below is read from REPO_ROOT, not SRC - it configures the installer,
-// it isn't itself installed.
+// it isn't itself installed. NOTE: payload/claude-md/ is a build input, not a copied rel -
+// ~/.claude/CLAUDE.md is assembled per-profile from those fragments (assemble-claude-md.mjs),
+// not mirrored 1:1 like the rest of SRC - see the assemble+write step after the placeFile loop.
 const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(REPO_ROOT, "payload");
 const HOME = homedir();
@@ -76,6 +79,16 @@ const VARIANT_ARG = (() => {
   const a = [...argv].find((x) => x.startsWith("--variant="));
   return a ? a.slice("--variant=".length) : null;
 })();
+// Non-interactive augment/trim toggles (OI-5): --configure-<group>=on|off, applied IN-PROCESS to
+// whichever `optional` group the active profile declares (today: only base's "neo4j") - so an
+// install/CI run never needs a manual follow-up command, just this one flag. Unknown group names
+// are silently inert (see the per-group loop in main()), same "no throw on stale input" idiom as
+// resolveVariant()'s own activeOptional handling.
+const CONFIGURE_FLAGS = {};
+for (const a of argv) {
+  const m = /^--configure-([A-Za-z0-9_-]+)=(on|off)$/.exec(a);
+  if (m) CONFIGURE_FLAGS[m[1]] = m[2] === "on";
+}
 const ENABLE_UPDATE_CHECK_FLAG = argv.has("--enable-update-check");
 const INTERACTIVE = !BULK && process.stdin.isTTY;
 const MD = argv.has("--md");
@@ -415,6 +428,41 @@ function walkDir(dir, rel = "") {
   }
   return out;
 }
+/* ---------- guided augment/trim (OI-5): per-profile `optional` groups ----------
+ * Generalizes the old neo4j-only opt-in into a loop over ANY profile's `optional` map (today:
+ * only base declares one, "neo4j"). fsGroupInstalled() is the ONE fallback path - it's the same
+ * "does a file from this group already exist on disk?" idiom the old neo4j-only code used,
+ * kept ONLY for manifests written before `activeOptional` existed. Once a manifest carries
+ * `activeOptional`, that array is authoritative and this is never consulted. */
+function fsGroupInstalled(globs) {
+  const res = (globs || []).map(globToRe);
+  if (!res.length) return false;
+  return walkDir(CDIR).some((rel) => res.some((re) => re.test(rel)));
+}
+// A group toggled OFF this run (was active last run, per manifest or the fs fallback; not active
+// now) is pruned directly here - deliberately NOT routed through pruneStale()'s BULK/interactive
+// gate below, because `--configure-<group>=off` (or an explicit interactive "n") is already
+// unambiguous consent to remove exactly those files; no second confirmation needed. Still safe-
+// gated the same way pruneStale() is: never touches a curated file, never touches a file modified
+// since install (a real edit wins over the toggle).
+function pruneDroppedOptional(groups, def, oldByRel) {
+  const globs = (groups || []).flatMap((g) => (def.optional && def.optional[g]) || []);
+  if (!globs.length) return;
+  const res = globs.map(globToRe);
+  const matches = walkDir(CDIR).filter((rel) => res.some((re) => re.test(rel)));
+  if (!matches.length) return;
+  log(`\n--- augment: optional group(s) turned off [${groups.join(", ")}] - pruning their files ---`);
+  for (const rel of matches) {
+    const dst = join(CDIR, ...rel.split("/"));
+    const cur = read(dst);
+    if (typeof cur === "string" && isCurated(cur)) { log(`  kept (curated) ${dst}`); summary.push(`kept (curated) ${dst}`); continue; }
+    const oldHash = oldByRel.get(rel);
+    if (oldHash && cur !== undefined && sha(cur) !== oldHash) { log(`  kept (modified since install) ${dst}`); summary.push(`kept (modified since install) ${dst}`); continue; }
+    if (DRY) { log(`  would-prune ${dst}`); summary.push(`would-prune ${dst} (optional group off)`); continue; }
+    try { rmSync(dst, { force: true }); log(`  pruned   ${dst}`); summary.push(`pruned   ${dst} (optional group off)`); }
+    catch { summary.push(`prune-failed ${dst}`); }
+  }
+}
 function overwriteTemplatesDir() {
   const bundleRels = new Set(walkDir(join(SRC, "setting-templates")));
   const destDir = join(CDIR, "setting-templates");
@@ -535,38 +583,55 @@ async function main() {
 
   // ---------- variant selection (spec § 9) ----------
   const oldManifestEarly = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8")));
-  const installedVariant = oldManifestEarly ? (oldManifestEarly.variant || "full") : null;
+  const installedVariant = oldManifestEarly ? (oldManifestEarly.profile || oldManifestEarly.variant || "full") : null;
+  const known = Object.keys(profilesOf(loadVariants(REPO_ROOT)));
   VARIANT = VARIANT_ARG;
-  if (VARIANT && !loadVariants(REPO_ROOT).variants[VARIANT]) {
-    log(`Unknown --variant=${VARIANT}. Known: ${Object.keys(loadVariants(REPO_ROOT).variants).join(", ")}`);
+  if (VARIANT && !known.includes(VARIANT)) {
+    log(`Unknown --variant=${VARIANT}. Known: ${known.join(", ")}`);
     process.exit(1);
   }
   if (!VARIANT && INTERACTIVE) {
     const def = installedVariant || "full";
-    const a = (await ask(`  bundle variant [full/lite] (Enter = ${def}) > `)).trim().toLowerCase();
-    VARIANT = a === "lite" || a === "full" ? a : def;
+    const a = (await ask(`  bundle profile [full/base/lite] (Enter = ${def}) > `)).trim().toLowerCase();
+    VARIANT = known.includes(a) ? a : def;
   }
   if (!VARIANT) VARIANT = installedVariant || "full";   // non-TTY: detected, or full on fresh
 
-  // Optional Neo4j ecosystem in lite (opt-in at install). Decided BEFORE resolveVariant so the
-  // neo4j file set is included/excluded for this run. State is the filesystem: a previously
-  // opted-in install has neo4j-config.mjs present, which becomes the default (and the non-TTY
-  // answer) so re-runs are idempotent; opting out drops it and pruneStale removes the files.
-  // Full always ships the ecosystem, so this only gates lite.
-  let activeOptional = [];
-  if (VARIANT === "lite") {
-    const installed = existsSync(join(CDIR, "bin", "lib", "neo4j-config.mjs"));
-    if (INTERACTIVE) {
-      const a = (await ask(`  include the graphify Neo4j ecosystem (read/write + driver + cypher)? ` +
-        `[${installed ? "Y/n" : "y/N"}] > `)).trim().toLowerCase();
-      NEO4J_ECOSYSTEM = a ? a[0] === "y" : installed;
+  // ---------- guided per-profile augment/trim (OI-5): one guided flow, never a manual chain ----------
+  // Any profile's `optional` groups (today: only base's "neo4j") are toggled HERE, in-process,
+  // BEFORE resolveVariant - either via --configure-<group>=on|off (non-interactive/CI, e.g. the
+  // e2e suite - this is the key OI-5 path: an install applies the toggle itself, it never tells
+  // the user to go run a follow-up command) or, in a TTY, one y/n prompt per group. The manifest's
+  // `activeOptional` is the primary source for "what was active last run" (read back below as
+  // `prevActiveOptional`, default for both the non-TTY case and the interactive Y/n hint); the old
+  // filesystem-sniff idiom (a group's marker file already present on disk) is kept ONLY as a
+  // fallback for a manifest written before that field existed. Full always ships neo4j (identity
+  // variant, no exclude/optional at all); lite never offers it (no optional.neo4j group).
+  const profileDef = profilesOf(loadVariants(REPO_ROOT))[VARIANT] || {};
+  // "$comment" is variants.json's own documentation-key convention (see the top-level
+  // $comment there too) - not a real group, so it must never be treated as one here.
+  const optionalGroups = Object.keys(profileDef.optional || {}).filter((k) => k !== "$comment");
+  const prevActiveOptional = Array.isArray(oldManifestEarly && oldManifestEarly.activeOptional)
+    ? oldManifestEarly.activeOptional : null;
+  const GROUP_LABELS = { neo4j: "the graphify Neo4j ecosystem (read/write + driver + cypher)" };
+  let activeOptional = [], droppedOptional = [];
+  for (const group of optionalGroups) {
+    const globs = profileDef.optional[group];
+    const wasActive = prevActiveOptional ? prevActiveOptional.includes(group) : fsGroupInstalled(globs);
+    let on;
+    if (group in CONFIGURE_FLAGS) {
+      on = CONFIGURE_FLAGS[group];
+    } else if (INTERACTIVE) {
+      const label = GROUP_LABELS[group] || `the "${group}" group`;
+      const a = (await ask(`  include ${label}? [${wasActive ? "Y/n" : "y/N"}] > `)).trim().toLowerCase();
+      on = a ? a[0] === "y" : wasActive;
     } else {
-      NEO4J_ECOSYSTEM = installed;                        // non-TTY: keep whatever is already installed
+      on = wasActive;                                     // non-TTY, no flag: keep whatever was active
     }
-    if (NEO4J_ECOSYSTEM) activeOptional = ["neo4j"];
-  } else {
-    NEO4J_ECOSYSTEM = true;                               // full ships the whole ecosystem
+    if (on) activeOptional.push(group);
+    else if (wasActive) droppedOptional.push(group);
   }
+  NEO4J_ECOSYSTEM = VARIANT === "full" ? true : activeOptional.includes("neo4j");
   V = resolveVariant({ repoRoot: REPO_ROOT, variant: VARIANT, activeOptional });
   if (installedVariant && installedVariant !== VARIANT)
     log(`Switching variant: ${installedVariant} -> ${VARIANT} (surplus files listed for removal below)`);
@@ -584,24 +649,35 @@ async function main() {
   if (platform() !== "win32" && !DRY)
     for (const p of copiedScripts) safe(() => chmodSync(p, 0o755));
 
-  /* ---------- always ensure ~/.claude/CLAUDE.md carries the curated marker ---------- */
-  // deny-curated-claude-md.mjs has no hardcoded path check for the global file anymore -
-  // authority lives entirely in the marker, one mechanism instead of two. So THIS is what
-  // guarantees ~/.claude/CLAUDE.md is always protected: independent of whatever merge/replace/
-  // skip choice the placeFile() conflict flow above made for its body content, unconditionally
-  // check whether the marker is present as a standalone line ANYWHERE in the file (not just the
-  // first line - a title or other content may legitimately come first) and prepend it if not.
-  // Never a merge/replace/skip question - the marker itself is not negotiable, only the prose
-  // around it is.
-  if (!DRY) {
+  /* ---------- assemble + write ~/.claude/CLAUDE.md from per-profile fragments ----------
+   * Replaces the old per-variant CLAUDE.md monoliths (payload/CLAUDE.md, payload-lite/CLAUDE.md):
+   * the assembled text is built fresh every run from payload/claude-md/ fragments for VARIANT
+   * (assemble-claude-md.mjs), which already starts with the CURATED:NOEDIT marker + a GENERATED
+   * header - so this single step both installs the file AND guarantees the marker, no separate
+   * "ensure marker" pass needed anymore. CLAUDE.md is deliberately NOT part of V.rels (payload/
+   * claude-md/** is in alwaysExclude - it's a build input, never copied 1:1), so it is placed
+   * here instead of through the placeFile() loop above - but it still goes through the same
+   * curated-conflict tiering as any other curated file (unchanged -> no-op; new -> create; changed
+   * -> diff + merge/replace/skip) so a hand-edited ~/.claude/CLAUDE.md is never silently clobbered.
+   */
+  {
+    const assembled = assembleClaudeMd(join(SRC, "claude-md"), VARIANT);
+    manifestNow.push({ rel: "CLAUDE.md", hash: sha(assembled) });
     const globalClaudeMd = join(CDIR, "CLAUDE.md");
     const curGlobal = read(globalClaudeMd);
-    if (curGlobal !== undefined) {
-      const bodyNoBom = curGlobal.replace(/^﻿/, "");
-      const alreadyMarked = bodyNoBom.split(/\r?\n/).some((line) => MARKER_RE.test(line.trim()));
-      if (!alreadyMarked) {
-        if (write(globalClaudeMd, MARKER_LINE + "\n" + curGlobal))
-          summary.push(`updated  ${globalClaudeMd} (prepended ${MARKER} - was missing)`);
+    if (curGlobal === undefined) {
+      if (write(globalClaudeMd, assembled)) summary.push(`created  ${globalClaudeMd}`);
+    } else if (curGlobal === assembled) {
+      summary.push(`unchanged ${globalClaudeMd}`);
+    } else {
+      log(`\n~ conflict (curated): ${globalClaudeMd}`);
+      log(renderDiff(curGlobal, assembled));
+      const act = await choose(globalClaudeMd, "merge");
+      if (act === "replace") {
+        if (write(globalClaudeMd, assembled))
+          summary.push(`replaced ${globalClaudeMd} (no backup - see diff above if you need the old content)`);
+      } else {
+        summary.push(`${act === "skip" ? "skipped" : "kept (see diff above)"} ${globalClaudeMd}`);
       }
     }
   }
@@ -996,10 +1072,16 @@ async function main() {
   /* ---------- prune stale files + persist manifest ---------- */
   migrateRulesDir();
   overwriteTemplatesDir();
+  {
+    const oldByRelEarly = new Map(((oldManifestEarly && oldManifestEarly.files) || []).map((f) => [f.rel, f.hash]));
+    pruneDroppedOptional(droppedOptional, profileDef, oldByRelEarly);
+  }
   await pruneStale();
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
-    const manifestPayload = { files: manifestNow, variant: VARIANT };
+    const maxPluginTier = profilesOf(loadVariants(REPO_ROOT))[VARIANT]?.maxPluginTier;
+    const manifestPayload = { files: manifestNow, profile: VARIANT, variant: VARIANT, activeOptional };
+    if (maxPluginTier !== undefined) manifestPayload.maxPluginTier = maxPluginTier;
     if (installedSha) {
       manifestPayload.installedSha = installedSha;
       manifestPayload.installedAt = new Date().toISOString();
@@ -1097,7 +1179,7 @@ async function main() {
     log("Step 3 - ONLY if the project needs stack-specific plugins (React, FastAPI, ...) -");
     log("         this does NOT happen automatically. Run /init-stack in that project's");
     log("         Claude Code session. It detects the stack, then asks you to run");
-    log("         'python3 ~/.claude/bin/init-stack.py -i' yourself in a real terminal");
+    log("         'node ~/.claude/bin/init-stack.mjs -i' yourself in a real terminal");
     log("         (interactive checklist) to install and enable the matching plugins.");
     log("");
     log("Step 4 - RESTART Claude Code again after /init-stack writes settings.json -");

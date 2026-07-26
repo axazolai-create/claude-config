@@ -65,20 +65,6 @@
         ]
       }
     ],
-    "TaskCreated": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/task-lifecycle-probe.mjs"] }
-        ]
-      }
-    ],
-    "TaskCompleted": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/task-lifecycle-probe.mjs"] }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

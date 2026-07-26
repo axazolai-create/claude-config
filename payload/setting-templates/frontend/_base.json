@@ -51,6 +51,7 @@
     },
     {
       "id": "playwright@claude-plugins-official",
+      "tier": "full",
       "description": "Browser automation / E2E testing (Microsoft Playwright, MIT, free).",
       "check": {
         "installed_file": "~/.claude/plugins/installed_plugins.json",
@@ -89,6 +90,7 @@
     },
     {
       "id": "chrome-devtools-mcp@claude-plugins-official",
+      "tier": "full",
       "description": "Chrome DevTools MCP (official) - live browser inspection: performance traces, DOM/console access, network, screenshots. Runs locally (needs Chrome installed), no account. Complements Playwright (Playwright = scripted E2E; this = interactive inspection/debugging of a running page). NOTE: the plugin id is chrome-devtools-mcp, not chrome-devtools.",
       "check": {
         "installed_file": "~/.claude/plugins/installed_plugins.json",
