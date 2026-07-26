@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// CLI wrapper around hooks/lib/context-mode-gsd-agents.mjs, for callers that can't (or
-// shouldn't) import the ESM lib directly - namely init-stack.py (Python has no import path into
-// a .mjs module, so it spawns this via `node`). setup.mjs and session-init.mjs are already
-// Node/ESM and import the lib function directly instead of spawning this.
+// CLI wrapper around hooks/lib/context-mode-gsd-agents.mjs, for callers that spawn it as a
+// subprocess rather than importing the ESM lib - namely init-stack.mjs, which runs it best-effort
+// via `node` so a failure there never blocks the stack-init flow. setup.mjs and session-init.mjs
+// are Node/ESM and import the lib function directly instead of spawning this.
 // Usage: node sync-gsd-context-mode-tool.mjs [claudeDir]   (default: ~/.claude)
 import { homedir } from "node:os";
 import { join } from "node:path";

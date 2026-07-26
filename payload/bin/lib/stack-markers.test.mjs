@@ -125,6 +125,18 @@ test("aspnet detected from Sdk=\"Microsoft.NET.Sdk.Web\"", () => {
   assert.deepEqual(s, ["aspnet"]);
 });
 
+test("aspnet detected from a Microsoft.AspNetCore PackageReference (secondary signal, plain SDK)", () => {
+  const d = tmp({ "App.csproj": '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Microsoft.AspNetCore.Mvc"/></ItemGroup></Project>' });
+  const s = detect(d);
+  assert.deepEqual(s, ["aspnet"]);
+});
+
+test("wpf detected from <UseWindowsForms> (WinForms routed to the wpf desktop stack)", () => {
+  const d = tmp({ "App.csproj": "<Project><PropertyGroup><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>" });
+  const s = detect(d);
+  assert.ok(s.includes("wpf") && !s.includes("aspnet") && !s.includes("csharp-cli") && !s.includes("csharp"), s.join(","));
+});
+
 test("standalone *.xaml with no .csproj files yields wpf via the fallback branch", () => {
   const d = tmp({ "MainWindow.xaml": "<Window/>" });
   const s = detect(d);
