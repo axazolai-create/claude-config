@@ -2,8 +2,9 @@
 // Detached, best-effort component-update worker. Spawned + unref'd by session-init.mjs, so it
 // never blocks the session. Every failure is swallowed (offline, missing tool, bad JSON): it only
 // ever records progress or applies a safe update. 24h throttle per component via the state file.
-// Phase 2 implements global-scope probes only; project-scope probes (impeccable, ui-ux-pro-max)
-// are added in Phase 3, keyed off COMPONENTS[].scope === "project".
+// Global-scope probes (PROBES) cover machine-wide CLIs; project-scope probes (projectProbe, below)
+// cover per-project skills (impeccable, ui-ux-pro-max), keyed off COMPONENTS[].scope === "project"
+// and rooted at --root (defaults to cwd).
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
@@ -11,6 +12,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { COMPONENTS, autoUpdateEnabled, decide } from "./component-registry.mjs";
 import { checkBundleUpdate } from "./config-update-check-run.mjs";
+import { applyPromaxGraft } from "./impeccable-promax-graft.mjs";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 const STATE = join(CLAUDE_DIR, "state", "component-updates.json");
@@ -31,13 +33,29 @@ function loadState() { return existsSync(STATE) ? (safe(() => JSON.parse(readFil
 function writeState(s) { safe(() => mkdirSync(dirname(STATE), { recursive: true })); safe(() => writeFileSync(STATE, JSON.stringify(s, null, 2) + "\n")); }
 const fresh = (entry) => entry && entry.lastCheckedAt && (Date.now() - Date.parse(entry.lastCheckedAt) < THROTTLE_MS);
 
-// TODO(phase3): parse --root <path> (defaults to cwd) for project-scope probes (impeccable, ui-ux-pro-max)
+const argvRoot = (() => { const i = process.argv.indexOf("--root"); return i >= 0 ? process.argv[i + 1] : process.cwd(); })();
+
+// Project-scope probes (impeccable, ui-ux-pro-max): per-project skill install, keyed off --root.
+export function projectProbe(name, root) {
+  const skillDir = join(root, ".claude", "skills", name === "ui-ux-pro-max" ? "ui-ux-pro-max" : "impeccable");
+  const pkg = name === "impeccable" ? "impeccable" : "ui-ux-pro-max-cli";
+  return {
+    present: () => existsSync(skillDir),
+    check: () => {                       // best-effort; any throw is swallowed by safe() at the call site
+      const installed = safe(() => JSON.parse(readFileSync(join(skillDir, "package.json"), "utf8")).version) || "0.0.0";
+      const latest = safe(() => spawnSync("npm", ["view", pkg, "version"], { encoding: "utf8" }).stdout.trim()) || installed;
+      return { installed, latest, updateAvailable: !!latest && latest !== installed };
+    },
+    update: () => detached("npx", [pkg === "impeccable" ? "impeccable" : "ui-ux-pro-max-cli", "update"]),
+  };
+}
+
 async function main() {
   if (process.env.CLAUDE_COMPONENT_AUTOUPDATE === "0" && process.env.CLAUDE_TOOL_AUTOUPGRADE === "0") return;
   const state = loadState();
   for (const comp of COMPONENTS) {
-    const probe = PROBES[comp.name];
-    if (!probe) continue;                 // project-scope probes arrive in Phase 3
+    const probe = comp.scope === "project" ? projectProbe(comp.name, argvRoot) : PROBES[comp.name];
+    if (!probe) continue;                 // no probe registered for this component
     if (fresh(state[comp.name])) continue;
     if (!safe(() => probe.present())) continue;
     const entry = { ...(state[comp.name] || {}), class: comp.updateClass, lastCheckedAt: new Date().toISOString() };
@@ -49,7 +67,11 @@ async function main() {
       if (res) {
         entry.installed = res.installed; entry.latest = res.latest; entry.updateAvailable = res.updateAvailable;
         const action = decide({ updateClass: comp.updateClass, updateAvailable: res.updateAvailable, autoUpdateEnabled: autoUpdateEnabled(comp.name) });
-        if (action === "auto" && probe.update) { probe.update(); entry.autoUpdated = true; }
+        if (action === "auto" && probe.update) {
+          probe.update(); entry.autoUpdated = true;
+          if (comp.afterUpdate === "promax-graft")
+            safe(() => applyPromaxGraft({ skillsDir: join(argvRoot, ".claude", "skills") }));
+        }
       }
     }
     state[comp.name] = entry;
