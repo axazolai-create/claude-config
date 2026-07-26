@@ -12,6 +12,7 @@ export function runInstaller(cmd, args, { root, skip = false } = {}) {
   const scratch = mkdtempSync(join(tmpdir(), "design-stack-home-"));
   const env = { ...process.env, HOME: scratch, USERPROFILE: scratch };
   const r = spawnSync(cmd, args, { cwd: root, env, encoding: "utf8", timeout: 180000, shell: true });
+  rmSync(scratch, { recursive: true, force: true });
   return { ok: !r.error && r.status === 0, skipped: false, stdout: r.stdout || "", stderr: r.stderr || "" };
 }
 

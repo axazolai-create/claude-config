@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import { runInstaller, pruneProMaxSkills, registerDesignHook } from "./design-stack.mjs";
 
@@ -37,4 +37,19 @@ test("registerDesignHook adds Edit|Write|MultiEdit + Stop once (idempotent)", ()
   const s2 = JSON.parse(readFileSync(settingsFile, "utf8"));
   assert.equal(s2.hooks.PostToolUse.filter((e) => e.matcher === "Edit|Write|MultiEdit").length, 1);
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("runInstaller isolates HOME/USERPROFILE from the real home", () => {
+  const root = mkdtempSync(join(tmpdir(), "ri-root-"));
+  // write a test script to avoid shell escaping issues
+  const testScript = join(root, "test.mjs");
+  writeFileSync(testScript, "process.stdout.write(process.env.USERPROFILE||process.env.HOME||'')");
+  // child prints the home it sees; runInstaller must have overridden it to a scratch dir
+  const r = runInstaller("node", [testScript], { root });
+  assert.equal(r.skipped, false);
+  assert.ok(r.ok, r.stderr);
+  const childHome = r.stdout.trim();
+  assert.ok(childHome.length > 0, "child saw no home");
+  assert.notEqual(childHome, homedir(), "child must NOT see the real home dir");
+  rmSync(root, { recursive: true, force: true });
 });
