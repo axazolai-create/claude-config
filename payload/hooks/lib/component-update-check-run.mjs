@@ -50,9 +50,17 @@ export function projectProbe(name, root) {
     // returns, so the child must have finished rewriting reference/*.md before the graft runs —
     // otherwise the graft would write into the pre-update files and the real update would
     // clobber it moments later (detached/async would race here; spawnSync guarantees ordering).
-    update: () => safe(() => spawnSync("npx", ["--yes", pkg === "impeccable" ? "impeccable" : "ui-ux-pro-max-cli", "update"],
-      { cwd: root, encoding: "utf8", timeout: 180000 })),
+    update: () => safe(() => spawnSync("npx", ["--yes", pkg, "update"], { cwd: root, encoding: "utf8", timeout: 180000 })),
   };
+}
+
+// Runs the component's self-update, THEN re-applies the Pro Max graft when the component declares it.
+// update() is synchronous (spawnSync) so the graft re-applies to the FRESHLY rewritten reference files
+// — an async/detached update would let the graft hit stale files and then be clobbered.
+export function updateAndRegraft({ probe, comp, root }) {
+  probe.update();
+  if (comp.afterUpdate === "promax-graft")
+    safe(() => applyPromaxGraft({ skillsDir: join(root, ".claude", "skills") }));
 }
 
 async function main() {
@@ -72,14 +80,7 @@ async function main() {
       if (res) {
         entry.installed = res.installed; entry.latest = res.latest; entry.updateAvailable = res.updateAvailable;
         const action = decide({ updateClass: comp.updateClass, updateAvailable: res.updateAvailable, autoUpdateEnabled: autoUpdateEnabled(comp.name) });
-        if (action === "auto" && probe.update) {
-          probe.update(); entry.autoUpdated = true;
-          // Ordering invariant: probe.update() must be synchronous (blocks until the child
-          // update finishes) so the re-graft below runs AFTER the files it re-anchors are
-          // rewritten, not racing an async/detached update.
-          if (comp.afterUpdate === "promax-graft")
-            safe(() => applyPromaxGraft({ skillsDir: join(argvRoot, ".claude", "skills") }));
-        }
+        if (action === "auto" && probe.update) { updateAndRegraft({ probe, comp, root: argvRoot }); entry.autoUpdated = true; }
       }
     }
     state[comp.name] = entry;
