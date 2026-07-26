@@ -17,6 +17,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
@@ -59,4 +60,27 @@ async function main() {
   writeState(state);
 }
 
-main();
+export function bundleUpdateAvailable(installedSha, remoteSha) {
+  return !!installedSha && !!remoteSha && installedSha !== remoteSha;
+}
+
+export async function checkBundleUpdate(claudeDir) {
+  const manifestPath = join(claudeDir, "state", "bundle-manifest.json");
+  const manifest = existsSync(manifestPath) ? (safe(() => JSON.parse(readFileSync(manifestPath, "utf8"))) || {}) : {};
+  const installed = manifest.installedSha;
+  if (!installed) return null; // no baseline yet
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch("https://api.github.com/repos/axazolai-create/claude-config/commits/master",
+      { signal: ctrl.signal, headers: { "User-Agent": "claude-config-update-check" } });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const j = await res.json();
+    const latest = j && typeof j.sha === "string" ? j.sha : null;
+    if (!latest) return null;
+    return { installed, latest, updateAvailable: bundleUpdateAvailable(installed, latest) };
+  } catch { return null; }
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();
