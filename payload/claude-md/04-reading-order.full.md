@@ -1,8 +1,7 @@
----
-profiles: [base, lite]
----
 ## READING ORDER (every session, before acting)
 - Open the project-level `CLAUDE.md` (if present) before acting. Do not act from memory alone.
+- If `.planning/` exists, this is a GSD project — the project's stack-rules snapshot
+  includes `rules-src/gsd.md` (methodology routing + CLAUDE.md quarantine rules).
 - Language/framework rules are compiled per project into `.claude/stack-rules.md` from
   `~/.claude/rules-src/` (checked at session start; see `rules-src/README.md`). They are
   NOT auto-loaded by file type anymore.

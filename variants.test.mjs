@@ -206,7 +206,11 @@ test("optional groups are a no-op on full (already identity)", () => {
   assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
   // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
   // .test.mjs) and the claude-md/ fragments (build input, see the test above), nothing else
-  // leaks in.
+  // leaks in. Non-vacuous: also assert the excluded set is non-empty and both families are
+  // actually present (not just "everything present passes an all-() over an empty set").
+  assert.ok(v.excludedSet.size > 0, "excludedSet must not be empty");
+  assert.ok([...v.excludedSet].some((r) => /task-lifecycle-probe/.test(r)), "task-lifecycle-probe must still be excluded");
+  assert.ok([...v.excludedSet].some((r) => r.startsWith("claude-md/")), "claude-md/ fragments must be excluded from full too");
   assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
