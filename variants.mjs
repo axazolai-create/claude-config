@@ -30,22 +30,28 @@ function walkRels(dir, rel = "") {
   return out;
 }
 
-export function resolveVariant({ repoRoot, variant }) {
+export function resolveVariant({ repoRoot, variant, activeOptional = [] }) {
   const cfg = loadVariants(repoRoot);
   const def = cfg.variants[variant];
   if (!def) throw new Error(`unknown variant "${variant}" (known: ${Object.keys(cfg.variants).join(", ")})`);
   const payloadDir = join(repoRoot, "payload");
   const payloadRels = walkRels(payloadDir);
 
-  if (!def.include) { // full: identity
+  if (!def.include) { // full: identity (already ships everything; optional groups are a no-op)
     return { name: variant, rels: payloadRels, srcFor: (rel) => join(payloadDir, ...rel.split("/")),
              excludedSet: new Set(), uncovered: [], orphanOverlay: [], plugins: def.plugins };
   }
   const incRes = def.include.map(globToRe);
   const excRes = def.exclude.map(globToRe);
+  // Active optional groups are promoted OVER exclude: their globs are installed this run and,
+  // being in the manifest, get pruned again automatically on a later opt-out. Unknown group
+  // names contribute nothing (no throw) so a stale flag can never break resolution.
+  const optGlobs = (activeOptional || []).flatMap((g) => (def.optional && def.optional[g]) || []);
+  const optRes = optGlobs.map(globToRe);
   const rels = [], excluded = [], uncovered = [];
   for (const rel of payloadRels) {
-    if (matchAny(rel, excRes)) excluded.push(rel);       // exclude wins over include
+    if (matchAny(rel, optRes)) rels.push(rel);           // active optional wins over exclude
+    else if (matchAny(rel, excRes)) excluded.push(rel);  // exclude wins over include
     else if (matchAny(rel, incRes)) rels.push(rel);
     else uncovered.push(rel);
   }

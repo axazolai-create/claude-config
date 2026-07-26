@@ -39,6 +39,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
+import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
@@ -82,6 +83,9 @@ const COLOR = !MD && !argv.has("--no-color") && !process.env.NO_COLOR && process
 // Resolved variant, hoisted to module scope so pruneStale()/settings-merge (later tasks) can see
 // them without threading through function args. Assigned (not re-declared) inside main().
 let VARIANT = null, V = null;
+// lite only: whether the optional graphify Neo4j ecosystem (read/write files + driver + C4
+// connection prompt) is active this run. Full always has it; in lite it is opt-in at install.
+let NEO4J_ECOSYSTEM = false;
 
 const log = (s = "") => process.stdout.write(s + "\n");
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
@@ -543,7 +547,27 @@ async function main() {
     VARIANT = a === "lite" || a === "full" ? a : def;
   }
   if (!VARIANT) VARIANT = installedVariant || "full";   // non-TTY: detected, or full on fresh
-  V = resolveVariant({ repoRoot: REPO_ROOT, variant: VARIANT });
+
+  // Optional Neo4j ecosystem in lite (opt-in at install). Decided BEFORE resolveVariant so the
+  // neo4j file set is included/excluded for this run. State is the filesystem: a previously
+  // opted-in install has neo4j-config.mjs present, which becomes the default (and the non-TTY
+  // answer) so re-runs are idempotent; opting out drops it and pruneStale removes the files.
+  // Full always ships the ecosystem, so this only gates lite.
+  let activeOptional = [];
+  if (VARIANT === "lite") {
+    const installed = existsSync(join(CDIR, "bin", "lib", "neo4j-config.mjs"));
+    if (INTERACTIVE) {
+      const a = (await ask(`  include the graphify Neo4j ecosystem (read/write + driver + cypher)? ` +
+        `[${installed ? "Y/n" : "y/N"}] > `)).trim().toLowerCase();
+      NEO4J_ECOSYSTEM = a ? a[0] === "y" : installed;
+    } else {
+      NEO4J_ECOSYSTEM = installed;                        // non-TTY: keep whatever is already installed
+    }
+    if (NEO4J_ECOSYSTEM) activeOptional = ["neo4j"];
+  } else {
+    NEO4J_ECOSYSTEM = true;                               // full ships the whole ecosystem
+  }
+  V = resolveVariant({ repoRoot: REPO_ROOT, variant: VARIANT, activeOptional });
   if (installedVariant && installedVariant !== VARIANT)
     log(`Switching variant: ${installedVariant} -> ${VARIANT} (surplus files listed for removal below)`);
   log(`Variant: ${VARIANT} (${V.rels.length} files)`);
@@ -912,7 +936,8 @@ async function main() {
   // Same "decide once, record in settings.json.env, never re-ask" idiom as the update-check
   // block above. Non-secret decision recorded in settings.json.env; the password is written
   // ONLY to ~/.graphify/neo4j.env (chmod 600), never into the repo or settings.json.
-  if (VARIANT === "full" && !DRY) {
+  // Gated on NEO4J_ECOSYSTEM: full always, lite only when the ecosystem was opted in above.
+  if (NEO4J_ECOSYSTEM && !DRY) {
     let neo4jSettings = {};
     try { neo4jSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { neo4jSettings = {}; }
     const neo4jDecided = neo4jSettings.env && "GRAPHIFY_NEO4J" in neo4jSettings.env;
@@ -921,24 +946,44 @@ async function main() {
         "Writes connection + password to ~/.graphify/neo4j.env (never committed). [y/N] > ");
       neo4jSettings.env = neo4jSettings.env || {};
       if (a[0] === "y") {
-        const uri = (await ask("  Neo4j bolt URI [bolt://localhost:7687] > ")).trim() || "bolt://localhost:7687";
-        const user = (await ask("  Neo4j user [neo4j] > ")).trim() || "neo4j";
-        const pw = (await ask("  Neo4j password > ")).trim();
-        // Optional feature: a filesystem failure here (mkdir/write) must never abort the rest of
-        // setup. On failure, GRAPHIFY_NEO4J is deliberately left unset so this offer re-asks next
-        // run instead of silently recording a false "declined".
-        try {
-          const envPath = join(HOME, ".graphify", "neo4j.env");
-          mkdirSync(dirname(envPath), { recursive: true });
-          writeFileSync(envPath, `NEO4J_URI=${uri}\nNEO4J_USER=${user}\nNEO4J_PASSWORD=${pw}\n`);
-          try { chmodSync(envPath, 0o600); } catch { /* best-effort - no-op on Windows */ }
-          neo4jSettings.env.GRAPHIFY_NEO4J = "1";
-          if (write(SETTINGS, JSON.stringify(neo4jSettings, null, 2) + "\n"))
-            summary.push(`updated  ${SETTINGS} (graphify-neo4j: enabled)`);
-          log("  Wrote ~/.graphify/neo4j.env. Next: run '/init-mcp neo4j' (+ restart) for reads, and");
-          log("  'node ~/.claude/graphify-sync-all.mjs --neo4j-push' (or the push script) to write.");
-        } catch (e) {
-          log(`  could not write ~/.graphify/neo4j.env, skipping (will re-ask next run): ${e.message}`);
+        // askRaw (case-preserving): ask() lowercases its answer, which corrupts a password
+        // (and any case-sensitive host). Host has no default - we must not silently keep localhost.
+        let host = "";
+        while (!host) host = await askRaw("  Neo4j host/IP (e.g. 192.168.8.4) > ");
+        const port = (await askRaw("  Neo4j bolt port [7687] > ")) || "7687";
+        const user = (await askRaw("  Neo4j user [neo4j] > ")) || "neo4j";
+        const pw = await askRaw("  Neo4j password > ");
+        const uri = `bolt://${host}:${port}`;
+
+        // D1 (auto-install then test): ensure the driver in graphify's env, then run a REAL
+        // connect+auth+read against $uri. Persist ONLY if it passes - a wrong host/port/password
+        // (or a down NAS) is caught here at the prompt, not silently at push time later.
+        const python = findGraphifyPython();
+        if (python) ensureNeo4jDriver(python);
+        log(`  testing ${uri} ...`);
+        const res = await testNeo4jConnection({ uri, user, password: pw, python });
+        if (res.ok) {
+          // A filesystem failure here must never abort the rest of setup; on failure leave
+          // GRAPHIFY_NEO4J unset so the offer re-asks next run (not a false "declined").
+          try {
+            const envPath = join(HOME, ".graphify", "neo4j.env");
+            mkdirSync(dirname(envPath), { recursive: true });
+            writeFileSync(envPath, `NEO4J_URI=${uri}\nNEO4J_USER=${user}\nNEO4J_PASSWORD=${pw}\n`);
+            try { chmodSync(envPath, 0o600); } catch { /* best-effort - no-op on Windows */ }
+            neo4jSettings.env.GRAPHIFY_NEO4J = "1";
+            if (write(SETTINGS, JSON.stringify(neo4jSettings, null, 2) + "\n"))
+              summary.push(`updated  ${SETTINGS} (graphify-neo4j: enabled)`);
+            log(`  OK - connected and read ${res.nodeCount} node(s). Wrote ~/.graphify/neo4j.env.`);
+            log("  Next: run '/init-mcp neo4j' (+ restart) for reads, and");
+            log("  'node ~/.claude/graphify-sync-all.mjs --neo4j-push' (or the push script) to write.");
+          } catch (e) {
+            log(`  could not write ~/.graphify/neo4j.env, skipping (will re-ask next run): ${e.message}`);
+          }
+        } else {
+          // Not saved; GRAPHIFY_NEO4J stays unset -> re-asks next run.
+          log(`  connection test FAILED: ${res.error}`);
+          log("  nothing saved (will re-ask next run). Check host/port/password, that the NAS Neo4j is");
+          log("  up, and that graphify + its neo4j driver are installed (node ~/.claude/bin/graphify-setup.mjs).");
         }
       } else {
         neo4jSettings.env.GRAPHIFY_NEO4J = "0";

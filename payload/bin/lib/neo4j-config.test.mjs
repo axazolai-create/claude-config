@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseEnvFile, loadNeo4jConfig, parseBoltHostPort, repoTagsFromGlobalGraph, probeReachable } from "./neo4j-config.mjs";
+import { parseEnvFile, loadNeo4jConfig, parseBoltHostPort, repoTagsFromGlobalGraph, probeReachable,
+  parseReadResult, driverInstalled, testNeo4jConnection } from "./neo4j-config.mjs";
 import { writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -36,4 +37,60 @@ test("repoTagsFromGlobalGraph returns distinct repo tags", () => {
 
 test("probeReachable resolves false for a closed port", async () => {
   assert.equal(await probeReachable("127.0.0.1", 1, 500), false);
+});
+
+test("parseReadResult extracts node count, rejects other output", () => {
+  assert.deepEqual(parseReadResult("READ_OK nodes=269"), { ok: true, nodeCount: 269 });
+  assert.deepEqual(parseReadResult("Neo.ClientError.Security.Unauthorized"), { ok: false });
+  assert.deepEqual(parseReadResult(""), { ok: false });
+});
+
+test("driverInstalled reflects the import probe exit status", () => {
+  assert.equal(driverInstalled("py", { run: () => ({ status: 0 }) }), true);
+  assert.equal(driverInstalled("py", { run: () => ({ status: 1 }) }), false);
+  assert.equal(driverInstalled(null, { run: () => ({ status: 0 }) }), false);
+});
+
+test("testNeo4jConnection: bad URI is rejected before any I/O", async () => {
+  const r = await testNeo4jConnection({ uri: "http://x", user: "neo4j", password: "p", python: "py" });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /cannot parse/i);
+});
+
+test("testNeo4jConnection: unreachable host short-circuits before the driver", async () => {
+  let ran = false;
+  const r = await testNeo4jConnection(
+    { uri: "bolt://nas:7687", user: "neo4j", password: "p", python: "py" },
+    { probe: async () => false, run: () => { ran = true; return { status: 0, stdout: "" }; } },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error, /unreachable/);
+  assert.equal(ran, false, "driver must not run when the port is unreachable");
+});
+
+test("testNeo4jConnection: reachable but no python reports driver unavailable", async () => {
+  const r = await testNeo4jConnection(
+    { uri: "bolt://nas:7687", user: "neo4j", password: "p", python: null },
+    { probe: async () => true, run: () => ({ status: 0, stdout: "READ_OK nodes=1" }) },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error, /no graphify python/i);
+});
+
+test("testNeo4jConnection: reachable + successful read returns node count", async () => {
+  const r = await testNeo4jConnection(
+    { uri: "bolt://nas:7687", user: "neo4j", password: "p", python: "py" },
+    { probe: async () => true, run: () => ({ status: 0, stdout: "READ_OK nodes=269", stderr: "" }) },
+  );
+  assert.deepEqual(r, { ok: true, nodeCount: 269 });
+});
+
+test("testNeo4jConnection: auth failure surfaces the driver error, does not claim ok", async () => {
+  const r = await testNeo4jConnection(
+    { uri: "bolt://nas:7687", user: "neo4j", password: "wrong", python: "py" },
+    { probe: async () => true,
+      run: () => ({ status: 1, stdout: "", stderr: "neo4j.exceptions.AuthError: Unauthorized" }) },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Unauthorized/);
 });

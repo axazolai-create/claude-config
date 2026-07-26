@@ -214,6 +214,22 @@
 - **Residual:** transient oscillation for a genuinely divergent shared repo under frequent dual
   sync. Accepted; revisit only if observed.
 
+## RISK-NEO4J-006 — Connection test at setup time depends on the neo4j driver being present
+
+- **Status:** Open (mitigated by design)
+- **Context:** the 2026-07-24 C4 rewrite (`docs/superpowers/specs/2026-07-24-graphify-neo4j-setup-test-before-save-plan.md`)
+  makes `setup.mjs` **test** the Neo4j connection before writing `~/.graphify/neo4j.env`. The
+  authoritative test (`RETURN 1` via the python driver) needs `neo4j` installed in graphify's
+  interpreter. On a fresh PC where graphify/driver is absent, the test cannot run.
+- **Mitigation:** the C4 flow calls `ensureNeo4jDriver` (uv `--with neo4j` / pipx inject / pip)
+  right before the test, so the driver is installed exactly when Neo4j is configured — full
+  always, lite only when the ecosystem is opted in (kept out of graphify's blanket extras so lite
+  stays clean by default). If it still can't be made present, C4 does not save a false "enabled" —
+  it leaves `GRAPHIFY_NEO4J` unset so the offer re-asks next run (same idiom as a filesystem-write
+  failure). Governed by decision D1 in the plan.
+- **Residual:** on a PC with no way to install the driver, Neo4j config is deferred, not saved
+  broken. Accepted — deferral is the correct outcome there.
+
 ## RISK-PNPM-001 — False positives from dynamic/conditional imports
 
 - **Status:** Open (accepted / low)

@@ -112,6 +112,45 @@ test("import graph: no static import in the lite set resolves to an excluded fil
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
+test("optional neo4j: opted in, ecosystem files are included and no longer excluded", () => {
+  const off = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  const neo = "bin/lib/neo4j-config.mjs";
+  assert.ok(!off.rels.includes(neo) && off.excludedSet.has(neo), "default: excluded");
+  assert.ok(on.rels.includes(neo) && !on.excludedSet.has(neo), "opted-in: included, not excluded");
+  assert.ok(on.rels.includes("bin/graphify-neo4j-push.mjs"), "push wrapper included");
+  assert.ok(on.rels.includes("graphify-neo4j.cypher"), "cypher cookbook included");
+  assert.ok(on.rels.includes("commands/init-mcp.md"), "read-MCP doc included");
+  assert.deepEqual(on.uncovered, [], "still fully classified when opted in");
+});
+
+test("optional neo4j: opted-in set is import-closed (no dangling static import)", () => {
+  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  const relSet = new Set(on.rels);
+  const bad = [];
+  for (const rel of on.rels) {
+    if (!rel.endsWith(".mjs")) continue;
+    const text = readFileSync(on.srcFor(rel), "utf8");
+    for (const specifier of staticImportRels(text)) {
+      const target = new URL(specifier, `file:///${rel}`).pathname.replace(/^\//, "");
+      if (!relSet.has(target)) bad.push(`${rel} -> ${specifier}`);
+    }
+  }
+  assert.deepEqual(bad, [], bad.join("\n"));
+});
+
+test("optional neo4j: unknown group name is a no-op, not a throw", () => {
+  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["does-not-exist"] });
+  assert.ok(!on.rels.includes("bin/lib/neo4j-config.mjs"));
+  assert.deepEqual(on.uncovered, []);
+});
+
+test("optional groups are a no-op on full (already identity)", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
+  assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
+  assert.equal(v.excludedSet.size, 0);
+});
+
 test("hook registrations: lite keeps exactly the 6 lite hooks and no statusLine", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));

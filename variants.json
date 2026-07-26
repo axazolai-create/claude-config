@@ -46,7 +46,13 @@
         "references/**", "rules-src/gsd.md",
         "skills/stack-markers/**", "skills/using-git-worktrees/**",
         "setting-templates/**"
-      ]
+      ],
+      "optional": {
+        "$comment": "Excluded by default but promotable at install time via setup.mjs activeOptional. When a group is active its globs win over exclude; the files are then installed (and, being in the manifest, pruned again on opt-out).",
+        "neo4j": [
+          "bin/lib/neo4j-config*", "bin/graphify-neo4j-*", "graphify-neo4j.cypher", "commands/init-mcp.md"
+        ]
+      }
     }
   }
 }
