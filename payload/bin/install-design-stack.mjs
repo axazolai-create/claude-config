@@ -15,24 +15,31 @@ const DEFAULT = {
 };
 const safe = (fn, fallback) => { try { return fn(); } catch (e) { console.error(`  ! ${e.message}`); return fallback; } };
 const parts = (s) => s.trim().split(/\s+/);
+const listSkillDirs = (dir) => safe(() =>
+  existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name) : [], []);
 
 export function runDesignStack({ root, config, skip = false } = {}) {
-  const cfg = config || DEFAULT;
+  const cfg = {
+    impeccable: { ...DEFAULT.impeccable, ...(config && config.impeccable) },
+    proMax: { ...DEFAULT.proMax, ...(config && config.proMax) },
+  };
   const skillsDir = join(root, ".claude", "skills");
-  const preExisting = existsSync(skillsDir) ? readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name) : [];
 
   // (a) Impeccable — install only if absent.
   const impPresent = existsSync(join(skillsDir, "impeccable"));
   const [ic, ...ia] = parts(cfg.impeccable.install);
   const impeccable = impPresent ? { ok: true, skipped: true } : safe(() => runInstaller(ic, ia, { root, skip }), { ok: false });
 
-  // (b) Pro Max — install if the core skill is absent, then prune to the subset.
+  // (b) Pro Max — install if core skill absent, then prune ONLY dirs this install created.
+  const before = listSkillDirs(skillsDir);                 // snapshot before proMax install
   const pmPresent = existsSync(join(skillsDir, "ui-ux-pro-max"));
   const [pc, ...pa] = parts(cfg.proMax.install);
   const proMax = pmPresent ? { ok: true, skipped: true } : safe(() => runInstaller(pc, pa, { root, skip }), { ok: false });
-  const protect = preExisting.filter((n) => n !== "impeccable" && !cfg.proMax.keepSkills.includes(n)
-    && !["design", "brand", "banner-design", "banner", "slides"].includes(n)); // don't protect known uipro extras
-  const pruned = safe(() => pruneProMaxSkills(skillsDir, cfg.proMax.keepSkills, { protect }), []);
+  const after = listSkillDirs(skillsDir);                  // snapshot after
+  const created = after.filter((d) => !before.includes(d));
+  // protect everything that existed before this install (created-by-uipro extras are NOT in `before`);
+  // pruneProMaxSkills then deletes only `created \ keepSkills` (its keep-set already covers keepSkills + impeccable).
+  const pruned = safe(() => pruneProMaxSkills(skillsDir, cfg.proMax.keepSkills, { protect: before }), []);
 
   // (c) design hook — project-scoped registration via our writer.
   const hook = safe(() => registerDesignHook(join(root, ".claude", "settings.json"),
@@ -52,11 +59,15 @@ export function runDesignStack({ root, config, skip = false } = {}) {
 }
 
 function main() {
-  const argv = process.argv.slice(2);
-  const ri = argv.indexOf("--root");
-  const root = ri >= 0 ? argv[ri + 1] : process.cwd();
-  const config = readDesignStackConfig(root) || DEFAULT;
-  const r = runDesignStack({ root, config });
-  console.log(`design-stack: pruned=${r.pruned.length} hook=${r.hook.added ? "added" : "present"} graft=${r.graft.applied.length}`);
+  try {
+    const argv = process.argv.slice(2);
+    const ri = argv.indexOf("--root");
+    const root = ri >= 0 ? argv[ri + 1] : process.cwd();
+    const config = readDesignStackConfig(root) || DEFAULT;
+    const r = runDesignStack({ root, config });
+    console.log(`design-stack: pruned=${r.pruned.length} hook=${r.hook.added ? "added" : "present"} graft=${r.graft.applied.length}`);
+  } catch (e) {
+    console.error(`  ! design-stack: ${e.message}`);
+  }
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

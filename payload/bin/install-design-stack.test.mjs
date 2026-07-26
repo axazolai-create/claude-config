@@ -20,31 +20,33 @@ test("frontend/_base.json declares designStack with the locked Pro Max subset", 
   assert.deepEqual(tpl.designStack.proMax.keepSkills, ["ui-ux-pro-max", "ui-styling", "design-system"]);
 });
 
-// With installers skipped, simulate their effect by pre-planting the skill dirs, then assert the
-// orchestrator prunes, registers the hook, and grafts — idempotently.
-function plantSkills(root) {
+test("provenance prune: removes only install-created extras, protects pre-existing user skills", () => {
+  const root = mkdtempSync(join(tmpdir(), "ds-prov-"));
   const skills = join(root, ".claude", "skills");
-  for (const s of ["ui-ux-pro-max", "ui-styling", "design-system", "design", "brand"])
-    mkdirSync(join(skills, s), { recursive: true });
-  const refDir = join(skills, "impeccable", "reference");
+  mkdirSync(skills, { recursive: true });
+  // pre-existing USER skill named "design" (a generic name uipro also uses) — must SURVIVE
+  mkdirSync(join(skills, "design"), { recursive: true });
+  writeFileSync(join(skills, "design", "USER.md"), "mine");
+  mkdirSync(join(skills, "ui-styling"), { recursive: true });     // kept, pre-existing
+  mkdirSync(join(skills, "design-system"), { recursive: true });  // kept, pre-existing
+  const refDir = join(skills, "impeccable", "reference");         // impeccable present → its install skipped
   mkdirSync(refDir, { recursive: true });
   for (const f of ["new-work.md", "shape.md", "colorize.md", "typeset.md"])
     writeFileSync(join(refDir, f), `# ${f}\n\n## Steps\nbody\n`);
-}
-const CONFIG = { impeccable: { install: "npx impeccable install --scope=project --no-hooks" },
-  proMax: { install: "uipro init --offline", keepSkills: ["ui-ux-pro-max", "ui-styling", "design-system"] } };
+  // fixture install: creates ui-ux-pro-max (kept) + brand + slides (extras to prune). No spaces in the path.
+  const gen = join(root, "make-extras.mjs");
+  writeFileSync(gen, `import { mkdirSync } from "node:fs"; import { join } from "node:path"; const b = join(process.cwd(), ".claude", "skills"); for (const d of ["ui-ux-pro-max","brand","slides"]) mkdirSync(join(b, d), { recursive: true });`);
+  const CONFIG = { impeccable: { install: "node --version" },
+    proMax: { install: `node ${gen}`, keepSkills: ["ui-ux-pro-max", "ui-styling", "design-system"] } };
 
-test("runDesignStack prunes to subset, registers hook, grafts — idempotent", () => {
-  const root = mkdtempSync(join(tmpdir(), "ds-root-"));
-  plantSkills(root);
-  const r1 = runDesignStack({ root, config: CONFIG, skip: true });
-  assert.deepEqual(r1.pruned.sort(), ["brand", "design"]);
+  const r1 = runDesignStack({ root, config: CONFIG, skip: false });
+  assert.deepEqual(r1.pruned.sort(), ["brand", "slides"], "only install-created extras pruned");
+  assert.equal(readFileSync(join(skills, "design", "USER.md"), "utf8"), "mine", "pre-existing user 'design' skill must survive");
+  assert.ok(existsSync(join(skills, "ui-ux-pro-max")), "kept skill survives");
   assert.equal(r1.hook.added, true);
   assert.ok(r1.graft.applied.length === 4);
-  assert.ok(existsSync(join(root, ".claude", "settings.json")));
-  assert.ok(readFileSync(join(root, ".claude", "skills", "impeccable", "reference", "shape.md"), "utf8").includes("promax-graft"));
-  // second run: nothing to prune, hook already there, graft already applied
-  const r2 = runDesignStack({ root, config: CONFIG, skip: true });
+  // idempotent second run: ui-ux-pro-max now present → install skipped → nothing created → nothing pruned
+  const r2 = runDesignStack({ root, config: CONFIG, skip: false });
   assert.deepEqual(r2.pruned, []);
   assert.equal(r2.hook.added, false);
   assert.deepEqual(r2.graft.applied, []);
