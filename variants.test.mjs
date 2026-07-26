@@ -52,7 +52,9 @@ test("lite set has no excluded families", () => {
 test("full variant is identity over payload/ (minus alwaysExclude)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
-  // full ships everything except the alwaysExclude families (e.g. task-lifecycle-probe*).
+  // full ships everything except the alwaysExclude families: exactly the 2
+  // task-lifecycle-probe entries (.mjs + .test.mjs), nothing else leaks in.
+  assert.equal(v.excludedSet.size, 2, `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
   assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r)),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
@@ -150,7 +152,9 @@ test("optional neo4j: unknown group name is a no-op, not a throw", () => {
 test("optional groups are a no-op on full (already identity)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
   assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
-  // full ships everything except the alwaysExclude families (e.g. task-lifecycle-probe*).
+  // full ships everything except the alwaysExclude families: exactly the 2
+  // task-lifecycle-probe entries (.mjs + .test.mjs), nothing else leaks in.
+  assert.equal(v.excludedSet.size, 2, `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
   assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r)),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
