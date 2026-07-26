@@ -975,9 +975,9 @@ async function main() {
   // flip a background network check on for everyone) - this is a one-time y/N decision, written
   // straight into `env`, exactly like the manual PowerShell-tool opt-in documented in README.md.
   // Once decided either way (yes -> "1", no -> "0") this never asks again on this machine, no
-  // matter how many times setup.mjs re-runs - mirrors the `fallow` decline pattern in
-  // init-stack.md (step 8): an explicit "no" is recorded, not re-nagged. This offer itself is
-  // machine-wide only (setup.mjs) - init-stack.md has no per-project equivalent of it.
+  // matter how many times setup.mjs re-runs - an explicit "no" is recorded, not re-nagged
+  // (the same "decide once, don't re-ask" pattern used elsewhere for one-time opt-ins). This
+  // offer itself is machine-wide only (setup.mjs) - init-stack.md has no per-project equivalent of it.
   if (!DRY) {
     let curEnvSettings = {};
     try { curEnvSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { curEnvSettings = {}; }

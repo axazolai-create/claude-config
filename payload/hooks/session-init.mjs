@@ -372,10 +372,10 @@ if (process.env.CLAUDE_LEANMODE !== "0" && resolveDial(root) !== "off") {
 }
 
 // ---- GSD /init-stack settings gap check -> suggest /init-stack ----
-// A HINT only - never installs/edits anything itself. `/init-stack` steps 6 and 8
-// (payload/commands/init-stack.md) propose workflow.test_command/build_command and a
-// `fallow` devDependency install, but those steps only run when the user actually invokes
-// /init-stack - which doesn't reliably happen right after `.planning/` first appears.
+// A HINT only - never installs/edits anything itself. The interactive
+// workflow.test_command/build_command + `fallow` devDependency proposals that /init-stack
+// used to run were removed in the GSD-free rewrite (eaf1a50; see RISK-INITSTACK-001), so
+// nothing surfaces them anymore right after `.planning/` first appears.
 // gsd-config-patch.mjs's tier2 patch already writes `code_quality.fallow.enabled: true` for
 // any Node project independent of whether /init-stack ever ran, and gsd-core HARD-FAILS
 // /gsd-code-review / /gsd-ship (not a graceful skip) when that flag is true but the binary
