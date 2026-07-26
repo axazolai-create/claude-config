@@ -24,6 +24,7 @@
         "hooks/lib/config-update-check-run.mjs", "hooks/lib/graphify-global-sync-run.mjs",
         "hooks/lib/inject-axes.mjs",
         "hooks/lib/leanmode-*", "hooks/lib/mark-initstack-done.mjs",
+        "hooks/lib/verbosity-*",
         "hooks/lib/stack-rules-check.mjs", "hooks/lib/token-usage-*",
         "rules-src/**",
         "skills/model-selection-policy/**", "skills/token-usage/**", "skills/update-changelog/**"
