@@ -11,6 +11,8 @@ export function runInstaller(cmd, args, { root, skip = false } = {}) {
   if (skipInstall(skip)) return { ok: true, skipped: true, stdout: "", stderr: "" };
   const scratch = mkdtempSync(join(tmpdir(), "design-stack-home-"));
   const env = { ...process.env, HOME: scratch, USERPROFILE: scratch };
+  // shell: true is required for Windows .cmd shims (npx/uipro); args come from trusted static
+  // template config (setting-templates/*.json), never from user input.
   const r = spawnSync(cmd, args, { cwd: root, env, encoding: "utf8", timeout: 180000, shell: true });
   rmSync(scratch, { recursive: true, force: true });
   return { ok: !r.error && r.status === 0, skipped: false, stdout: r.stdout || "", stderr: r.stderr || "" };
@@ -56,7 +58,7 @@ export function registerDesignHook(settingsFile, { scriptPath }) {
   return { added: true };
 }
 
-export function readDesignStackConfig(root, { templatesDir } = {}) {
+export function readDesignStackConfig({ templatesDir } = {}) {
   // Prefer the resolved frontend template shipped in ~/.claude; fall back to null (orchestrator
   // then uses built-in defaults). templatesDir defaults to <configDir>/setting-templates.
   const base = templatesDir || join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "setting-templates");
@@ -65,6 +67,10 @@ export function readDesignStackConfig(root, { templatesDir } = {}) {
   try { return (JSON.parse(readFileSync(p, "utf8")) || {}).designStack || null; } catch { return null; }
 }
 
+// Writes PROJECT-scoped <root>/.claude/state/component-updates.json. The worker/statusline
+// currently read the GLOBAL state file instead — this baseline is a forward-looking record
+// tied to the deferred project-scope-statusline follow-up (keyed by bare name; assumes a
+// single primary project), not a bug.
 export function recordBaselineVersions(root, versions) {
   const file = join(root, ".claude", "state", "component-updates.json");
   let state = {};

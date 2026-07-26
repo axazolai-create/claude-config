@@ -35,8 +35,6 @@ export function runDesignStack({ root, config, skip = false } = {}) {
   const pmPresent = existsSync(join(skillsDir, "ui-ux-pro-max"));
   const [pc, ...pa] = parts(cfg.proMax.install);
   const proMax = pmPresent ? { ok: true, skipped: true } : safe(() => runInstaller(pc, pa, { root, skip }), { ok: false });
-  const after = listSkillDirs(skillsDir);                  // snapshot after
-  const created = after.filter((d) => !before.includes(d));
   // protect everything that existed before this install (created-by-uipro extras are NOT in `before`);
   // pruneProMaxSkills then deletes only `created \ keepSkills` (its keep-set already covers keepSkills + impeccable).
   const pruned = safe(() => pruneProMaxSkills(skillsDir, cfg.proMax.keepSkills, { protect: before }), []);
@@ -63,7 +61,7 @@ function main() {
     const argv = process.argv.slice(2);
     const ri = argv.indexOf("--root");
     const root = ri >= 0 ? argv[ri + 1] : process.cwd();
-    const config = readDesignStackConfig(root) || DEFAULT;
+    const config = readDesignStackConfig() || DEFAULT;
     const r = runDesignStack({ root, config });
     console.log(`design-stack: pruned=${r.pruned.length} hook=${r.hook.added ? "added" : "present"} graft=${r.graft.applied.length}`);
   } catch (e) {

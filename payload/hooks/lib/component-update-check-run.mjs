@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { COMPONENTS, autoUpdateEnabled, decide } from "./component-registry.mjs";
 import { checkBundleUpdate } from "./config-update-check-run.mjs";
 import { applyPromaxGraft } from "./impeccable-promax-graft.mjs";
+import { runInstaller } from "../../bin/lib/design-stack.mjs";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 const STATE = join(CLAUDE_DIR, "state", "component-updates.json");
@@ -37,12 +38,13 @@ const argvRoot = (() => { const i = process.argv.indexOf("--root"); return i >= 
 
 // Project-scope probes (impeccable, ui-ux-pro-max): per-project skill install, keyed off --root.
 export function projectProbe(name, root) {
-  const skillDir = join(root, ".claude", "skills", name === "ui-ux-pro-max" ? "ui-ux-pro-max" : "impeccable");
+  const skillDir = join(root, ".claude", "skills", name);
   const pkg = name === "impeccable" ? "impeccable" : "ui-ux-pro-max-cli";
   return {
     present: () => existsSync(skillDir),
     check: () => {                       // best-effort; any throw is swallowed by safe() at the call site
-      const installed = safe(() => JSON.parse(readFileSync(join(skillDir, "package.json"), "utf8")).version) || "0.0.0";
+      const installed = safe(() => JSON.parse(readFileSync(join(skillDir, "package.json"), "utf8")).version);
+      if (!installed) return { installed: "unknown", latest: "unknown", updateAvailable: false }; // can't compare → assume current
       const latest = safe(() => spawnSync("npm", ["view", pkg, "version"], { encoding: "utf8" }).stdout.trim()) || installed;
       return { installed, latest, updateAvailable: !!latest && latest !== installed };
     },
@@ -50,7 +52,9 @@ export function projectProbe(name, root) {
     // returns, so the child must have finished rewriting reference/*.md before the graft runs —
     // otherwise the graft would write into the pre-update files and the real update would
     // clobber it moments later (detached/async would race here; spawnSync guarantees ordering).
-    update: () => safe(() => spawnSync("npx", ["--yes", pkg, "update"], { cwd: root, encoding: "utf8", timeout: 180000 })),
+    // Routed through the SAME isolation wrapper as install (scratch HOME/USERPROFILE, cwd=root) —
+    // never run the installer with the real HOME (Impeccable's all-harnesses footgun).
+    update: () => safe(() => runInstaller("npx", ["--yes", pkg, "update"], { root })),
   };
 }
 
