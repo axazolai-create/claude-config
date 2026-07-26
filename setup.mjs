@@ -40,7 +40,7 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
-import { resolveVariant, filterPartialHooks, loadVariants } from "./variants.mjs";
+import { resolveVariant, filterPartialHooks, loadVariants, profilesOf } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
@@ -537,8 +537,8 @@ async function main() {
   const oldManifestEarly = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8")));
   const installedVariant = oldManifestEarly ? (oldManifestEarly.variant || "full") : null;
   VARIANT = VARIANT_ARG;
-  if (VARIANT && !loadVariants(REPO_ROOT).variants[VARIANT]) {
-    log(`Unknown --variant=${VARIANT}. Known: ${Object.keys(loadVariants(REPO_ROOT).variants).join(", ")}`);
+  if (VARIANT && !profilesOf(loadVariants(REPO_ROOT))[VARIANT]) {
+    log(`Unknown --variant=${VARIANT}. Known: ${Object.keys(profilesOf(loadVariants(REPO_ROOT))).join(", ")}`);
     process.exit(1);
   }
   if (!VARIANT && INTERACTIVE) {

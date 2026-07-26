@@ -44,9 +44,50 @@ test("overlay: no orphan files in payload-lite/", () => {
 test("lite set has no excluded families", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   for (const rel of v.rels) {
-    assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-|references\/|setting-templates\/)/.test(rel), rel);
+    // setting-templates/** is deliberately NOT in this list: templates ship in every profile
+    // (spec §1) - lite filters plugins by maxPluginTier: "core" at install time, not by
+    // excluding template files.
+    assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-|references\/)/.test(rel), rel);
     assert.notEqual(rel, "rules-src/gsd.md");
   }
+});
+
+test("profile chain is a strict subset: lite ⊂ base ⊂ full", () => {
+  const full = new Set(resolveVariant({ repoRoot: ROOT, variant: "full" }).rels);
+  const base = new Set(resolveVariant({ repoRoot: ROOT, variant: "base" }).rels);
+  const lite = new Set(resolveVariant({ repoRoot: ROOT, variant: "lite" }).rels);
+  for (const r of base) assert.ok(full.has(r), `base file not in full: ${r}`);
+  for (const r of lite) assert.ok(base.has(r), `lite file not in base: ${r}`);
+  assert.ok(base.size < full.size && lite.size < base.size, "each step must be a proper subset");
+});
+
+test("base drops all GSD, keeps neo4j opt-in and design/infra keep-set", () => {
+  const base = resolveVariant({ repoRoot: ROOT, variant: "base" });
+  for (const r of base.rels) {
+    assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-)/.test(r), `GSD leaked into base: ${r}`);
+    assert.notEqual(r, "rules-src/gsd.md");
+  }
+  const baseWithNeo = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
+  assert.ok(baseWithNeo.rels.includes("bin/lib/neo4j-config.mjs"), "base neo4j promotable");
+  assert.ok(!base.rels.includes("bin/lib/neo4j-config.mjs"), "base neo4j excluded by default");
+  // OI-4 keep-set present in base:
+  for (const f of ["hooks/bg-supervision-nudge.mjs", "commands/init-mcp.md",
+                   "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs"])
+    assert.ok(base.rels.includes(f), `base must keep ${f}`);
+  // full-only infra absent from base:
+  for (const f of ["hooks/db-live-access-gate.mjs", "hooks/ci-watch-nudge.mjs"])
+    assert.ok(!base.rels.includes(f), `full-only infra leaked into base: ${f}`);
+});
+
+test("lite drops base's universal infra + neo4j", () => {
+  const lite = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  for (const f of ["hooks/bg-supervision-nudge.mjs", "commands/init-mcp.md",
+                   "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs",
+                   "bin/lib/neo4j-config.mjs"])
+    assert.ok(!lite.rels.includes(f), `lite must drop ${f}`);
+  // lite offers no neo4j opt-in at all (moved to base): opting in on lite yields nothing.
+  const liteWithNeo = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  assert.ok(!liteWithNeo.rels.includes("bin/lib/neo4j-config.mjs"), "lite has no neo4j opt-in");
 });
 
 test("full variant is identity over payload/ (minus alwaysExclude)", () => {
@@ -117,19 +158,17 @@ test("import graph: no static import in the lite set resolves to an excluded fil
 });
 
 test("optional neo4j: opted in, ecosystem files are included and no longer excluded", () => {
-  const off = resolveVariant({ repoRoot: ROOT, variant: "lite" });
-  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  const off = resolveVariant({ repoRoot: ROOT, variant: "base" });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
   const neo = "bin/lib/neo4j-config.mjs";
   assert.ok(!off.rels.includes(neo) && off.excludedSet.has(neo), "default: excluded");
   assert.ok(on.rels.includes(neo) && !on.excludedSet.has(neo), "opted-in: included, not excluded");
   assert.ok(on.rels.includes("bin/graphify-neo4j-push.mjs"), "push wrapper included");
   assert.ok(on.rels.includes("graphify-neo4j.cypher"), "cypher cookbook included");
-  assert.ok(on.rels.includes("commands/init-mcp.md"), "read-MCP doc included");
-  assert.deepEqual(on.uncovered, [], "still fully classified when opted in");
 });
 
 test("optional neo4j: opted-in set is import-closed (no dangling static import)", () => {
-  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
   const relSet = new Set(on.rels);
   const bad = [];
   for (const rel of on.rels) {
@@ -144,9 +183,8 @@ test("optional neo4j: opted-in set is import-closed (no dangling static import)"
 });
 
 test("optional neo4j: unknown group name is a no-op, not a throw", () => {
-  const on = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["does-not-exist"] });
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["does-not-exist"] });
   assert.ok(!on.rels.includes("bin/lib/neo4j-config.mjs"));
-  assert.deepEqual(on.uncovered, []);
 });
 
 test("optional groups are a no-op on full (already identity)", () => {
