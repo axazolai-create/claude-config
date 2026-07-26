@@ -122,3 +122,10 @@ export function rewriteContextBar(text, { totalCtx, used, usedTokens }) {
   const insertAt = pipeIdx + " │ ".length;
   return withoutBar.slice(0, insertAt) + newSegment + " │ " + withoutBar.slice(insertAt);
 }
+
+/** Append a compact ` │ ⬆<count>` segment (yellow) before any trailing newline. */
+export function appendUpdatesSegment(text, count) {
+  if (typeof text !== "string" || !Number.isFinite(count) || count < 1) return text;
+  const seg = ` │ \x1b[33m⬆${count}\x1b[0m`;
+  return text.replace(/(\r?\n)?$/, (nl) => seg + (nl || ""));
+}

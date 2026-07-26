@@ -7,7 +7,10 @@
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { computeUsedTokenMetrics, rewriteContextBar } from "./lib/gsd-context-meter-lib.mjs";
+import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { computeUsedTokenMetrics, rewriteContextBar, appendUpdatesSegment } from "./lib/gsd-context-meter-lib.mjs";
+import { pendingCount } from "./lib/component-registry.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +39,15 @@ process.stdin.on("end", () => {
   } catch {
     // Bad input JSON or compute failure - keep the original's output unmodified.
   }
+
+  try {
+    const claudeDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+    const statePath = join(claudeDir, "state", "component-updates.json");
+    if (existsSync(statePath)) {
+      const st = JSON.parse(readFileSync(statePath, "utf8"));
+      output = appendUpdatesSegment(output, pendingCount(st));
+    }
+  } catch { /* never break the statusline over an update hint */ }
 
   process.stdout.write(output);
 });
