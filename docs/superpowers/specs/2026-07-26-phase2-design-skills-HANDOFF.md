@@ -1,5 +1,20 @@
 # Phase 2 — design skills into the frontend template — HANDOFF (resume after /clear)
 
+> **SUPERSEDED / RE-DECOMPOSED (2026-07-26).** This "design skills into the frontend template"
+> work is now **Phase 3**, not Phase 2. Brainstorming split it: the **new Phase 2** is a centralized
+> component-update checker (`docs/superpowers/specs/2026-07-26-component-update-checker-design.md`),
+> which the design-skills install strategy depends on. Also changed since this doc was written:
+> **frontend-design is removed entirely and replaced by Impeccable** (not by Pro Max); **Pro Max is
+> installed only as an enhancement grafted into Impeccable**, never a standalone skill; install uses
+> each tool's **official installer** (not vendoring), with freshness kept by the Phase-2 updater; and
+> Impeccable's design hook is registered through **our** centralized hook system. See the memory
+> [[impeccable-promax-facts]] for the verified install/trigger/license facts and the spiked details.
+> The vendoring/subset decisions below are OBSOLETE; keep this file only for the frontend-template
+> mechanics (removing the `frontend-design` entry, the `skills[]` channel) that Phase 3 still uses.
+
+---
+
+
 **Why this file:** Phase 1 (three-profile unification) is SHIPPED and merged to `master`. Phase 2
 is the second, orthogonal deliverable from the same design spec. This captures everything needed to
 resume Phase 2 in a fresh session without re-deriving it.
