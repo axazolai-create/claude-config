@@ -126,6 +126,14 @@ still pending user action (all `reinit`, or `safe` awaiting restart), appends a 
 (e.g. `⬆2`). Zero pending ⇒ no segment (no noise). Read-only, cheap (one JSON read), never blocks
 the meter render.
 
+**Profile caveat (found during planning):** `gsd-context-meter.mjs`/`gsd-context-meter-lib.mjs`
+match `variants.json`'s `hooks/gsd-*` + `hooks/lib/gsd-*` excludes, so they ship **full-only**
+(base/lite drop the GSD context meter). The statusline segment is therefore a **full-only garnish**;
+in base/lite the update signal comes through the `session-init.mjs` note channel (universal, all
+three profiles), which is the primary channel regardless. The new updater libs
+(`component-registry.mjs`, `component-update-check-run.mjs`) are NOT `gsd-*`-prefixed, so they ship
+in all three profiles as intended — no `variants.json` change needed.
+
 ## 8. Files touched
 
 - **New:** `payload/hooks/lib/component-registry.mjs`, `payload/hooks/lib/component-update-check-run.mjs`.
