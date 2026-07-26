@@ -44,6 +44,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
+import { formatUpdateNotes } from "./lib/component-registry.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 // Bundle variant (spec: docs/superpowers/specs/2026-07-22-lite-variant-design.md § 5).
@@ -292,60 +293,15 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && !state[root].graphifySynced)
   }
 }
 
-// Periodic self-upgrade check for known CLI tools this config integrates with (context-mode,
-// graphify). Machine-wide, NOT scoped to this project - tracked in its own state file so it
-// fires on its throttle window regardless of which project happens to trigger the session.
-// Detached/background, never blocks, never surfaces an error if the tool is missing.
-//   - context-mode ships its own `context-mode upgrade` CLI subcommand: pulls latest from
-//     GitHub, rebuilds, reconfigures hooks. Its own `doctor` command already reports "outdated"
-//     only when a newer version exists, so re-running `upgrade` when already current is
-//     expected to be a cheap no-op (same assumption self-update commands like `brew upgrade`
-//     make) - not independently verified against this specific CLI's source.
-//   - graphify has no built-in self-upgrade subcommand; its own README documents
-//     `uv tool upgrade graphifyy` as the update path. Only attempted if `uv` is on PATH
-//     (bin/graphify-setup.mjs is the only installer here that guarantees that) - silently
-//     skipped otherwise rather than guessing at pip/pipx equivalents.
-// Throttled to once per 24h per tool (state timestamp) so a burst of sessions in one day
-// doesn't re-trigger a rebuild/network check repeatedly. Toggle globally: CLAUDE_TOOL_AUTOUPGRADE=0.
-// Toggle per tool: CLAUDE_TOOL_AUTOUPGRADE_<NAME> (dashes -> underscores, e.g.
-// CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE=0).
-// Accepted risk: this runs detached at session start, so an upgrade could in principle still be
-// rewriting a tool's files while the very first few tool calls of the SAME session use it - the
-// same trade-off already accepted for graphify's background extract above; no reports of it
-// causing problems there.
-const KNOWN_TOOLS = [
-  { name: "context-mode", cmd: "context-mode", upgradeArgs: ["upgrade"] },
-  { name: "graphify", cmd: "graphify", upgradeCmd: "uv", upgradeArgs: ["tool", "upgrade", "graphifyy"] },
-];
-if (process.env.CLAUDE_TOOL_AUTOUPGRADE !== "0") {
-  const UPGRADE_THROTTLE_MS = 24 * 60 * 60 * 1000; // 24h
-  const toolStateFile = join(CLAUDE_DIR, "state", "tool-upgrade.json");
-  let toolState = existsSync(toolStateFile) ? (safe(() => JSON.parse(readFileSync(toolStateFile, "utf8"))) || {}) : {};
-  let toolStateChanged = false;
-
-  for (const tool of KNOWN_TOOLS) {
-    const envKey = `CLAUDE_TOOL_AUTOUPGRADE_${tool.name.toUpperCase().replace(/-/g, "_")}`;
-    if (process.env[envKey] === "0") continue;
-
-    const last = toolState[tool.name] ? Date.parse(toolState[tool.name]) : 0;
-    if (Number.isFinite(last) && Date.now() - last < UPGRADE_THROTTLE_MS) continue;
-
-    const installed = safe(() => spawnSync(tool.cmd, ["--version"], { encoding: "utf8" }));
-    if (!installed || installed.error || installed.status !== 0) continue; // not installed - skip silently
-
-    const upgradeBin = tool.upgradeCmd || tool.cmd;
-    if (tool.upgradeCmd) {
-      // Only attempt when the delegate binary (e.g. `uv`) is itself present.
-      const delegatePresent = safe(() => spawnSync(tool.upgradeCmd, ["--version"], { encoding: "utf8" }));
-      if (!delegatePresent || delegatePresent.error || delegatePresent.status !== 0) continue;
-    }
-    safe(() => spawn(upgradeBin, tool.upgradeArgs, { detached: true, stdio: "ignore" }).unref());
-    actions.push(`queued background self-upgrade check for '${tool.name}'`);
-    toolState[tool.name] = new Date().toISOString();
-    toolStateChanged = true;
-  }
-
-  if (toolStateChanged) writeFile(toolStateFile, JSON.stringify(toolState, null, 2) + "\n");
+// ---- centralized component-update checker (registry-driven; supersedes the old KNOWN_TOOLS
+// block). Detached + unref'd so it never blocks; it self-throttles per component (24h) and is
+// best-effort. Notes are emitted from the state a PRIOR run wrote, below. Master toggle honored
+// inside the worker; keep the legacy CLAUDE_TOOL_AUTOUPGRADE=0 escape here too so a full opt-out
+// short-circuits before we even spawn. ----
+if (process.env.CLAUDE_COMPONENT_AUTOUPDATE !== "0") {
+  const worker = join(dirname(fileURLToPath(import.meta.url)), "lib", "component-update-check-run.mjs");
+  if (existsSync(worker))
+    safe(() => spawn(process.execPath, [worker, "--root", root], { detached: true, stdio: "ignore" }).unref());
 }
 
 // ---- stack-rules snapshot check ----
@@ -557,6 +513,16 @@ if (firstTime && gsdProject) {
       notes.push("workflow.test_command/build_command are unset - gsd-core auto-detects a " +
         "reasonable default, but /init-stack (step 6) can propose a more specific one from " +
         "the detected stack if you want to set it explicitly.");
+  }
+}
+
+// ---- surface component updates the worker recorded on an earlier session (decoupled
+// trigger/notify, same pattern as the bundle check). Best-effort; never blocks. ----
+if (process.env.CLAUDE_COMPONENT_AUTOUPDATE !== "0") {
+  const statePath = join(CLAUDE_DIR, "state", "component-updates.json");
+  if (existsSync(statePath)) {
+    const st = safe(() => JSON.parse(readFileSync(statePath, "utf8")));
+    if (st) for (const line of formatUpdateNotes(st)) notes.push(`Component update: ${line}`);
   }
 }
 
