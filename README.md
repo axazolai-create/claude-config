@@ -170,8 +170,7 @@ notepad bootstrap.ps1; .\bootstrap.ps1
     `payload/` по спискам `include`/`exclude` в `variants.json` (exclude выигрывает у include).
   - **НЕТ**: `gsd`-агентов и хуков, `db-live-access-gate`, `ci-watch-nudge`,
     `schedulewakeup`-нуджа, pnpm-phantom-guard, bg-supervision (`supervise-bg.mjs`),
-    `task-lifecycle-probe`, команды `/init-mcp`, скилла `stack-markers`, теневого скилла
-    `using-git-worktrees`.
+    `task-lifecycle-probe`, команды `/init-mcp`, теневого скилла `using-git-worktrees`.
 
 ### Выбор варианта
 
@@ -345,7 +344,6 @@ notepad bootstrap.ps1; .\bootstrap.ps1
     using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Superpowers
     token-usage/SKILL.md                 # /token-usage — сводка по логу расхода токенов
     update-changelog/SKILL.md            # /update-changelog — git-история → changelog.json (RU-записи)
-    stack-markers/SKILL.md               # маппинг файл-маркер->стек, вынесен из CLAUDE.md (см. .claude/_analize/)
     model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, вынесен из CLAUDE.md
   rules-src/                             # источник правил стека — НЕ автозагружается Claude Code;
                                           #   компилируется в <проект>/.claude/stack-rules.md (см. ниже)

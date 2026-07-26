@@ -176,8 +176,7 @@ switch at any time by re-running `setup.mjs`.
     per the `include`/`exclude` lists in `variants.json` (exclude wins over include);
   - **NOT included**: `gsd` agents and hooks, `db-live-access-gate`, `ci-watch-nudge`, the
     `schedulewakeup` nudge, the pnpm-phantom guard, bg-supervision (`supervise-bg.mjs`),
-    `task-lifecycle-probe`, the `/init-mcp` command, the `stack-markers` skill, the
-    `using-git-worktrees` shadow skill.
+    `task-lifecycle-probe`, the `/init-mcp` command, the `using-git-worktrees` shadow skill.
 
 ### Selecting a variant
 
@@ -353,7 +352,6 @@ So this package does three things:
     using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
     token-usage/SKILL.md                 # /token-usage — token spend log summary
     update-changelog/SKILL.md            # /update-changelog — git history → changelog.json (RU entries)
-    stack-markers/SKILL.md               # file-marker->stack mapping, split out of CLAUDE.md (see .claude/_analize/)
     model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, split out of CLAUDE.md
   rules-src/                             # stack rule sources — NOT auto-loaded by Claude Code;
                                           #   compiled into <project>/.claude/stack-rules.md (see below)
