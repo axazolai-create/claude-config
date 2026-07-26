@@ -86,6 +86,9 @@
 
 - **Status:** Resolved (2026-07-17) — the check-and-decision point already existed at
   `/init-stack` step 8; the bug was that the nag text pointed at the wrong step number.
+  **Superseded context (2026-07-27):** `init-stack.md`'s steps 6-11 (including this fallow
+  step 8) were later deleted wholesale in the GSD-free rewrite `eaf1a50` — the interactive
+  fallow proposal no longer exists anywhere. See RISK-INITSTACK-001 for the current state.
 - **Context:** `gsd-config-patch.mjs`'s tier2 default sets `code_quality.fallow.enabled` to
   `true` whenever the project root has a `package.json` — deliberately without checking
   whether the `fallow` binary is actually installed (see the comment above
@@ -502,23 +505,37 @@
 - **Residual:** a silent rename leaves the components un-updated until the ids are corrected;
   detection is manual. Accepted / low.
 
-## RISK-INITSTACK-001 — Pre-existing stale `/init-stack` step-number cross-references
+## RISK-INITSTACK-001 — `/init-stack` GSD-free rewrite deleted steps 6-11; ~24 stale references + 2 dropped capabilities
 
-- **Status:** Open (accepted / pre-existing) — surfaced 2026-07-27 during Phase 3 Task 7.
-- **Context:** the Phase-3 design-stack insertion into `payload/commands/init-stack.md` (new step 5,
-  Finish→6, Mark completion→7) triggered a RISK-FALLOW-001-style cross-reference sweep. The sweep
-  found `step 6/8/9/10/11` references in ~8 files (`session-init.mjs`, `rules-src/gsd.md`,
-  `gsd-agent-patches.mjs`, `gsd-workflow-patches.mjs`, `leanmode-rules.mjs`, `mark-initstack-done.mjs`,
-  `apply-gsd-agent-patches.mjs`, `gsd-defaults-sync.mjs`, `README*.md`) plus `docs/gsd-config-defaults.md`
-  (`step 5`) that point at step numbers which **match no real heading** in the current 7-step
-  `init-stack.md` (it has never had steps 8-11). These are leftovers from an older, larger version of
-  the command and are the same drift class as RISK-FALLOW-001, at wider scope.
-- **Mitigation:** independently verified (Phase-3 Task 7 review) that the Phase-3 insertion invalidated
-  **no** previously-valid reference — every stale reference was already stale beforehand. Phase 3 left
-  them untouched rather than guessing their intended targets.
-- **Residual:** the stale references remain and will be rediscovered on the next `init-stack.md`
-  renumber. A dedicated pass should re-map each to its real current step (or delete it) and, ideally,
-  tie the text to the command's actual `## N.` headings. Deferred — out of Phase 3's scope. Accepted.
+- **Status:** Partially resolved (2026-07-27) — the stale references are fixed; reinstating the two
+  genuinely-dropped capabilities is a tracked design task.
+- **Context:** commit `eaf1a50` rewrote `payload/commands/init-stack.md` into a single "GSD-free" doc
+  shared by all three profiles and, in doing so, **deleted old steps 6-11 wholesale** (not renumbered):
+  the stack-aware test/build-command proposal, the `claude_orchestration` pilot ask, the `fallow`
+  devDependency proposal, apply-gsd-agent-patches, and sync-gsd-defaults. Only "mark leanmode dial +
+  graphify freshness" survived (now current step 7). ~24 references across ~12 files
+  (`session-init.mjs`, `gsd-config-patch.mjs`, `apply-gsd-agent-patches.mjs`, `gsd-agent-patches.mjs`,
+  `gsd-workflow-patches.mjs`, `gsd-defaults-sync.mjs`, `leanmode-rules.mjs`, `mark-initstack-done.mjs`,
+  `rules-src/gsd.md`, `setup.mjs`, `references/gsd-claude-orchestration-pilot.md`, `README.en.md`) kept
+  pointing at those dead step numbers. An investigation (2026-07-27) classified each as GSD-only vs
+  generally-useful and confirmed which functionality still exists and where.
+- **Resolution (done — commits `25f339a`, `420a1cd`):** every stale reference corrected to the truth,
+  comment/string/doc text only, no logic touched, full sweep green (215/215). REMAP: gsd-agent /
+  workflow-patch pointers → `/init-session` (its only current caller); gsd-defaults-sync → manual-only;
+  mark-initstack-done step 9 → current step 7. REWORD/REMOVE: the false test/build, `fallow`, and
+  `claude_orchestration` "run /init-stack step N" promises now state the step was removed and cite this
+  risk id; the orphaned `gsd-claude-orchestration-pilot.md` gets a dormant-doc note (preserved, not
+  deleted). **No functionality was reinstated.**
+- **Open (design task — Category II):** two capabilities were genuinely dropped, not just mislabeled —
+  (1) the stack-aware test/build-command proposal and (2) the `claude_orchestration` pilot ask — and
+  `fallow`'s install-proposal never reached base/lite. Reinstating them must mount in the orchestrator
+  that owns code-review **per profile — GSD's gates in full, Superpowers' gates in base/lite** (NOT
+  universally Superpowers, which would strip GSD in full); profile-membership + install gating should
+  reuse the `pnpm-phantom-fix` stack-marker pattern, not GSD-coupling. See memory
+  `gsd-superpowers-orchestration-boundary`.
+- **Residual:** until that task ships, base/lite get no `fallow` awareness and `full` lost the
+  interactive test/build + orchestration asks (gsd-core's generic auto-detect still covers test/build;
+  the orchestration-pilot doc is dormant-but-preserved). Accepted for now.
 
 ## RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 

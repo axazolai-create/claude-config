@@ -75,11 +75,11 @@ CLAUDE.md's own advice says to set "deliberately per project"):
   workflow outright (not a graceful skip) when `enabled: true` but the binary isn't
   resolvable. Gating on `package.json` keeps this default from breaking review in
   Python/Kotlin/Swift/etc. projects. It still doesn't guarantee the binary is actually
-  installed in a given Node repo - that half is handled by `/init-stack`'s fallow
-  devDependency proposal (payload/commands/init-stack.md step 5, added the same session).
-  If a Node project's `/gsd-code-review`/`/gsd-ship` hits this before `/init-stack` ever
-  installed fallow, the failure is loud and actionable (fallow's own error names the exact
-  install command), not silent.
+  installed in a given Node repo - an interactive `/init-stack` fallow-install step used to
+  cover that half, but was removed in the GSD-free rewrite (eaf1a50; see RISK-INITSTACK-001),
+  so nothing installs it interactively now. If a Node project's `/gsd-code-review`/`/gsd-ship`
+  hits this before fallow is installed, the failure is loud and actionable (fallow's own error
+  names the exact install command), not silent.
 
 Deliberately NOT included (see rules-src/gsd.md and the hook's own commit history for why):
 `tdd_mode`, `code_review`(+`_depth`/`_command`), `security_enforcement`/
@@ -88,8 +88,9 @@ deliberately per project, not defaulted. Also excluded: `ui_phase`/`ui_review`/
 `ui_safety_gate` (depend on whether the project even has a frontend - stack-dependent, not a
 personal preference), `git.branching_strategy`(+templates) (depends on team workflow, not
 stack or preference), `test_command`/`build_command`/`plan_bounce_script`/`mvp_mode`
-(project-specific: no universal default makes sense across repos - `test_command`/
-`build_command` instead get a stack-aware proposal in `/init-stack` step 5),
+(project-specific: no universal default makes sense across repos - the stack-aware
+`/init-stack` proposal that used to set `test_command`/`build_command` was removed in eaf1a50
+(see RISK-INITSTACK-001); gsd-core auto-detects a default),
 `cross_ai_*`/`plan_review_convergence` (require an actually-configured external AI
 CLI/reviewer - not universal), `runtime`/`model_profile_overrides`/`dynamic_routing`/
 `model_policy` (this config already targets Claude Code directly via
