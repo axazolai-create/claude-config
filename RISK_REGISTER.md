@@ -385,3 +385,45 @@
   completes. On the bulk path the same wrong id would instead surface as a printed manual command
   the user runs by hand, catching the failure before it executes. Accepted; revisit by
   confirming the id on a machine that has `gsd` installed via the marketplace.
+
+## RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
+
+- **Status:** Open (until tests green)
+- **Context:** `payload/hooks/leanmode-subagent.mjs` (single-axis SubagentStart) becomes
+  `inject-axes.mjs`, iterating an axis registry over both SessionStart and SubagentStart. Any
+  drift in how leanmode's level is resolved or injected per agent_type would silently weaken a
+  working mechanic. See docs/superpowers/specs/2026-07-26-ai-development-mode-design.md § 2.
+- **Mitigation:** the leanmode axis re-exports `lib/leanmode-rules.mjs` unchanged, so its
+  resolution logic is untouched; the full existing `leanmode-*` test suite is the gate; add an
+  axis-independence test (leanmode=off still injects verbosity, and vice versa) and a
+  per-event coverage test (SessionStart → verbosity only; SubagentStart → both when on).
+- **Residual:** the injector composition layer is new code; regression risk retired once the
+  leanmode suite + new tests are green.
+
+## RISK-VERBOSITY-001 — "Terse" verbosity axis slides into minification or drops load-bearing intent
+
+- **Status:** Open (accepted, behavioral)
+- **Context:** the verbosity axis tells the model to drop comments and filler whitespace. Over-
+  interpreted, the model could shorten identifiers, collapse required structure, remove a comment
+  that carried a non-obvious *why*, or delete a docstring that is a real public API contract.
+  See design § 3.
+- **Mitigation:** every tier text ends with a verbatim hard carve-out — preserve names, casing,
+  mandatory syntax/indentation, error handling, validation, security; explicitly "NOT
+  minification"; ultra is opt-in only. Correctness/security are out of the axis's scope by
+  construction (same carve-out leanmode makes).
+- **Residual:** prose-guided behavior can still misfire on an edge case; caught in review, not
+  hook-enforced. Accepted.
+
+## RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
+
+- **Status:** Open (until Stage 2)
+- **Context:** G Stage 2 edits the existing, working autosync (`hooks/graphify-global-sync.mjs`,
+  `hooks/lib/graphify-global-sync-run.mjs`, `bin/graphify-freshness*`) to guarantee `graphify
+  query` never answers from a stale graph. A careless edit could cause missed syncs, double
+  syncs, or a perf regression. See design § 4.
+- **Mitigation:** pin-then-edit — a regression test locking current autosync behavior runs before
+  the change and must still pass after; Stage 2 lands only after Stage 1 (grep nudge, zero-risk)
+  is merged and green; Stage 2 is splittable into a follow-up spec if the risk grows during
+  planning.
+- **Residual:** none accepted yet — this risk is not closed until Stage 2 ships with the guard
+  test green, or is deferred to its own spec.

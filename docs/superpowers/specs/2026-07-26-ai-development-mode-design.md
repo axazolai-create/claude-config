@@ -161,11 +161,12 @@ before touching working code.
 
 ### Stage 2 — freshness (edits existing mechanics, guarded)
 
-- Tighten the existing autosync so `graphify query` never answers from a stale graph. Existing
-  surfaces: `payload/hooks/graphify-global-sync.mjs`, `payload/hooks/lib/graphify-global-sync-run.mjs`,
-  `payload/bin/graphify-freshness*`. Stage 2 wires a freshness check (graph mtime vs. HEAD / last
-  tracked commit) that the Stage 1 nudge reads, and ensures the post-commit `--update` path is
-  actually reached.
+- Freshness was implemented additively: a local mtime-vs-HEAD check lives inside the Stage 1 nudge
+  itself (`payload/hooks/graphify-grep-nudge.mjs`), comparing `graphify-out/graph.json`'s mtime to
+  the repo's HEAD commit time. The existing autosync (`payload/hooks/graphify-global-sync.mjs`,
+  `payload/hooks/lib/graphify-global-sync-run.mjs`) is untouched. `payload/bin/graphify-freshness*`
+  is unrelated prior art — it checks the installed graphify CLI version against PyPI, not graph
+  staleness.
 - **Guard:** a regression test pinning current autosync behavior runs *before* the edit; the edit
   must not change it (RISK-GRAPHFRESH-001). Stage 2 lands only after Stage 1 is merged and green.
 

@@ -25,7 +25,7 @@ function plantForeign(dir) {
   for (const f of FOREIGN) { mkdirSync(join(dir, dirname(f)), { recursive: true }); writeFileSync(join(dir, f), `foreign:${f}`); }
 }
 
-test("lite install: exact tree, 6 hooks, no statusLine, manifest.variant", () => {
+test("lite install: exact tree, 7 hooks, no statusLine, manifest.variant", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-lite-"));
   plantForeign(dir);
   const r = run(dir, ["--variant=lite", "--replace-all"]);
@@ -41,7 +41,7 @@ test("lite install: exact tree, 6 hooks, no statusLine, manifest.variant", () =>
   for (const entries of Object.values(settings.hooks || {}))
     for (const e of entries) for (const h of (e.hooks || []))
       for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
-  assert.equal(scripts.size, 6);
+  assert.equal(scripts.size, 7);
   assert.ok(!("statusLine" in settings));
   assert.equal(JSON.parse(readFileSync(join(dir, "state/bundle-manifest.json"), "utf8")).variant, "lite");
   // lite CLAUDE.md is the overlay version
@@ -77,6 +77,19 @@ test("manifest without variant field = full (no surplus prune on full reinstall)
   assert.equal(r.status, 0);
   assert.ok(existsSync(join(dir, "hooks/gsd-context-meter.mjs")));
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("lite build ships the AI-dev-mode (A) files", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  for (const p of [
+    "hooks/inject-axes.mjs",
+    "hooks/lib/inject-axes.mjs",
+    "hooks/lib/verbosity-rules.mjs",
+    "hooks/lib/verbosity-lite-rule.md",
+    "commands/aidev.md",
+  ]) {
+    assert.ok(v.rels.includes(p), `${p} must be in lite`);
+  }
 });
 
 test("--dry-run writes nothing for both variants", () => {
