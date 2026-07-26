@@ -41,7 +41,7 @@ import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
 import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
-import { resolveVariant, filterPartialHooks, loadVariants, profilesOf } from "./variants.mjs";
+import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
@@ -79,6 +79,16 @@ const VARIANT_ARG = (() => {
   const a = [...argv].find((x) => x.startsWith("--variant="));
   return a ? a.slice("--variant=".length) : null;
 })();
+// Non-interactive augment/trim toggles (OI-5): --configure-<group>=on|off, applied IN-PROCESS to
+// whichever `optional` group the active profile declares (today: only base's "neo4j") - so an
+// install/CI run never needs a manual follow-up command, just this one flag. Unknown group names
+// are silently inert (see the per-group loop in main()), same "no throw on stale input" idiom as
+// resolveVariant()'s own activeOptional handling.
+const CONFIGURE_FLAGS = {};
+for (const a of argv) {
+  const m = /^--configure-([A-Za-z0-9_-]+)=(on|off)$/.exec(a);
+  if (m) CONFIGURE_FLAGS[m[1]] = m[2] === "on";
+}
 const ENABLE_UPDATE_CHECK_FLAG = argv.has("--enable-update-check");
 const INTERACTIVE = !BULK && process.stdin.isTTY;
 const MD = argv.has("--md");
@@ -418,6 +428,41 @@ function walkDir(dir, rel = "") {
   }
   return out;
 }
+/* ---------- guided augment/trim (OI-5): per-profile `optional` groups ----------
+ * Generalizes the old neo4j-only opt-in into a loop over ANY profile's `optional` map (today:
+ * only base declares one, "neo4j"). fsGroupInstalled() is the ONE fallback path - it's the same
+ * "does a file from this group already exist on disk?" idiom the old neo4j-only code used,
+ * kept ONLY for manifests written before `activeOptional` existed. Once a manifest carries
+ * `activeOptional`, that array is authoritative and this is never consulted. */
+function fsGroupInstalled(globs) {
+  const res = (globs || []).map(globToRe);
+  if (!res.length) return false;
+  return walkDir(CDIR).some((rel) => res.some((re) => re.test(rel)));
+}
+// A group toggled OFF this run (was active last run, per manifest or the fs fallback; not active
+// now) is pruned directly here - deliberately NOT routed through pruneStale()'s BULK/interactive
+// gate below, because `--configure-<group>=off` (or an explicit interactive "n") is already
+// unambiguous consent to remove exactly those files; no second confirmation needed. Still safe-
+// gated the same way pruneStale() is: never touches a curated file, never touches a file modified
+// since install (a real edit wins over the toggle).
+function pruneDroppedOptional(groups, def, oldByRel) {
+  const globs = (groups || []).flatMap((g) => (def.optional && def.optional[g]) || []);
+  if (!globs.length) return;
+  const res = globs.map(globToRe);
+  const matches = walkDir(CDIR).filter((rel) => res.some((re) => re.test(rel)));
+  if (!matches.length) return;
+  log(`\n--- augment: optional group(s) turned off [${groups.join(", ")}] - pruning their files ---`);
+  for (const rel of matches) {
+    const dst = join(CDIR, ...rel.split("/"));
+    const cur = read(dst);
+    if (typeof cur === "string" && isCurated(cur)) { log(`  kept (curated) ${dst}`); summary.push(`kept (curated) ${dst}`); continue; }
+    const oldHash = oldByRel.get(rel);
+    if (oldHash && cur !== undefined && sha(cur) !== oldHash) { log(`  kept (modified since install) ${dst}`); summary.push(`kept (modified since install) ${dst}`); continue; }
+    if (DRY) { log(`  would-prune ${dst}`); summary.push(`would-prune ${dst} (optional group off)`); continue; }
+    try { rmSync(dst, { force: true }); log(`  pruned   ${dst}`); summary.push(`pruned   ${dst} (optional group off)`); }
+    catch { summary.push(`prune-failed ${dst}`); }
+  }
+}
 function overwriteTemplatesDir() {
   const bundleRels = new Set(walkDir(join(SRC, "setting-templates")));
   const destDir = join(CDIR, "setting-templates");
@@ -552,29 +597,41 @@ async function main() {
   }
   if (!VARIANT) VARIANT = installedVariant || "full";   // non-TTY: detected, or full on fresh
 
-  // Optional Neo4j ecosystem in base (opt-in at install). Decided BEFORE resolveVariant so the
-  // neo4j file set is included/excluded for this run. State is the filesystem: a previously
-  // opted-in install has neo4j-config.mjs present, which becomes the default (and the non-TTY
-  // answer) so re-runs are idempotent; opting out drops it and pruneStale removes the files.
-  // Full always ships the ecosystem; lite never offers it (its extends-inherited exclude drops
-  // neo4j and it has no optional.neo4j group, so activeOptional=["neo4j"] would be a no-op there
-  // anyway - but we don't even ask, to keep the lite prompt flow minimal).
-  let activeOptional = [];
-  if (VARIANT === "base") {
-    const installed = existsSync(join(CDIR, "bin", "lib", "neo4j-config.mjs"));
-    if (INTERACTIVE) {
-      const a = (await ask(`  include the graphify Neo4j ecosystem (read/write + driver + cypher)? ` +
-        `[${installed ? "Y/n" : "y/N"}] > `)).trim().toLowerCase();
-      NEO4J_ECOSYSTEM = a ? a[0] === "y" : installed;
+  // ---------- guided per-profile augment/trim (OI-5): one guided flow, never a manual chain ----------
+  // Any profile's `optional` groups (today: only base's "neo4j") are toggled HERE, in-process,
+  // BEFORE resolveVariant - either via --configure-<group>=on|off (non-interactive/CI, e.g. the
+  // e2e suite - this is the key OI-5 path: an install applies the toggle itself, it never tells
+  // the user to go run a follow-up command) or, in a TTY, one y/n prompt per group. The manifest's
+  // `activeOptional` is the primary source for "what was active last run" (read back below as
+  // `prevActiveOptional`, default for both the non-TTY case and the interactive Y/n hint); the old
+  // filesystem-sniff idiom (a group's marker file already present on disk) is kept ONLY as a
+  // fallback for a manifest written before that field existed. Full always ships neo4j (identity
+  // variant, no exclude/optional at all); lite never offers it (no optional.neo4j group).
+  const profileDef = profilesOf(loadVariants(REPO_ROOT))[VARIANT] || {};
+  // "$comment" is variants.json's own documentation-key convention (see the top-level
+  // $comment there too) - not a real group, so it must never be treated as one here.
+  const optionalGroups = Object.keys(profileDef.optional || {}).filter((k) => k !== "$comment");
+  const prevActiveOptional = Array.isArray(oldManifestEarly && oldManifestEarly.activeOptional)
+    ? oldManifestEarly.activeOptional : null;
+  const GROUP_LABELS = { neo4j: "the graphify Neo4j ecosystem (read/write + driver + cypher)" };
+  let activeOptional = [], droppedOptional = [];
+  for (const group of optionalGroups) {
+    const globs = profileDef.optional[group];
+    const wasActive = prevActiveOptional ? prevActiveOptional.includes(group) : fsGroupInstalled(globs);
+    let on;
+    if (group in CONFIGURE_FLAGS) {
+      on = CONFIGURE_FLAGS[group];
+    } else if (INTERACTIVE) {
+      const label = GROUP_LABELS[group] || `the "${group}" group`;
+      const a = (await ask(`  include ${label}? [${wasActive ? "Y/n" : "y/N"}] > `)).trim().toLowerCase();
+      on = a ? a[0] === "y" : wasActive;
     } else {
-      NEO4J_ECOSYSTEM = installed;                        // non-TTY: keep whatever is already installed
+      on = wasActive;                                     // non-TTY, no flag: keep whatever was active
     }
-    if (NEO4J_ECOSYSTEM) activeOptional = ["neo4j"];
-  } else if (VARIANT === "full") {
-    NEO4J_ECOSYSTEM = true;                               // full ships the whole ecosystem
-  } else {
-    NEO4J_ECOSYSTEM = false;                              // lite never ships it
+    if (on) activeOptional.push(group);
+    else if (wasActive) droppedOptional.push(group);
   }
+  NEO4J_ECOSYSTEM = VARIANT === "full" ? true : activeOptional.includes("neo4j");
   V = resolveVariant({ repoRoot: REPO_ROOT, variant: VARIANT, activeOptional });
   if (installedVariant && installedVariant !== VARIANT)
     log(`Switching variant: ${installedVariant} -> ${VARIANT} (surplus files listed for removal below)`);
@@ -1015,11 +1072,15 @@ async function main() {
   /* ---------- prune stale files + persist manifest ---------- */
   migrateRulesDir();
   overwriteTemplatesDir();
+  {
+    const oldByRelEarly = new Map(((oldManifestEarly && oldManifestEarly.files) || []).map((f) => [f.rel, f.hash]));
+    pruneDroppedOptional(droppedOptional, profileDef, oldByRelEarly);
+  }
   await pruneStale();
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
     const maxPluginTier = profilesOf(loadVariants(REPO_ROOT))[VARIANT]?.maxPluginTier;
-    const manifestPayload = { files: manifestNow, profile: VARIANT, variant: VARIANT };
+    const manifestPayload = { files: manifestNow, profile: VARIANT, variant: VARIANT, activeOptional };
     if (maxPluginTier !== undefined) manifestPayload.maxPluginTier = maxPluginTier;
     if (installedSha) {
       manifestPayload.installedSha = installedSha;
@@ -1118,7 +1179,7 @@ async function main() {
     log("Step 3 - ONLY if the project needs stack-specific plugins (React, FastAPI, ...) -");
     log("         this does NOT happen automatically. Run /init-stack in that project's");
     log("         Claude Code session. It detects the stack, then asks you to run");
-    log("         'python3 ~/.claude/bin/init-stack.py -i' yourself in a real terminal");
+    log("         'node ~/.claude/bin/init-stack.mjs -i' yourself in a real terminal");
     log("         (interactive checklist) to install and enable the matching plugins.");
     log("");
     log("Step 4 - RESTART Claude Code again after /init-stack writes settings.json -");

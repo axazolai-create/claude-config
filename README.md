@@ -112,14 +112,14 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 ### Первичная настройка (новый ПК)
 
 1. `node setup.mjs` (или bootstrap — см. выше) — ставит `~/.claude`, в т.ч.
-   `~/.claude/bin/init-stack.py`, которым пользуется шаг 3.
+   `~/.claude/bin/init-stack.mjs`, которым пользуется шаг 3.
 2. **Перезапусти Claude Code** (хуки и `settings.json` читаются только при старте).
 3. В каждом ПРОЕКТЕ, где нужны стек-специфичные плагины, — открой там сессию Claude Code и
    запусти `/init-stack`. Он:
-   - сам прогонит `python3 ~/.claude/bin/init-stack.py` (детект стека + отчёт, ничего не пишет);
+   - сам прогонит `node ~/.claude/bin/init-stack.mjs` (детект стека + отчёт, ничего не пишет);
    - файл/деп-маркеры → id стека и `STACK_PATHS` — общий источник в `~/.claude/bin/lib/stack-markers.mjs`
      (заменяет прежний скилл `stack-markers`);
-   - попросит тебя лично запустить `python3 ~/.claude/bin/init-stack.py -i` в СВОЁМ терминале —
+   - попросит тебя лично запустить `node ~/.claude/bin/init-stack.mjs -i` в СВОЁМ терминале —
      интерактивный чек-лист (arrow-key UI) через Claude провести нельзя; на подтверждении он сам
      ставит недостающие плагины (`claude plugin install`) и пишет `./.claude/settings.json`;
    - если нет реального терминала — non-interactive fallback (`--enable`/`--apply-all`);
@@ -131,8 +131,8 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 клонирования репозитория или когда в нём впервые понадобились плагины).
 
 > Шаг 3 и вся таблица «Перенастройка» ниже описывают **full**-вариант `/init-stack`
-> (python-скрипт + plugin-machinery). В **lite**-варианте `/init-stack` — не то же самое: он
-> только детектит стек и собирает `.claude/stack-rules.md`, без python и без установки/включения
+> (Node-скрипт + plugin-machinery). В **lite**-варианте `/init-stack` — не то же самое: он
+> только детектит стек и собирает `.claude/stack-rules.md`, без установки/включения
 > плагинов вообще. Подробности и как выбрать/переключить вариант — «Варианты бандла» ниже.
 
 ### Перенастройка
@@ -142,8 +142,8 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 | Вышла новая версия этого репозитория (обновились хуки/правила/скиллы) | `node setup.mjs` (флаги конфликтов — см. выше; `--dry-run` — посмотреть, что изменится, ничего не трогая) | по мере обновления пакета |
 | `PreToolUse hook error` / битые пути в `~/.claude/settings.json` | `node setup.mjs --doctor`, затем `node setup.mjs` | по симптому (см. диагностику ниже) |
 | В проекте сменился/добавился стек (новый фреймворк, монорепа и т.п.) | `/init-stack` заново — пречекнуты уже включённые плагины + авто-набор нового стека | при смене стека |
-| Включить/выключить один конкретный плагин без полного прогона `/init-stack` | `python3 ~/.claude/bin/init-stack.py -i` напрямую (тот же чек-лист, но без отчёта и без GSD-шагов 6 и 8 `/init-stack`) | по необходимости |
-| Посмотреть текущий статус плагинов, ничего не меняя | `python3 ~/.claude/bin/init-stack.py` (без аргументов, ничего не пишет) | по необходимости |
+| Включить/выключить один конкретный плагин без полного прогона `/init-stack` | `node ~/.claude/bin/init-stack.mjs -i` напрямую (тот же чек-лист, но без отчёта и без GSD-шагов 6 и 8 `/init-stack`) | по необходимости |
+| Посмотреть текущий статус плагинов, ничего не меняя | `node ~/.claude/bin/init-stack.mjs` (без аргументов, ничего не пишет) | по необходимости |
 
 После ЛЮБОГО из этих шагов, где менялся `settings.json` (пользовательский или проектный) —
 **перезапусти Claude Code**: хуки, user-`CLAUDE.md` и `enabledPlugins` резолвятся только при
@@ -304,7 +304,7 @@ notepad bootstrap.ps1; .\bootstrap.ps1
   settings.json                          # твой файл + до-мёрженные ключи (hooks, permissions.deny)
   add-risk.mjs                           # хелпер риск-реестра (его дёргает авто-инициализация)
   apply-gsd-agent-patches.mjs            # применяет agent+workflow контент-патчи (зовёт /init-session)
-  sync-gsd-context-mode-tool.mjs         # CLI-обёртка tool-grant синка (зовут setup.mjs / init-stack.py)
+  sync-gsd-context-mode-tool.mjs         # CLI-обёртка tool-grant синка (зовут setup.mjs / init-stack.mjs)
   hooks/
     deny-curated-claude-md.mjs           # блок правок курируемого CLAUDE.md (любая локация)
     secrets-gate.mjs                     # блок `git commit` при найденных секретах в staged
@@ -362,7 +362,7 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 - Копирует все файлы в `~/.claude` (создаёт папки), проставляет +x на `.mjs` под POSIX.
 - **Область действия — только `~/.claude`** (хуки, `rules-src/`, `skills/`, `CLAUDE.md`,
   `settings.json`). Плагины проекта сюда не входят — это отдельный, независимый механизм,
-  `/init-stack` (см. ниже), у него свой скрипт (`bin/init-stack.py`) и свой вывод. Если после
+  `/init-stack` (см. ниже), у него свой скрипт (`bin/init-stack.mjs`) и свой вывод. Если после
   запуска `setup.mjs` в выводе видны только сообщения про плагины — скорее всего был запущен
   `/init-stack`, а не `setup.mjs`: они не вызывают друг друга и ничего друг про друга не знают.
 
@@ -831,7 +831,7 @@ bump версии патча устаревший текст заменяетс�
   MCP-сервер). Это одна строка фронтматтера, поэтому безопасно гонять КАЖДУЮ сессию — в т.ч.
   после того, как апдейтер самого gsd-core перезапишет агента и снова уронит тул. Зовётся из
   `session-init.mjs` и из CLI-обёртки `sync-gsd-context-mode-tool.mjs` (её дёргают `setup.mjs` и
-  `init-stack.py`).
+  `init-stack.mjs`).
 - **Review-gated контент-патчи** — `hooks/lib/gsd-agent-patches.mjs` (30+ агентов: роутинг на
   context-mode-тулы, хардненинг `gsd-executor.md`/`gsd-debugger.md`, guardrail против рекурсивного
   спавна — включая bounded-Agent guardrail для `gsd-debug-session-manager.md`, единственного
