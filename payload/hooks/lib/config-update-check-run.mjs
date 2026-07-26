@@ -69,18 +69,18 @@ export async function checkBundleUpdate(claudeDir) {
   const manifest = existsSync(manifestPath) ? (safe(() => JSON.parse(readFileSync(manifestPath, "utf8"))) || {}) : {};
   const installed = manifest.installedSha;
   if (!installed) return null; // no baseline yet
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch("https://api.github.com/repos/axazolai-create/claude-config/commits/master",
       { signal: ctrl.signal, headers: { "User-Agent": "claude-config-update-check" } });
-    clearTimeout(t);
     if (!res.ok) return null;
     const j = await res.json();
     const latest = j && typeof j.sha === "string" ? j.sha : null;
     if (!latest) return null;
     return { installed, latest, updateAvailable: bundleUpdateAvailable(installed, latest) };
   } catch { return null; }
+  finally { clearTimeout(t); }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

@@ -294,10 +294,12 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && !state[root].graphifySynced)
 }
 
 // ---- centralized component-update checker (registry-driven; supersedes the old KNOWN_TOOLS
-// block). Detached + unref'd so it never blocks; it self-throttles per component (24h) and is
-// best-effort. Notes are emitted from the state a PRIOR run wrote, below. Master toggle honored
-// inside the worker; keep the legacy CLAUDE_TOOL_AUTOUPGRADE=0 escape here too so a full opt-out
-// short-circuits before we even spawn. ----
+// block). Detached + unref'd so it never blocks; the worker self-throttles per component (24h)
+// and is best-effort. Notes are emitted from the state a PRIOR run wrote, below. The legacy
+// CLAUDE_TOOL_AUTOUPGRADE[_<NAME>]=0 opt-out is still honored for the migrated tools
+// (context-mode/graphify) INSIDE the worker via autoUpdateEnabled - a legacy-only opt-out still
+// spawns the worker (cheap) but suppresses those upgrades there; the claude-config bundle check
+// still runs, which is intended. Master off-switch: CLAUDE_COMPONENT_AUTOUPDATE=0. ----
 if (process.env.CLAUDE_COMPONENT_AUTOUPDATE !== "0") {
   const worker = join(dirname(fileURLToPath(import.meta.url)), "lib", "component-update-check-run.mjs");
   if (existsSync(worker))
