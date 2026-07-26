@@ -6,8 +6,9 @@
 //   - checkGsdWorkflowPatches(claudeDir)  -> read-only. Surfaced every session by session-init.mjs.
 //   - applyGsdWorkflowPatches(claudeDir)  -> actually patches. Called only by an explicit human
 //                                            invocation - payload/apply-gsd-agent-patches.mjs
-//                                            also calls this, so /init-stack step 10 applies both
-//                                            in one command - never automatically/per-session.
+//                                            also calls this, so /init-session applies both
+//                                            in one command (init-stack.md no longer has an
+//                                            equivalent step) - never automatically/per-session.
 // Same "content-aware, not presence-aware" versioned-marker scheme as gsd-agent-patches.mjs:
 // `<!-- gsd-patch:ID vN -->...<!-- /gsd-patch:ID -->`. See that file's header comment for the
 // full rationale; duplicated here in miniature (single target file, single patch) rather than

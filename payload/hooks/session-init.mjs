@@ -382,9 +382,9 @@ if (process.env.CLAUDE_LEANMODE !== "0" && resolveDial(root) !== "off") {
 // isn't resolvable. Re-checked EVERY session, like the MCP suggestion above - not a one-time
 // flag, because the gap is defined by CURRENT STATE (config says enabled, binary absent),
 // not "did we ever tell the user once". It stops surfacing on its own once fallow is
-// actually installed, or the user declines via step 8 (which writes `fallow.enabled: false`
-// and closes the gap for good - unlike a silent decline, which would leave this nagging
-// forever). gsd-config-patch.mjs runs the SAME check on a throttle for the mid-session case
+// actually installed, or the user (or you, by hand) sets `code_quality.fallow.enabled: false`
+// in `.planning/config.json` to close the gap for good - unlike a silent decline, which would
+// leave this nagging forever. gsd-config-patch.mjs runs the SAME check on a throttle for the mid-session case
 // (`.planning/` created after this session already started) - see that file for why both
 // exist, same reasoning as the tier1/tier2 split at the top of that file.
 // Opt out: CLAUDE_GSD_INITSTACK_SUGGEST=0.
@@ -403,7 +403,7 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
         notes.push("GSD settings gap: code_quality.fallow.enabled=true but the `fallow` " +
           "binary isn't installed - the next /gsd-code-review or /gsd-ship will hard-fail, " +
           `not skip gracefully. Install it yourself (\`${installCmd}\`, run at the repo root ` +
-          "where .planning/ lives)" + (FULL ? " or run /init-stack (step 8) to do it interactively," : "") +
+          "where .planning/ lives)" +
           " or explicitly set code_quality.fallow.enabled: false for this project.");
       }
     }
@@ -437,8 +437,8 @@ if (FULL) {
 
     // ---- gsd-* agents: check (never write) for pending content patches ----
     // Deliberately CHECK-ONLY, unlike the tool-grant sync just above: hooks/lib/gsd-agent-patches.mjs
-    // injects prose across 30+ files, so it's review-gated behind an explicit invocation (step 10 of
-    // payload/commands/init-stack.md, or standalone via /init-session) instead of silently
+    // injects prose across 30+ files, so it's review-gated behind an explicit invocation of
+    // /init-session (init-stack.md no longer has this step; see apply-gsd-agent-patches.mjs) instead of silently
     // rewriting every session. Every session, idempotent - cheap (file reads only), stops
     // surfacing on its own once the patches have been applied and nothing is pending.
     // Opt out: CLAUDE_GSD_AGENT_PATCHES_CHECK=0.
@@ -448,8 +448,8 @@ if (FULL) {
       const files = Object.keys(pending);
       if (files.length)
         notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
-          `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - run /init-stack ` +
-          `(step 10 applies these) or /init-session to apply.`);
+          `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - ` +
+          `run /init-session to apply.`);
 
       // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
       // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale
@@ -459,7 +459,7 @@ if (FULL) {
       if (retiredFiles.length)
         notes.push(`gsd-* agent file(s) still carry text from ${retiredFiles.length} retired patch ` +
           `target(s) (${retiredFiles.slice(0, 5).join(", ")}${retiredFiles.length > 5 ? ", ..." : ""}) ` +
-          `- run /init-stack (step 10) or /init-session to clean up.`);
+          `- run /init-session to clean up.`);
 
       // Same check-only/apply-gated split, for gsd-core's own execute-phase.md dispatch template
       // (not an agents/*.md file, so tracked separately - see gsd-workflow-patches.mjs).
@@ -467,8 +467,8 @@ if (FULL) {
       const wfFiles = Object.keys(wfPending);
       if (wfFiles.length)
         notes.push(`gsd-core workflow patch pending for ${wfFiles.join(", ")} ` +
-          `(routes verify_isolated="true" plans to gsd-executor-decomposing) - run /init-stack ` +
-          `(step 10 applies this) or /init-session to apply.`);
+          `(routes verify_isolated="true" plans to gsd-executor-decomposing) - ` +
+          `run /init-session to apply.`);
 
       // Standing invariant, not a pending patch: an agent granting `Agent` with no anti-recursion
       // guardrail caused refusals/silent stuck states in the 2026-07 recursive-delegation test
@@ -498,12 +498,14 @@ if (process.env.CLAUDE_TOKEN_USAGE_LOG !== "0") {
 }
 
 // ONE-TIME per project (soft nudge, not urgent like the fallow gap above - gsd-core's own
-// test_command/build_command auto-detect already works fine without an explicit value):
-// suggest /init-stack's step 6 (stack-aware test_command/build_command proposal) once, the
-// first session that sees BOTH a `.planning/` project and a recognizable stack signal with
-// no explicit override yet. One-time (not recurring like the fallow check) because there's
-// no hard-failure risk here to keep chasing - re-suggesting every session for something
-// purely optional would just be noise.
+// test_command/build_command auto-detect already works fine without an explicit value): flag
+// once that workflow.test_command/build_command are unset - there is currently no repo
+// mechanism to propose a more specific one from the detected stack (see RISK-INITSTACK-001;
+// the old /init-stack step that did this was removed in the GSD-free rewrite, eaf1a50).
+// Fires the first session that sees BOTH a `.planning/` project and a recognizable stack
+// signal with no explicit override yet. One-time (not recurring like the fallow check)
+// because there's no hard-failure risk here to keep chasing - re-suggesting every session for
+// something purely optional would just be noise.
 if (firstTime && gsdProject) {
   const cfgPath = join(root, ".planning", "config.json");
   const cfg = existsSync(cfgPath) ? (safe(() => readJSON(cfgPath)) || {}) : null;
@@ -513,8 +515,8 @@ if (firstTime && gsdProject) {
       || existsSync(join(root, "pyproject.toml")) || existsSync(join(root, "build.gradle.kts"));
     if (hasStackSignal && !wf.test_command && !wf.build_command)
       notes.push("workflow.test_command/build_command are unset - gsd-core auto-detects a " +
-        "reasonable default, but /init-stack (step 6) can propose a more specific one from " +
-        "the detected stack if you want to set it explicitly.");
+        "reasonable default; there is currently no repo mechanism to propose a more specific " +
+        "one from the detected stack (see RISK-INITSTACK-001).");
   }
 }
 

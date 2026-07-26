@@ -73,7 +73,7 @@ Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
 **Windows: bootstrap + gsd agent patches in one go.** `setup.mjs` deliberately does NOT apply
 the review-gated gsd-agent content patches (see "gsd-core") — after an install/update they are
-normally applied separately (`/init-session` or step 10 of `/init-stack`). A ready PowerShell
+normally applied separately (`/init-session` — init-stack.md no longer has this step). A ready PowerShell
 block that does both at once (honours a `CLAUDE_CONFIG_DIR` relocation; on a fresh machine
 without gsd-core the third step is a harmless no-op):
 
@@ -128,8 +128,9 @@ changes).
      it installs the missing plugins itself (`claude plugin install`) and writes
      `./.claude/settings.json`;
    - if there's no real terminal — non-interactive fallback (`--enable`/`--apply-all`);
-   - for GSD projects (`.planning/config.json` exists), it additionally proposes
-     `workflow.test_command`/`build_command` and installing `fallow`, if the stack supports it.
+   - GSD-specific proposals (test/build command, `fallow` install, `claude_orchestration`) were
+     removed from `/init-stack` in the GSD-free rewrite (eaf1a50) and have no current
+     replacement — see RISK-INITSTACK-001.
 4. **Restart Claude Code again** — `enabledPlugins` also only resolves at startup.
 
 Bottom line for a new machine: `setup.mjs` — once, `/init-stack` — per project (right after
@@ -148,7 +149,7 @@ cloning the repo, or whenever it first needs plugins).
 | A new version of this repo shipped (hooks/rules/skills updated) | `node setup.mjs` (conflict flags — see above; `--dry-run` to preview without touching anything) | whenever the package updates |
 | `PreToolUse hook error` / broken paths in `~/.claude/settings.json` | `node setup.mjs --doctor`, then `node setup.mjs` | by symptom (see diagnostics below) |
 | The project's stack changed/gained a new one (new framework, monorepo, etc.) | `/init-stack` again — already-enabled plugins are pre-checked + the new stack's auto-set is added | on a stack change |
-| Toggle one specific plugin without a full `/init-stack` run | `node ~/.claude/bin/init-stack.mjs -i` directly (same checklist, but without the report and without `/init-stack`'s GSD steps 6 and 8) | as needed |
+| Toggle one specific plugin without a full `/init-stack` run | `node ~/.claude/bin/init-stack.mjs -i` directly (same checklist, but without the report) | as needed |
 | Just check current plugin status, changing nothing | `node ~/.claude/bin/init-stack.mjs` (no args, writes nothing) | as needed |
 
 After ANY of these steps that touched `settings.json` (user-level or project-level) —
@@ -481,7 +482,7 @@ the merge is always additive and can't silently clobber anything.
   missing ones are added. Silent, best-effort: a read/write error doesn't halt the install.
 - A specific project's `.planning/config.json` is left untouched by `setup.mjs` — it's not tied to
   a project. For that there's a separate CLI **`~/.claude/gsd-defaults-sync.mjs`** (installed
-  there, called from `/init-stack`, step 11; also manually:
+  there — run manually (`/init-stack` no longer calls it):
   `node ~/.claude/gsd-defaults-sync.mjs [homeDir] [projectDir]`). In one pass it: repeats the same
   merge into `~/.gsd/defaults.json`; applies a **reference-wins merge** (`mergeReferenceWins`) into
   the current project's `.planning/config.json` — bundle values overwrite the project's same-named
@@ -763,7 +764,7 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   `docs/superpowers/specs/2026-07-10-leanmode-design.md`, outside the distribution). The dial
   defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
   flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
-  called as `/init-stack`'s step 9 — not a registered hook on its own); otherwise `off`.
+  called as `/init-stack`'s step 7 — not a registered hook on its own); otherwise `off`.
   Toggle: `CLAUDE_LEANMODE=0`. The hook also emits `systemMessage: "leanmode: <level>"`
   alongside `additionalContext` — kept in the source in case the harness renders it.
   Empirically (2026-07-11, three real subagent launches, debug-log instrumentation)
@@ -844,7 +845,7 @@ different write policies, deliberately:
   reviews what's about to land. `session-init.mjs` checks them **read-only** every session
   (`checkGsd…Patches`) and prints a hint if something is pending. It's applied only by an explicit
   human invocation: the **`/init-session`** command (`apply-gsd-agent-patches.mjs`, applies BOTH
-  sets — agent + workflow — at once) or **step 10 of `/init-stack`**. After a gsd-core update the
+  sets — agent + workflow — at once) — init-stack.md no longer has an equivalent step. After a gsd-core update the
   patches expectedly "fall off" (their files were rewritten by the native updater) —
   `session-init` notices and offers `/init-session` again. The patches are tied to a specific
   gsd-core version's format: markers verified against the installed **1.8.0** (on a future

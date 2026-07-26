@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// CLI entry point for payload/commands/init-stack.md (step 10) and payload/commands/init-session.md
-// (standalone fallback) - applies every pending patch from hooks/lib/gsd-agent-patches.mjs to
+// CLI entry point for payload/commands/init-session.md (its only current caller —
+// init-stack.md dropped this step entirely in the GSD-free rewrite, eaf1a50) - applies every
+// pending patch from hooks/lib/gsd-agent-patches.mjs to
 // ~/.claude/agents/gsd-*.md. Deliberately NOT wired into setup.mjs or session-init.mjs's
 // auto-apply path (unlike sync-gsd-context-mode-tool.mjs's underlying lib) - these patches
 // inject prose across 30+ files, so they only run when a human explicitly triggers one of

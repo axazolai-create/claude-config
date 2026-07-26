@@ -5,12 +5,13 @@
 // frontmatter grant, so a human reviews what's about to land before it's applied instead of
 // it rewriting silently every session.
 //   - checkGsdAgentPatches(claudeDir)  -> read-only. Called every session by session-init.mjs
-//                                          to surface a "run /init-stack or /init-session" note
+//                                          to surface a "run /init-session" note
 //                                          when something is pending. Never writes.
 //   - applyGsdAgentPatches(claudeDir)  -> actually patches. Called only by an explicit human
-//                                          invocation - payload/commands/init-stack.md (step 10)
-//                                          or the standalone payload/commands/init-session.md
-//                                          (via apply-gsd-agent-patches.mjs), never
+//                                          invocation of the standalone
+//                                          payload/commands/init-session.md (via
+//                                          apply-gsd-agent-patches.mjs; init-stack.md no
+//                                          longer has this step), never
 //                                          automatically/per-session.
 // Each patch is scoped to the file(s) it targets via `appliesTo` - most gsd-* agents get only
 // the context-mode routing block; gsd-executor.md/gsd-debugger.md get a couple of bespoke

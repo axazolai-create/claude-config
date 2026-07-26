@@ -137,11 +137,12 @@ const DEFAULT_WORKFLOW_CONFIG = {
   // binary with no meaning for non-Node stacks, and gsd-core FAILS the review workflow (not a
   // graceful skip) when enabled=true but the binary isn't resolvable. Gating on package.json
   // keeps this default from breaking review in Python/Kotlin/Swift/etc. projects. It still
-  // doesn't guarantee the binary is actually installed in a given Node repo - that half is
-  // handled by `/init-stack`'s fallow devDependency proposal (payload/commands/init-stack.md
-  // step 8). If a Node project's `/gsd-code-review`/`/gsd-ship` hits this before `/init-stack`
-  // ever ran, fallow's own error message tells the user exactly how to fix it
-  // (`npm install -D fallow` / `cargo install fallow`) - a loud, actionable failure, not silent.
+  // doesn't guarantee the binary is actually installed in a given Node repo - that half used to
+  // be handled by an interactive `/init-stack` step (removed in the GSD-free rewrite, eaf1a50);
+  // there is currently no repo mechanism that installs `fallow` interactively. If a Node
+  // project's `/gsd-code-review`/`/gsd-ship` hits this, fallow's own error message tells the
+  // user exactly how to fix it (`npm install -D fallow` / `cargo install fallow`) - a loud,
+  // actionable failure, not silent - and is the only remaining safety net.
   code_quality: {
     fallow: {
       enabled: existsSync(join(root, "package.json")),
@@ -249,7 +250,7 @@ if (tier3Due) {
       gapNote = "GSD settings gap: code_quality.fallow.enabled=true but the `fallow` binary " +
         "isn't installed - the next /gsd-code-review or /gsd-ship will hard-fail, not skip " +
         `gracefully. Install it yourself (\`${installCmd}\`, run at the repo root where ` +
-        ".planning/ lives) or run /init-stack (step 8) to do it interactively, or set " +
+        ".planning/ lives), or set " +
         "code_quality.fallow.enabled: false for this project.";
     }
   }

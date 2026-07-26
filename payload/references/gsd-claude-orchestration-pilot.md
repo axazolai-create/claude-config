@@ -1,8 +1,9 @@
 # Considering `claude_orchestration` for a GSD project
 
-This doc is what `/init-stack` (step 7) points at before asking whether to enable
-`claude_orchestration.enabled` in a project's `.planning/config.json`. It exists so the
-command doesn't have to inline a full decision framework into its own prose.
+This doc explains `claude_orchestration` for manual reference - no current command surfaces
+this decision interactively (the `/init-stack` step that used to ask whether to enable
+`claude_orchestration.enabled` in a project's `.planning/config.json` was dropped in the
+GSD-free rewrite, eaf1a50; see RISK-INITSTACK-001).
 
 ## Why `Workflow`, not a recursive `Agent` call
 

@@ -66,7 +66,7 @@ export function resolveBaseLevel(agentType, root) {
 
 // Project dial: off|lite|full|ultra. Explicit leanmode.json.dial wins; otherwise "full" once
 // /init-stack has run for this project (state[root].initStackRun, written by
-// hooks/lib/mark-initstack-done.mjs from init-stack.md's step 9), else "off".
+// hooks/lib/mark-initstack-done.mjs from init-stack.md's step 7), else "off".
 export function resolveDial(root) {
   const cfg = readLeanmodeConfig(root);
   if (typeof cfg.dial === "string") return cfg.dial;

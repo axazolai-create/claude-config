@@ -702,8 +702,8 @@ async function main() {
   /* ---------- gsd-defaults.partial.json: mirror + apply to ~/.gsd/defaults.json ----------
    * gsd-defaults.partial.json is REPO_ROOT meta (same treatment as settings.partial.json -
    * source of truth, not walked by placeFile()). Its content must also persist inside
-   * ~/.claude so /init-stack's standalone CLI (payload/gsd-defaults-sync.mjs, which has no
-   * access to REPO_ROOT once installed) can re-read it later - so this step always
+   * ~/.claude so the standalone `gsd-defaults-sync.mjs` CLI (manual-only; no longer wired into
+   * /init-stack; has no access to REPO_ROOT once installed) can re-read it later - so this step always
    * overwrites the installed mirror copy, then applies it via the just-installed lib. */
   if (VARIANT === "full" && !DRY) {
     const partialDefaultsRaw = read(join(REPO_ROOT, "gsd-defaults.partial.json"));
