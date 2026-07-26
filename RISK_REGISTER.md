@@ -414,6 +414,86 @@
 - **Residual:** prose-guided behavior can still misfire on an edge case; caught in review, not
   hook-enforced. Accepted.
 
+## RISK-DESIGNSTACK-001 — Impeccable installer footgun writes into all harnesses + settings.local.json
+
+- **Status:** Open (mitigated by design) — Phase 3, spec
+  `docs/superpowers/specs/2026-07-26-phase3-design-skills-integration-design.md`.
+- **Context:** `npx impeccable install` is interactive and its **default** answer installs the
+  skill into every detected harness (`~/.claude`, `~/.agents`, `~/.gemini`) AND appends a
+  PostToolUse/Stop hook block to `settings.local.json`. `install --help` does not print flags — it
+  re-runs the installer. A naive call from `/init-stack` could pollute the user's global config.
+- **Mitigation:** the orchestrator (`bin/install-design-stack.mjs`) always invokes via
+  `runInstaller` with a **scratch `HOME`/`USERPROFILE`** (fresh temp dir), `cwd=<project root>`, and
+  explicit `--providers=claude --scope=project --no-hooks`, so nothing touches the real global
+  harnesses and Impeccable's own settings writer is disabled; our settings-injector registers the
+  design hook into the project's `.claude/settings.json` instead. An end-state test asserts the
+  scratch HOME ≠ real HOME and that only `<root>/.claude` is written.
+- **Residual:** relies on the installer honouring `--scope=project`/`--no-hooks`; a future
+  Impeccable that ignores them would need the orchestrator pinned/updated. Accepted.
+
+## RISK-DESIGNSTACK-002 — `impeccable update` clobbers the Pro Max content-graft
+
+- **Status:** Open (mitigated by design)
+- **Context:** Pro Max is integrated by grafting "query search.py first" prose into Impeccable's
+  `reference/*.md` (no first-class external-DB plug exists). `npx impeccable update` overwrites those
+  files, silently removing the graft and the Pro Max enrichment with it.
+- **Mitigation:** the updater's `afterUpdate` (`component-registry.mjs` `impeccable` entry) re-runs
+  `applyPromaxGraft()` after every auto-update; the graft is anchored + sentinel-guarded
+  (`<!-- promax-graft:v1 -->`) so re-apply is idempotent — same infra shape as
+  `gsd-agent-patches.mjs`.
+- **Residual:** if an Impeccable release renames/removes the target reference files the anchor is
+  not found and the graft is **skipped** (reported as `skippedNoAnchor`), not mis-inserted — the
+  detector still works, just without Pro Max enrichment until the anchors are refreshed. Accepted.
+
+## RISK-DESIGNSTACK-003 — Pro Max search requires Python 3
+
+- **Status:** Open (accepted)
+- **Context:** `ui-ux-pro-max`'s `scripts/search.py` (local BM25 over the style/palette/font CSVs)
+  needs a Python 3 interpreter (stdlib only, no network). On a machine without python3 the search
+  step cannot run.
+- **Mitigation:** soft-degrade — the orchestrator warns at install time if python3 is absent, and
+  the grafted prose explicitly instructs "query search.py **if available**, else fall back to the
+  reference tables below" (the same CSV data is also readable as prose tables the agent can consult).
+- **Residual:** on a python-less machine the agent uses the static reference tables rather than
+  ranked search — reduced quality, not a failure. Accepted.
+
+## RISK-DESIGNSTACK-004 — Registered hook path couples to the installed skill's script location
+
+- **Status:** Open (mitigated by design)
+- **Context:** the design hook we register into the project's `.claude/settings.json` points at
+  `.claude/skills/impeccable/scripts/hook.mjs`. If an Impeccable upgrade relocates or renames that
+  script, the hook silently stops firing.
+- **Mitigation:** idempotent re-registration — re-running `/init-stack` (and the updater's
+  post-update path) re-verifies the hook entry and the script path, re-registering if it moved;
+  the registration step short-circuits only when a valid entry pointing at an existing script is
+  present.
+- **Residual:** between an upstream rename and the next `/init-stack`/update cycle the hook could be
+  stale. Low (Impeccable's script layout has been stable at v3.3.1); accepted.
+
+## RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths
+
+- **Status:** Resolved (by subset choice)
+- **Context:** the `uipro init` suite includes a `design` skill that hardcodes global
+  `~/.claude/skills/design/` paths, which breaks when the skill is copied project-local; `brand`,
+  `banner-design`, `slides` reference absent premium skills.
+- **Mitigation:** the D3 subset keeps only `ui-ux-pro-max` + `ui-styling` + `design-system`; the
+  orchestrator **prunes** every other suite skill (incl. `design`) after `uipro init`, so the
+  footgun skill is never present in a project.
+- **Residual:** none — the offending skills are removed. If a future `uipro` renames a kept skill
+  the prune allowlist needs updating; surfaced by the end-state test.
+
+## RISK-DESIGNSTACK-006 — Pinned npm package ids can drift or rename
+
+- **Status:** Open (accepted / low)
+- **Context:** the updater's project probe reads latest versions via `npm view impeccable version`
+  and `npm view ui-ux-pro-max-cli version`; the orchestrator installs by those ids. A rename or
+  unpublish upstream would break the probe/install.
+- **Mitigation:** `check()` is best-effort and fully fail-soft (wrapped in `safe()`, `main().catch`
+  backstop) — a bad id yields no version signal and no crash; the install step warns and continues
+  without aborting `/init-stack`.
+- **Residual:** a silent rename leaves the components un-updated until the ids are corrected;
+  detection is manual. Accepted / low.
+
 ## RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 
 - **Status:** Open (until Stage 2)
