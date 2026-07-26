@@ -117,6 +117,8 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 3. В каждом ПРОЕКТЕ, где нужны стек-специфичные плагины, — открой там сессию Claude Code и
    запусти `/init-stack`. Он:
    - сам прогонит `python3 ~/.claude/bin/init-stack.py` (детект стека + отчёт, ничего не пишет);
+   - файл/деп-маркеры → id стека и `STACK_PATHS` — общий источник в `~/.claude/bin/lib/stack-markers.mjs`
+     (заменяет прежний скилл `stack-markers`);
    - попросит тебя лично запустить `python3 ~/.claude/bin/init-stack.py -i` в СВОЁМ терминале —
      интерактивный чек-лист (arrow-key UI) через Claude провести нельзя; на подтверждении он сам
      ставит недостающие плагины (`claude plugin install`) и пишет `./.claude/settings.json`;

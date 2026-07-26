@@ -121,6 +121,8 @@ changes).
    run `/init-stack`. It:
    - runs `python3 ~/.claude/bin/init-stack.py` itself (stack detection + report, writes
      nothing);
+   - the file/dep marker → stack-id mapping and `STACK_PATHS` now live in one shared source,
+     `~/.claude/bin/lib/stack-markers.mjs` (replaces the old `stack-markers` skill);
    - asks you to run `python3 ~/.claude/bin/init-stack.py -i` yourself, in YOUR OWN terminal —
      the interactive checklist (arrow-key UI) can't be driven through Claude; on confirmation
      it installs the missing plugins itself (`claude plugin install`) and writes

@@ -80,6 +80,15 @@ test("dart checked before swift: Flutter's vendored ios/ project does not false-
   assert.ok(s.includes("dart") && !s.includes("swift"), s.join(","));
 });
 
+test("react-native checked before swift: RN's vendored ios/ project does not false-positive as swift", () => {
+  const d = tmp({
+    "package.json": JSON.stringify({ dependencies: { "react-native": "0.74" } }),
+    "ios/Runner.xcodeproj/project.pbxproj": "",
+  });
+  const s = detect(d);
+  assert.ok(s.includes("react-native") && !s.includes("swift"), s.join(","));
+});
+
 test("swift detected standalone via Package.swift when no dart/RN present", () => {
   const d = tmp({ "Package.swift": "// swift-tools-version:5.9" });
   const s = detect(d);
