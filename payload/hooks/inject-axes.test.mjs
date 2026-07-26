@@ -56,3 +56,37 @@ test("SessionStart yields nothing yet (leanmode is SubagentStart-only)", () => {
   assert.equal(res, null);
   rmSync(root, { recursive: true, force: true });
 });
+
+function bothRoot() {
+  const root = mkdtempSync(join(tmpdir(), "inj2-"));
+  mkdirSync(join(root, ".claude"), { recursive: true });
+  writeFileSync(join(root, ".claude", "leanmode.json"), JSON.stringify({ dial: "full", default: "full" }));
+  writeFileSync(join(root, ".claude", "verbosity.json"), JSON.stringify({ level: "full" }));
+  return root;
+}
+
+test("SessionStart injects verbosity only (leanmode not subscribed)", () => {
+  const root = bothRoot();
+  const res = run({ hook_event_name: "SessionStart", cwd: root });
+  assert.ok(res);
+  assert.match(res.systemMessage, /verbosity: full/);
+  assert.doesNotMatch(res.systemMessage, /leanmode/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("SubagentStart injects both axes when both on", () => {
+  const root = bothRoot();
+  const res = run({ hook_event_name: "SubagentStart", agent_type: "x", cwd: root });
+  assert.match(res.systemMessage, /leanmode: full/);
+  assert.match(res.systemMessage, /verbosity: full/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("leanmode disabled still injects verbosity (axis independence)", () => {
+  const root = bothRoot();
+  const res = run({ hook_event_name: "SubagentStart", agent_type: "x", cwd: root }, { CLAUDE_LEANMODE: "0" });
+  assert.ok(res);
+  assert.match(res.systemMessage, /verbosity: full/);
+  assert.doesNotMatch(res.systemMessage, /leanmode/);
+  rmSync(root, { recursive: true, force: true });
+});
