@@ -31,7 +31,7 @@ if (!architectural) process.exit(0);
 function isGraphStale(root, path) {
   const st = safe(() => statSync(path));
   if (!st) return false;
-  const head = safe(() => spawnSync("git", ["-C", root, "log", "-1", "--format=%ct"], { encoding: "utf8", timeout: 3000 }));
+  const head = safe(() => spawnSync("git", ["-C", root, "log", "-1", "--format=%ct"], { encoding: "utf8", timeout: 1000 }));
   if (!head || head.error || head.status !== 0 || !head.stdout) return false; // not a repo / no HEAD -> unknown, not stale
   const headMs = parseInt(head.stdout.trim(), 10) * 1000;
   if (!Number.isFinite(headMs)) return false;

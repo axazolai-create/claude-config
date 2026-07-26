@@ -397,7 +397,7 @@ if (FULL && process.env.CLAUDE_MCP_SUGGEST !== "0") {
 // something for this project (dial != "off"); a project with the dial off gets no reminder,
 // same silence the SubagentStart hook itself already applies at "off".
 // The banner a subagent launch prints (`agent_type(description) Model`) is drawn by the harness
-// before any hook runs, so leanmode-subagent.mjs's own SubagentStart-emitted systemMessage
+// before any hook runs, so inject-axes.mjs's own SubagentStart-emitted systemMessage
 // cannot appear on it or as a separate line - confirmed empirically (2026-07-11, debug-log
 // instrumentation + three real subagent launches): the hook fires and emits correctly, but
 // systemMessage from SubagentStart never renders anywhere. The only way to surface the level

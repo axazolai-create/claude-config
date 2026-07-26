@@ -39,5 +39,6 @@ test("each tier file loads and carries the anti-minify carve-out; off is empty",
     const t = loadVerbosityRule(lvl);
     assert.ok(t.length > 0, `${lvl} has text`);
     assert.match(t, /NOT minification/);
+    assert.match(t, /This is NOT minification — never shorten identifiers, never collapse required structure\./);
   }
 });
