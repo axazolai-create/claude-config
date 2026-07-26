@@ -79,6 +79,19 @@ test("manifest without variant field = full (no surplus prune on full reinstall)
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("lite build ships the AI-dev-mode (A) files", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
+  for (const p of [
+    "hooks/inject-axes.mjs",
+    "hooks/lib/inject-axes.mjs",
+    "hooks/lib/verbosity-rules.mjs",
+    "hooks/lib/verbosity-lite-rule.md",
+    "commands/aidev.md",
+  ]) {
+    assert.ok(v.rels.includes(p), `${p} must be in lite`);
+  }
+});
+
 test("--dry-run writes nothing for both variants", () => {
   for (const variant of ["lite", "full"]) {
     const dir = mkdtempSync(join(tmpdir(), "cc-dry-"));

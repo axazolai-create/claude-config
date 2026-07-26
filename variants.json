@@ -16,7 +16,7 @@
         "agents/leanmode-executor.md",
         "bin/graphify-freshness*", "bin/graphify-setup.mjs",
         "bin/lib/config-dir-validate*", "bin/lib/entrypoint-guard.test.mjs",
-        "commands/init-stack.md", "commands/leanmode.md",
+        "commands/init-stack.md", "commands/leanmode.md", "commands/aidev.md",
         "hooks/secrets-gate.mjs", "hooks/deny-curated-claude-md.mjs",
         "hooks/token-usage-log.mjs", "hooks/session-init.mjs",
         "hooks/graphify-global-sync.mjs", "hooks/inject-axes*",
