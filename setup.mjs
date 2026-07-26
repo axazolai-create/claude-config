@@ -40,6 +40,7 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
+import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
@@ -47,9 +48,11 @@ import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
 // SRC = REPO_ROOT/payload - everything that actually gets installed into ~/.claude
 // (hooks/, skills/, rules-src/, commands/, setting-templates/, bin/, add-risk.mjs,
-// graphify-sync-all.mjs, CLAUDE.md). Kept as two separate constants (not one) because
+// graphify-sync-all.mjs). Kept as two separate constants (not one) because
 // settings.partial.json below is read from REPO_ROOT, not SRC - it configures the installer,
-// it isn't itself installed.
+// it isn't itself installed. NOTE: payload/claude-md/ is a build input, not a copied rel -
+// ~/.claude/CLAUDE.md is assembled per-profile from those fragments (assemble-claude-md.mjs),
+// not mirrored 1:1 like the rest of SRC - see the assemble+write step after the placeFile loop.
 const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(REPO_ROOT, "payload");
 const HOME = homedir();
@@ -584,24 +587,35 @@ async function main() {
   if (platform() !== "win32" && !DRY)
     for (const p of copiedScripts) safe(() => chmodSync(p, 0o755));
 
-  /* ---------- always ensure ~/.claude/CLAUDE.md carries the curated marker ---------- */
-  // deny-curated-claude-md.mjs has no hardcoded path check for the global file anymore -
-  // authority lives entirely in the marker, one mechanism instead of two. So THIS is what
-  // guarantees ~/.claude/CLAUDE.md is always protected: independent of whatever merge/replace/
-  // skip choice the placeFile() conflict flow above made for its body content, unconditionally
-  // check whether the marker is present as a standalone line ANYWHERE in the file (not just the
-  // first line - a title or other content may legitimately come first) and prepend it if not.
-  // Never a merge/replace/skip question - the marker itself is not negotiable, only the prose
-  // around it is.
-  if (!DRY) {
+  /* ---------- assemble + write ~/.claude/CLAUDE.md from per-profile fragments ----------
+   * Replaces the old per-variant CLAUDE.md monoliths (payload/CLAUDE.md, payload-lite/CLAUDE.md):
+   * the assembled text is built fresh every run from payload/claude-md/ fragments for VARIANT
+   * (assemble-claude-md.mjs), which already starts with the CURATED:NOEDIT marker + a GENERATED
+   * header - so this single step both installs the file AND guarantees the marker, no separate
+   * "ensure marker" pass needed anymore. CLAUDE.md is deliberately NOT part of V.rels (payload/
+   * claude-md/** is in alwaysExclude - it's a build input, never copied 1:1), so it is placed
+   * here instead of through the placeFile() loop above - but it still goes through the same
+   * curated-conflict tiering as any other curated file (unchanged -> no-op; new -> create; changed
+   * -> diff + merge/replace/skip) so a hand-edited ~/.claude/CLAUDE.md is never silently clobbered.
+   */
+  {
+    const assembled = assembleClaudeMd(join(SRC, "claude-md"), VARIANT);
+    manifestNow.push({ rel: "CLAUDE.md", hash: sha(assembled) });
     const globalClaudeMd = join(CDIR, "CLAUDE.md");
     const curGlobal = read(globalClaudeMd);
-    if (curGlobal !== undefined) {
-      const bodyNoBom = curGlobal.replace(/^﻿/, "");
-      const alreadyMarked = bodyNoBom.split(/\r?\n/).some((line) => MARKER_RE.test(line.trim()));
-      if (!alreadyMarked) {
-        if (write(globalClaudeMd, MARKER_LINE + "\n" + curGlobal))
-          summary.push(`updated  ${globalClaudeMd} (prepended ${MARKER} - was missing)`);
+    if (curGlobal === undefined) {
+      if (write(globalClaudeMd, assembled)) summary.push(`created  ${globalClaudeMd}`);
+    } else if (curGlobal === assembled) {
+      summary.push(`unchanged ${globalClaudeMd}`);
+    } else {
+      log(`\n~ conflict (curated): ${globalClaudeMd}`);
+      log(renderDiff(curGlobal, assembled));
+      const act = await choose(globalClaudeMd, "merge");
+      if (act === "replace") {
+        if (write(globalClaudeMd, assembled))
+          summary.push(`replaced ${globalClaudeMd} (no backup - see diff above if you need the old content)`);
+      } else {
+        summary.push(`${act === "skip" ? "skipped" : "kept (see diff above)"} ${globalClaudeMd}`);
       }
     }
   }

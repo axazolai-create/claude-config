@@ -96,11 +96,14 @@ test("lite drops base's universal infra + neo4j", () => {
 test("full variant is identity over payload/ (minus alwaysExclude)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
-  // full ships everything except the alwaysExclude families: exactly the 2
-  // task-lifecycle-probe entries (.mjs + .test.mjs), nothing else leaks in.
-  assert.equal(v.excludedSet.size, 2, `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
-  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r)),
+  // full ships everything except the alwaysExclude families: the 2 task-lifecycle-probe
+  // entries (.mjs + .test.mjs) and every claude-md/ fragment (build input for
+  // assemble-claude-md.mjs — CLAUDE.md itself is assembled by setup.mjs, never copied as a
+  // payload rel). Nothing else leaks in.
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
+  assert.ok([...v.excludedSet].some((r) => /task-lifecycle-probe/.test(r)), "task-lifecycle-probe must still be excluded");
+  assert.ok([...v.excludedSet].some((r) => r.startsWith("claude-md/")), "claude-md/ fragments must be excluded from full too");
 });
 
 // "setting-templates" was dropped from this list under three-profile unification (Task 6):
@@ -201,10 +204,10 @@ test("optional neo4j: unknown group name is a no-op, not a throw", () => {
 test("optional groups are a no-op on full (already identity)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
   assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
-  // full ships everything except the alwaysExclude families: exactly the 2
-  // task-lifecycle-probe entries (.mjs + .test.mjs), nothing else leaks in.
-  assert.equal(v.excludedSet.size, 2, `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
-  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r)),
+  // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
+  // .test.mjs) and the claude-md/ fragments (build input, see the test above), nothing else
+  // leaks in.
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
 
