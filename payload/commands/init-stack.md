@@ -79,11 +79,22 @@ install it by hand first, by state (always wait for my OK):
 - **unavailable** -> `refresh`, then retry or fix the id in the template.
 Re-check after each: `node ~/.claude/bin/init-stack.mjs --status <plugin-id>` until `installed`.
 
-## 5. Finish
+## 5. Design stack (only if a frontend stack was detected)
+Runs after install/activate completes, whichever path was taken (step 3 interactive or step 4
+fallback). If step 1 classified the project as a frontend stack (react / next / react-native /
+vue / …), install the per-project design stack - Impeccable + the grafted Pro Max subset:
+
+    node "$CLAUDE_CONFIG_DIR/bin/install-design-stack.mjs" --root .
+
+(Falls back to `~/.claude/bin/...` when `CLAUDE_CONFIG_DIR` is unset.) It is idempotent and
+fail-soft - safe to re-run; it installs only what is missing and re-verifies the hook + graft.
+Skip entirely for non-frontend stacks.
+
+## 6. Finish
 After settings are written, remind me: `enabledPlugins` resolves at STARTUP - I must RESTART Claude
 Code (or `/reload-plugins` if available). Do NOT claim plugins are active in the current session.
 
-## 6. Mark completion + graphify freshness (always, no gate)
+## 7. Mark completion + graphify freshness (always, no gate)
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (silent, idempotent). Lets leanmode's
 project dial default to `full` for this project instead of staying `off` (rationale:
 `docs/superpowers/specs/2026-07-10-leanmode-design.md`).
