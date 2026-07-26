@@ -6,8 +6,8 @@
 // already applies to graphify's CLAUDE.md section. Idempotent and self-healing: safe to re-run
 // every session, including after gsd-core's own updater rewrites an agent file and drops the tool
 // again.
-// Consumed by: sync-gsd-context-mode-tool.mjs (CLI wrapper, spawned by setup.mjs and by
-// init-stack.py via `node`), and imported directly by session-init.mjs (both already Node/ESM).
+// Consumed by: sync-gsd-context-mode-tool.mjs (CLI wrapper, spawned best-effort by init-stack.mjs
+// via `node`), and imported directly by setup.mjs and session-init.mjs (all Node/ESM).
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
