@@ -49,7 +49,10 @@ const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 // Bundle variant (spec: docs/superpowers/specs/2026-07-22-lite-variant-design.md § 5).
 // Manifest without the field = pre-variant bundle = full. Lite skips every GSD step below.
 const VARIANT = (() => {
-  try { return JSON.parse(readFileSync(join(CLAUDE_DIR, "state", "bundle-manifest.json"), "utf8")).variant || "full"; }
+  try {
+    const m = JSON.parse(readFileSync(join(CLAUDE_DIR, "state", "bundle-manifest.json"), "utf8"));
+    return m.profile || m.variant || "full";
+  }
   catch { return "full"; }
 })();
 const FULL = VARIANT === "full";

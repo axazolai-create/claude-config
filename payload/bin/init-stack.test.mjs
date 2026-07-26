@@ -25,6 +25,7 @@ import {
   apply,
   grab,
   main,
+  readMaxPluginTier,
 } from "./init-stack.mjs";
 
 const REPO_TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "setting-templates");
@@ -511,4 +512,12 @@ test("main --apply-all respects maxPluginTier from the bundle manifest (drops ti
   const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
   assert.equal(settings.enabledPlugins["typescript-lsp@claude-plugins-official"], true);
   assert.ok(!("playwright@claude-plugins-official" in settings.enabledPlugins));
+});
+
+test("readMaxPluginTier: corrupt (invalid-JSON) manifest degrades to no cap, does not throw", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  mkdirSync(join(configDir, "state"), { recursive: true });
+  writeFileSync(join(configDir, "state", "bundle-manifest.json"), "{ not valid json", "utf8");
+  assert.doesNotThrow(() => readMaxPluginTier(configDir));
+  assert.equal(readMaxPluginTier(configDir), undefined);
 });

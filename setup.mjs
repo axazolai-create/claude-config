@@ -538,26 +538,29 @@ async function main() {
 
   // ---------- variant selection (spec § 9) ----------
   const oldManifestEarly = safe(() => JSON.parse(readFileSync(MANIFEST, "utf8")));
-  const installedVariant = oldManifestEarly ? (oldManifestEarly.variant || "full") : null;
+  const installedVariant = oldManifestEarly ? (oldManifestEarly.profile || oldManifestEarly.variant || "full") : null;
+  const known = Object.keys(profilesOf(loadVariants(REPO_ROOT)));
   VARIANT = VARIANT_ARG;
-  if (VARIANT && !profilesOf(loadVariants(REPO_ROOT))[VARIANT]) {
-    log(`Unknown --variant=${VARIANT}. Known: ${Object.keys(profilesOf(loadVariants(REPO_ROOT))).join(", ")}`);
+  if (VARIANT && !known.includes(VARIANT)) {
+    log(`Unknown --variant=${VARIANT}. Known: ${known.join(", ")}`);
     process.exit(1);
   }
   if (!VARIANT && INTERACTIVE) {
     const def = installedVariant || "full";
-    const a = (await ask(`  bundle variant [full/lite] (Enter = ${def}) > `)).trim().toLowerCase();
-    VARIANT = a === "lite" || a === "full" ? a : def;
+    const a = (await ask(`  bundle profile [full/base/lite] (Enter = ${def}) > `)).trim().toLowerCase();
+    VARIANT = known.includes(a) ? a : def;
   }
   if (!VARIANT) VARIANT = installedVariant || "full";   // non-TTY: detected, or full on fresh
 
-  // Optional Neo4j ecosystem in lite (opt-in at install). Decided BEFORE resolveVariant so the
+  // Optional Neo4j ecosystem in base (opt-in at install). Decided BEFORE resolveVariant so the
   // neo4j file set is included/excluded for this run. State is the filesystem: a previously
   // opted-in install has neo4j-config.mjs present, which becomes the default (and the non-TTY
   // answer) so re-runs are idempotent; opting out drops it and pruneStale removes the files.
-  // Full always ships the ecosystem, so this only gates lite.
+  // Full always ships the ecosystem; lite never offers it (its extends-inherited exclude drops
+  // neo4j and it has no optional.neo4j group, so activeOptional=["neo4j"] would be a no-op there
+  // anyway - but we don't even ask, to keep the lite prompt flow minimal).
   let activeOptional = [];
-  if (VARIANT === "lite") {
+  if (VARIANT === "base") {
     const installed = existsSync(join(CDIR, "bin", "lib", "neo4j-config.mjs"));
     if (INTERACTIVE) {
       const a = (await ask(`  include the graphify Neo4j ecosystem (read/write + driver + cypher)? ` +
@@ -567,8 +570,10 @@ async function main() {
       NEO4J_ECOSYSTEM = installed;                        // non-TTY: keep whatever is already installed
     }
     if (NEO4J_ECOSYSTEM) activeOptional = ["neo4j"];
-  } else {
+  } else if (VARIANT === "full") {
     NEO4J_ECOSYSTEM = true;                               // full ships the whole ecosystem
+  } else {
+    NEO4J_ECOSYSTEM = false;                              // lite never ships it
   }
   V = resolveVariant({ repoRoot: REPO_ROOT, variant: VARIANT, activeOptional });
   if (installedVariant && installedVariant !== VARIANT)
@@ -1013,7 +1018,9 @@ async function main() {
   await pruneStale();
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
-    const manifestPayload = { files: manifestNow, variant: VARIANT };
+    const maxPluginTier = profilesOf(loadVariants(REPO_ROOT))[VARIANT]?.maxPluginTier;
+    const manifestPayload = { files: manifestNow, profile: VARIANT, variant: VARIANT };
+    if (maxPluginTier !== undefined) manifestPayload.maxPluginTier = maxPluginTier;
     if (installedSha) {
       manifestPayload.installedSha = installedSha;
       manifestPayload.installedAt = new Date().toISOString();

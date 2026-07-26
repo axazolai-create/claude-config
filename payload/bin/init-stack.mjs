@@ -312,9 +312,14 @@ export function installedSkillNames(root, configDirPath = configDir()) {
 // maxPluginTier is NOT installer-meta (variants.json isn't shipped into ~/.claude) - the
 // effective cap for an installed bundle is stamped into the bundle manifest at install time
 // (Task 8 writes it; older manifests simply lack the field -> undefined -> no cap, i.e. today's
-// full behavior until setup.mjs starts writing it).
+// full behavior until setup.mjs starts writing it). A missing manifest is already fail-soft
+// (loadJson returns {}); a CORRUPT (invalid-JSON) manifest must degrade the same way - init-stack
+// should never hard-fail just because the cap can't be read - so this also swallows loadJson's
+// parse-error throw and falls back to "no cap".
 export function readMaxPluginTier(configDirPath = configDir()) {
-  const manifest = loadJson(join(configDirPath, "state", "bundle-manifest.json"));
+  let manifest;
+  try { manifest = loadJson(join(configDirPath, "state", "bundle-manifest.json")); }
+  catch { return undefined; }
   return manifest && typeof manifest === "object" ? manifest.maxPluginTier : undefined;
 }
 
