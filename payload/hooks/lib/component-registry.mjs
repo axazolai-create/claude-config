@@ -33,3 +33,30 @@ export function decide({ updateClass, updateAvailable, autoUpdateEnabled }) {
   if (updateClass === "safe" && autoUpdateEnabled) return "auto";
   return "notify";
 }
+
+export function pendingCount(state) {
+  if (!state || typeof state !== "object") return 0;
+  return Object.values(state).filter((e) => e && e.updateAvailable === true).length;
+}
+
+// claude-config is the only reinit entry that is re-applied by the installer, not /init-stack.
+function reinitCommand(name) {
+  return name === "claude-config" ? "re-run the installer (setup.mjs)" : "run /init-stack to apply";
+}
+
+export function formatUpdateNotes(state) {
+  if (!state || typeof state !== "object") return [];
+  const out = [];
+  for (const [name, e] of Object.entries(state)) {
+    if (!e || e.updateAvailable !== true) continue;
+    const ver = e.latest ? ` ${e.latest}` : "";
+    if (e.class === "safe" && e.autoUpdated) {
+      out.push(`${name}: updated ${e.installed}→${e.latest} (active next session — restart to apply now).`);
+    } else if (e.class === "safe") {
+      out.push(`${name}:${ver} available (auto-update off — update it manually or re-enable).`);
+    } else {
+      out.push(`${name}:${ver} available — ${reinitCommand(name)}.`);
+    }
+  }
+  return out;
+}

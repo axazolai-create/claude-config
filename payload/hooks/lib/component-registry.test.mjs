@@ -31,3 +31,27 @@ test("autoUpdateEnabled: default on, global/per-name/legacy off", () => {
   assert.equal(autoUpdateEnabled("context-mode", { CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE: "0" }), false);
   assert.equal(autoUpdateEnabled("graphify", { CLAUDE_TOOL_AUTOUPGRADE_GRAPHIFY: "0" }), false);
 });
+
+import { pendingCount, formatUpdateNotes } from "./component-registry.mjs";
+
+const STATE = {
+  "impeccable":    { installed: "4.0.2", latest: "4.1.0", updateAvailable: true,  class: "safe",   autoUpdated: true },
+  "graphify":      { installed: "1.0.0", latest: "1.0.0", updateAvailable: false, class: "safe",   autoUpdated: false },
+  "claude-config": { installed: "abc123", latest: "def456", updateAvailable: true, class: "reinit", autoUpdated: false },
+};
+
+test("pendingCount: counts only updateAvailable entries", () => {
+  assert.equal(pendingCount(STATE), 2);
+  assert.equal(pendingCount({}), 0);
+});
+
+test("formatUpdateNotes: safe-applied says restart; reinit says the command", () => {
+  const notes = formatUpdateNotes(STATE);
+  assert.equal(notes.length, 2);
+  const safe = notes.find((n) => n.startsWith("impeccable"));
+  assert.match(safe, /4\.0\.2.*4\.1\.0/);
+  assert.match(safe, /restart/i);
+  const reinit = notes.find((n) => n.startsWith("claude-config"));
+  assert.match(reinit, /setup\.mjs|installer/i);
+  assert.doesNotMatch(reinit, /restart to apply now/i);
+});
