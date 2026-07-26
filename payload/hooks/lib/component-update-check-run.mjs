@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { COMPONENTS, autoUpdateEnabled, decide } from "./component-registry.mjs";
 import { checkBundleUpdate } from "./config-update-check-run.mjs";
 
@@ -30,6 +31,7 @@ function loadState() { return existsSync(STATE) ? (safe(() => JSON.parse(readFil
 function writeState(s) { safe(() => mkdirSync(dirname(STATE), { recursive: true })); safe(() => writeFileSync(STATE, JSON.stringify(s, null, 2) + "\n")); }
 const fresh = (entry) => entry && entry.lastCheckedAt && (Date.now() - Date.parse(entry.lastCheckedAt) < THROTTLE_MS);
 
+// TODO(phase3): parse --root <path> (defaults to cwd) for project-scope probes (impeccable, ui-ux-pro-max)
 async function main() {
   if (process.env.CLAUDE_COMPONENT_AUTOUPDATE === "0" && process.env.CLAUDE_TOOL_AUTOUPGRADE === "0") return;
   const state = loadState();
@@ -54,4 +56,4 @@ async function main() {
   }
   writeState(state);
 }
-main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main().catch(() => {});
