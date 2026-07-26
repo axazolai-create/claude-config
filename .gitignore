@@ -1,0 +1,16 @@
+.claude/
+.vscode/
+.superpowers/
+graphify-out/
+node_modules/
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+**/__pycache__/
+.reference/
+RISK_REGISTER.md
+.test/
+.planning/
