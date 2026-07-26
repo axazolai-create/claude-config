@@ -161,7 +161,7 @@ test("hook registrations: lite keeps exactly the 6 lite hooks and no statusLine"
     for (const e of entries) for (const h of (e.hooks || []))
       for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
   assert.deepEqual([...scripts].sort(), [
-    "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "leanmode-subagent.mjs",
+    "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "inject-axes.mjs",
     "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
   ]);
   // statusLine script must NOT be in the lite set (Task 5 uses this fact to drop statusLine)
