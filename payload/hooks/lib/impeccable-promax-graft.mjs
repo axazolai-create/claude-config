@@ -8,7 +8,10 @@ import { join } from "node:path";
 export const SENTINEL = "<!-- promax-graft:v1 -->";
 
 // anchor text must be a stable prose fragment present in each shipped Impeccable reference file.
-// Verify against the installed skill during Task 5 integration; update here if upstream changes.
+// Verified 2026-07-27 against a live `npx impeccable install`: all four files exist and each
+// carries a `## ` heading (new-work.md/shape.md/typeset.md at line 5, colorize.md at line 7), so
+// the graft inserts before the first section. Re-verify if a future Impeccable renames these; a
+// missing file/anchor degrades to skippedNoAnchor (never corrupts).
 export const ANCHORS = {
   "new-work.md": "## ",
   "shape.md": "## ",
