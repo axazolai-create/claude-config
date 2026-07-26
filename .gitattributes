@@ -1,3 +1,9 @@
 # bootstrap.sh is served raw and piped into `bash`; CRLF would break its shebang.
 # Force LF for shell scripts even on Windows checkouts (repo has core.autocrlf=true).
 *.sh text eol=lf
+
+# payload/claude-md/*.md fragments are frontmatter-parsed by assemble-claude-md.mjs (bare-\n
+# anchored regexes). assemble-claude-md.mjs itself normalizes CRLF defensively, but pin these
+# to LF too so a fresh Windows checkout doesn't materialize CRLF in the first place (repo has
+# core.autocrlf=true).
+payload/claude-md/** text eol=lf

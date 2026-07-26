@@ -67,3 +67,31 @@ test("real fragments: 11-rules-resolution drops the retired stack-markers skill 
   assert.doesNotMatch(full, /stack-markers/);
   assert.match(full, /rules-src\/README\.md/);
 });
+
+// Regression: repo has core.autocrlf=true, so a fresh Windows checkout materializes
+// payload/claude-md/*.md with CRLF even though they're authored/stored as LF. parseFragment's
+// frontmatter regex anchors on bare \n and must still match a \r\n-terminated fragment, or the
+// raw "---\r\nprofiles: [...]\r\n---" block leaks into the assembled output and profile gating
+// silently breaks (a full-only section would leak into base/lite). This fixture uses EXPLICIT
+// \r\n throughout so it fails on a checkout-dependent working tree exactly like a real one would.
+function crlfFixture() {
+  const d = mkdtempSync(join(tmpdir(), "cmd-crlf-"));
+  const w = (n, s) => writeFileSync(join(d, n), s);
+  w("05-language.md", "## LANGUAGE\r\nshared-lang\r\n");
+  w("10-gsd.md", "---\r\nprofiles: [full]\r\n---\r\n## GSD\r\nmethodology\r\n");
+  return d;
+}
+test("parseFragment handles CRLF frontmatter (fresh Windows checkout, core.autocrlf=true)", () => {
+  const r = parseFragment("---\r\nprofiles: [full, lite]\r\n---\r\n## X\r\nbody\r\n");
+  assert.deepEqual(r.profiles, ["full", "lite"]);
+  assert.doesNotMatch(r.body, /^---/m);
+  assert.doesNotMatch(r.body, /^profiles:/m);
+  assert.match(r.body, /## X/);
+});
+test("assembleClaudeMd on a CRLF fixture: no profiles:[full] leak into base, no raw frontmatter", () => {
+  const o = assembleClaudeMd(crlfFixture(), "base");
+  assert.doesNotMatch(o, /## GSD/);
+  assert.doesNotMatch(o, /^---$/m);
+  assert.doesNotMatch(o, /^profiles:/m);
+  assert.match(o, /## LANGUAGE/);
+});
