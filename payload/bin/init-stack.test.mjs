@@ -1,10 +1,12 @@
-// Tests for init-stack.mjs's pure/read-only core (template inheritance resolver + gather).
-// Mirrors payload/bin/test_init_stack.py: SyntheticFixtureTests (resolver mechanics against a
-// throwaway template tree) + the parity cases from RealTemplatesTests (against the actual
-// setting-templates/ tree shipped in this repo).
+// Tests for init-stack.mjs: the pure/read-only core (template inheritance resolver + gather)
+// AND the side-effecting half (apply/install/CLI dispatch) + the profile-aware plugin tier
+// filter. Mirrors payload/bin/test_init_stack.py: SyntheticFixtureTests (resolver mechanics
+// against a throwaway template tree) + the parity cases from RealTemplatesTests (against the
+// actual setting-templates/ tree shipped in this repo), plus new coverage for the Node-only
+// apply/tier-filter/CLI additions (init-stack.py has no equivalent to port from).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -19,9 +21,18 @@ import {
   cleanNonplugin,
   deepMerge,
   splitId,
+  keepPlugin,
+  apply,
+  grab,
+  main,
 } from "./init-stack.mjs";
 
 const REPO_TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "setting-templates");
+
+// Every test that touches subprocess-guarded paths (installMissing/syncGsdContextModeAgents)
+// relies on this: never let the suite shell out to `claude plugin install`/marketplace add or
+// spawn node for real. Mirrors setup.mjs's CLAUDE_SETUP_SKIP_PLUGINS=1 hermetic-mode pattern.
+process.env.CLAUDE_INIT_STACK_SKIP_SUBPROCESS = "1";
 
 // ---------- synthetic fixtures ----------
 function writeTemplates(files) {
@@ -321,4 +332,183 @@ test("gatherSkills: state reflects installedSkills by dirname", () => {
   const shadcn = skills.find((s) => s.id === "shadcn");
   assert.equal(shadcn.name, "shadcn-ui");
   assert.equal(shadcn.state, "installed");
+});
+
+// ---------- tier filter (spec §4) ----------
+test("keepPlugin: absent tier defaults to core, kept under any cap", () => {
+  assert.equal(keepPlugin({ id: "x@mp" }, "core"), true);
+  assert.equal(keepPlugin({ id: "x@mp" }, "full"), true);
+  assert.equal(keepPlugin({ id: "x@mp" }, undefined), true);
+});
+
+test("keepPlugin: tier:full dropped under maxPluginTier core, kept under full or no cap", () => {
+  const entry = { id: "playwright@mp", tier: "full" };
+  assert.equal(keepPlugin(entry, "core"), false);
+  assert.equal(keepPlugin(entry, "full"), true);
+  assert.equal(keepPlugin(entry, undefined), true);
+});
+
+test("gather: tier filter drops a tier:full plugin under maxPluginTier core", () => {
+  const dir = writeTemplates({
+    "frontend/react.json": {
+      stack: "react",
+      merge: {},
+      plugins: [{ id: "typescript-lsp@mp" }, { id: "playwright@mp", tier: "full" }],
+    },
+  });
+  const kept = gather(["react"], { templatesDir: dir, maxPluginTier: "core" }).entries.map((e) => e.id);
+  assert.ok(kept.includes("typescript-lsp@mp") && !kept.includes("playwright@mp"), kept.join(","));
+});
+
+test("gather: no maxPluginTier keeps tier:full plugins", () => {
+  const dir = writeTemplates({
+    "frontend/react.json": {
+      stack: "react",
+      merge: {},
+      plugins: [{ id: "typescript-lsp@mp" }, { id: "playwright@mp", tier: "full" }],
+    },
+  });
+  const kept = gather(["react"], { templatesDir: dir }).entries.map((e) => e.id);
+  assert.ok(kept.includes("typescript-lsp@mp") && kept.includes("playwright@mp"), kept.join(","));
+});
+
+test("gather: real frontend template drops playwright/chrome-devtools-mcp under core, keeps them uncapped", () => {
+  const core = gather(["react"], { templatesDir: REPO_TEMPLATES_DIR, maxPluginTier: "core" }).entries.map((e) => e.id);
+  assert.ok(!core.includes("playwright@claude-plugins-official"));
+  assert.ok(!core.includes("chrome-devtools-mcp@claude-plugins-official"));
+  assert.ok(core.includes("typescript-lsp@claude-plugins-official")); // core plugin unaffected
+
+  const full = gather(["react"], { templatesDir: REPO_TEMPLATES_DIR }).entries.map((e) => e.id);
+  assert.ok(full.includes("playwright@claude-plugins-official"));
+  assert.ok(full.includes("chrome-devtools-mcp@claude-plugins-official"));
+});
+
+// ---------- apply ----------
+function tmpRoot() {
+  return mkdtempSync(join(tmpdir(), "init-stack-apply-"));
+}
+
+test("apply writes enabledPlugins into .claude/settings.json", () => {
+  const root = tmpRoot();
+  apply(["x@mp"], [], [], { root, templatesDir: REPO_TEMPLATES_DIR });
+  const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+  assert.equal(settings.enabledPlugins["x@mp"], true);
+});
+
+test("apply removes ids and preserves sibling settings keys (additive merge)", () => {
+  const root = tmpRoot();
+  mkdirSync(join(root, ".claude"), { recursive: true });
+  writeFileSync(
+    join(root, ".claude", "settings.json"),
+    JSON.stringify({ enabledPlugins: { "old@mp": true }, model: "sonnet" }),
+    "utf8",
+  );
+  apply(["new@mp"], ["old@mp"], [], { root, templatesDir: REPO_TEMPLATES_DIR });
+  const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+  assert.equal(settings.enabledPlugins["new@mp"], true);
+  assert.ok(!("old@mp" in settings.enabledPlugins));
+  assert.equal(settings.model, "sonnet"); // sibling key untouched
+});
+
+test("apply never enables a placeholder id", () => {
+  const root = tmpRoot();
+  apply(["<fill-me>@mp"], [], [], { root, templatesDir: REPO_TEMPLATES_DIR });
+  const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+  assert.deepEqual(settings.enabledPlugins, {});
+});
+
+// ---------- grab (CLI arg parsing) ----------
+test("grab: collects tokens after a flag until the next --flag", () => {
+  assert.deepEqual(grab(["--enable", "a@mp", "b@mp", "--remove", "c@mp"], "--enable"), ["a@mp", "b@mp"]);
+  assert.deepEqual(grab(["--enable", "a@mp", "b@mp", "--remove", "c@mp"], "--remove"), ["c@mp"]);
+  assert.deepEqual(grab(["--apply-all"], "--enable"), []);
+});
+
+// ---------- main() CLI dispatch ----------
+function withCapturedLog(fn) {
+  const lines = [];
+  const orig = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    return { result: fn(), lines };
+  } finally {
+    console.log = orig;
+  }
+}
+
+test("main --status prints {id,state} JSON and returns 0", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  const { result, lines } = withCapturedLog(() => main(["--status", "foo@mp"], { configDir }));
+  assert.equal(result, 0);
+  assert.deepEqual(JSON.parse(lines[0]), { id: "foo@mp", state: "marketplace_missing" });
+});
+
+test("main --status with missing id arg prints an error object and returns 2", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  const { result, lines } = withCapturedLog(() => main(["--status"], { configDir }));
+  assert.equal(result, 2);
+  assert.deepEqual(JSON.parse(lines[0]), { error: "--status needs a plugin id" });
+});
+
+test("main: invalid installed_plugins.json is caught at the CLI boundary and exits 2 (not thrown)", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  mkdirSync(join(configDir, "plugins"), { recursive: true });
+  writeFileSync(join(configDir, "plugins", "installed_plugins.json"), "{ not valid json", "utf8");
+  let threw = false;
+  let result;
+  const origErr = console.error;
+  console.error = () => {};
+  try {
+    result = main(["--status", "foo@mp"], { configDir });
+  } catch {
+    threw = true;
+  } finally {
+    console.error = origErr;
+  }
+  assert.equal(threw, false);
+  assert.equal(result, 2);
+});
+
+test("main: no known stack detected reports and returns 0", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  const root = mkdtempSync(join(tmpdir(), "init-stack-noroot-"));
+  const { result, lines } = withCapturedLog(() => main([], { configDir, root }));
+  assert.equal(result, 0);
+  assert.ok(lines.some((l) => l.includes("No known stack detected")));
+});
+
+test("main --apply-all enables every declared non-placeholder plugin for the detected stack", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  const root = mkdtempSync(join(tmpdir(), "init-stack-root-"));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { react: "^18" } }), "utf8");
+  withCapturedLog(() => main(["--apply-all"], { configDir, root, templatesDir: REPO_TEMPLATES_DIR }));
+  const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+  assert.equal(settings.enabledPlugins["typescript-lsp@claude-plugins-official"], true);
+});
+
+test("main default report ends with the STATUS_JSON marker and payload", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  const root = mkdtempSync(join(tmpdir(), "init-stack-root-"));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { react: "^18" } }), "utf8");
+  const { result, lines } = withCapturedLog(() =>
+    main([], { configDir, root, templatesDir: REPO_TEMPLATES_DIR }),
+  );
+  assert.equal(result, 0);
+  const markerIdx = lines.findIndex((l) => l.includes("=== STATUS_JSON ==="));
+  assert.ok(markerIdx !== -1, "STATUS_JSON marker missing");
+  const payload = JSON.parse(lines[markerIdx + 1]);
+  assert.deepEqual(payload.stacks, ["react"]);
+  assert.ok(Array.isArray(payload.plugins));
+});
+
+test("main --apply-all respects maxPluginTier from the bundle manifest (drops tier:full)", () => {
+  const configDir = mkdtempSync(join(tmpdir(), "init-stack-cfg-"));
+  mkdirSync(join(configDir, "state"), { recursive: true });
+  writeFileSync(join(configDir, "state", "bundle-manifest.json"), JSON.stringify({ maxPluginTier: "core" }), "utf8");
+  const root = mkdtempSync(join(tmpdir(), "init-stack-root-"));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { react: "^18" } }), "utf8");
+  withCapturedLog(() => main(["--apply-all"], { configDir, root, templatesDir: REPO_TEMPLATES_DIR }));
+  const settings = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+  assert.equal(settings.enabledPlugins["typescript-lsp@claude-plugins-official"], true);
+  assert.ok(!("playwright@claude-plugins-official" in settings.enabledPlugins));
 });

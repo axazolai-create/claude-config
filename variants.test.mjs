@@ -103,8 +103,16 @@ test("full variant is identity over payload/ (minus alwaysExclude)", () => {
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
 });
 
+// "setting-templates" was dropped from this list under three-profile unification (Task 6):
+// setting-templates/ now ships in EVERY profile (variant-agnostic stack templates; which
+// plugins a profile is willing to enable is the tier filter, not file exclusion - see
+// docs/superpowers/specs/2026-07-26-three-profile-unification-design.md §2.1/§4), and the now-
+// unified payload/commands/init-stack.md legitimately references
+// `~/.claude/setting-templates/` for every profile, including lite. "init-stack.py" stays
+// forbidden: the Python implementation is deleted, so the unified doc invokes
+// `node ~/.claude/bin/init-stack.mjs` only.
 const FORBIDDEN = [
-  "gsd", "init-stack.py", "setting-templates", "neo4j", "pnpm-phantom",
+  "gsd", "init-stack.py", "neo4j", "pnpm-phantom",
   "db-live-access", "ci-watch", "schedulewakeup", "stack-markers",
   "worktree-executor-discipline", "bg-supervision", "supervise-bg",
   "task-lifecycle-probe", "init-mcp",
