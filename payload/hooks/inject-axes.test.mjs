@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadRuleText } from "./lib/leanmode-rules.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HOOK = join(HERE, "inject-axes.mjs");
@@ -30,8 +31,15 @@ test("SubagentStart injects the leanmode block for a mapped-to-full agent", () =
   const res = run({ hook_event_name: "SubagentStart", agent_type: "x", cwd: root });
   assert.ok(res, "expected output");
   assert.match(res.systemMessage, /leanmode: full/);
-  assert.ok(res.hookSpecificOutput.additionalContext.length > 0);
+  assert.equal(res.hookSpecificOutput.additionalContext, loadRuleText("full"));
   assert.equal(res.hookSpecificOutput.hookEventName, "SubagentStart");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("SubagentStart with no agent_type yields no output (retired leanmode-subagent.mjs parity)", () => {
+  const root = leanmodeRoot();
+  const res = run({ hook_event_name: "SubagentStart", cwd: root });
+  assert.equal(res, null);
   rmSync(root, { recursive: true, force: true });
 });
 

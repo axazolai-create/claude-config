@@ -11,6 +11,7 @@ let d = {};
 try { d = JSON.parse(safe(() => readFileSync(0, "utf8")) || "{}"); } catch { process.exit(0); }
 
 const event = d.hook_event_name || (d.agent_type ? "SubagentStart" : "SessionStart");
+if (event === "SubagentStart" && !d.agent_type) process.exit(0);
 const agentType = d.agent_type || "main";
 const root = findRoot(d.cwd || process.cwd());
 
