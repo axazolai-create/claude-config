@@ -90,14 +90,15 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/session-init.mjs"] }
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/session-init.mjs"] },
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/inject-axes.mjs"] }
         ]
       }
     ],
     "SubagentStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/leanmode-subagent.mjs"] }
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/inject-axes.mjs"] }
         ]
       }
     ]
