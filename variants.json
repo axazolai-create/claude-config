@@ -1,6 +1,6 @@
 {
   "$comment": "Profile definitions for setup.mjs. Globs relative to payload/. exclude wins over include; extends unions the parent chain's exclude first. optional groups are promoted over exclude when active.",
-  "alwaysExclude": ["hooks/task-lifecycle-probe*", "claude-md/**"],
+  "alwaysExclude": ["hooks/task-lifecycle-probe*", "claude-md/**", "**.test.mjs"],
   "managedPlugins": {
     "superpowers":  "superpowers@claude-plugins-official",
     "gsd":          "gsd@claude-plugins-official",

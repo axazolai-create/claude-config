@@ -42,6 +42,14 @@ function assertTreeEquals(dir, rels) {
       assert.ok(rels.includes(rel), `unexpected: ${rel}`);
 }
 
+test("no *.test.mjs leaks into any resolved profile (alwaysExclude)", () => {
+  for (const variant of ["full", "base", "lite"]) {
+    const v = resolveVariant({ repoRoot: ROOT, variant });
+    const leaked = v.rels.filter((r) => r.endsWith(".test.mjs"));
+    assert.deepEqual(leaked, [], `test files leaked into ${variant}: ${leaked.join(", ")}`);
+  }
+});
+
 test("lite install: exact tree, 7 hooks, no statusLine, manifest.variant", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-lite-"));
   plantForeign(dir);
