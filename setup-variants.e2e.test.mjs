@@ -217,3 +217,16 @@ test("--dry-run writes nothing for both variants", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("phase3 design-stack files ship in every profile; test files excluded", () => {
+  const wanted = [
+    "bin/install-design-stack.mjs",
+    "bin/lib/design-stack.mjs",
+    "hooks/lib/impeccable-promax-graft.mjs",
+  ];
+  for (const variant of ["full", "base", "lite"]) {
+    const v = resolveVariant({ repoRoot: ROOT, variant });
+    for (const f of wanted) assert.ok(v.rels.includes(f), `${f} must ship in ${variant}`);
+    assert.ok(!v.rels.some((r) => r.endsWith(".test.mjs")), `no test files in ${variant}`);
+  }
+});

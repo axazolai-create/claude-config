@@ -228,12 +228,12 @@ test("deepMerge recursively merges nested objects, later values win on scalars",
 });
 
 // ---------- parity against the REAL shipped templates (payload/setting-templates) ----------
-test("react inherits the frontend chain (typescript-lsp, accesslint, frontend-design)", () => {
+test("react inherits the frontend chain (typescript-lsp, accesslint; frontend-design removed)", () => {
   const { entries } = gather(["react"], { templatesDir: REPO_TEMPLATES_DIR });
   const ids = new Set(entries.map((e) => e.id));
   assert.ok(ids.has("typescript-lsp@claude-plugins-official"));
   assert.ok(ids.has("accesslint@accesslint"));
-  assert.ok(ids.has("frontend-design@claude-plugins-official"));
+  assert.ok(!ids.has("frontend-design@claude-plugins-official"), "frontend-design removed in Phase 3");
   assert.ok(ids.has("context7@claude-plugins-official")); // root _base, universal
 });
 
