@@ -19,3 +19,11 @@ test("projectProbe present() is false when the skill dir is absent (no throw)", 
   assert.equal(probe.present(), false);
   rmSync(root, { recursive: true, force: true });
 });
+
+test("projectProbe update() is synchronous (spawnSync), not detached — so the after-update re-graft can't race it", async () => {
+  const mod = await import("./component-update-check-run.mjs");
+  const probe = mod.projectProbe("impeccable", "/some/root");
+  const src = probe.update.toString();
+  assert.match(src, /spawnSync/);
+  assert.doesNotMatch(src, /detached\(/);
+});

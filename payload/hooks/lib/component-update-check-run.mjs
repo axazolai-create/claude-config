@@ -46,7 +46,12 @@ export function projectProbe(name, root) {
       const latest = safe(() => spawnSync("npm", ["view", pkg, "version"], { encoding: "utf8" }).stdout.trim()) || installed;
       return { installed, latest, updateAvailable: !!latest && latest !== installed };
     },
-    update: () => detached("npx", [pkg === "impeccable" ? "impeccable" : "ui-ux-pro-max-cli", "update"]),
+    // Synchronous by design: the caller re-applies applyPromaxGraft immediately after update()
+    // returns, so the child must have finished rewriting reference/*.md before the graft runs —
+    // otherwise the graft would write into the pre-update files and the real update would
+    // clobber it moments later (detached/async would race here; spawnSync guarantees ordering).
+    update: () => safe(() => spawnSync("npx", ["--yes", pkg === "impeccable" ? "impeccable" : "ui-ux-pro-max-cli", "update"],
+      { cwd: root, encoding: "utf8", timeout: 180000 })),
   };
 }
 
@@ -69,6 +74,9 @@ async function main() {
         const action = decide({ updateClass: comp.updateClass, updateAvailable: res.updateAvailable, autoUpdateEnabled: autoUpdateEnabled(comp.name) });
         if (action === "auto" && probe.update) {
           probe.update(); entry.autoUpdated = true;
+          // Ordering invariant: probe.update() must be synchronous (blocks until the child
+          // update finishes) so the re-graft below runs AFTER the files it re-anchors are
+          // rewritten, not racing an async/detached update.
           if (comp.afterUpdate === "promax-graft")
             safe(() => applyPromaxGraft({ skillsDir: join(argvRoot, ".claude", "skills") }));
         }
