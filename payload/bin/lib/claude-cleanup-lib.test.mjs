@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, mkdirSync as mkd, writeFileSync, writeFileSync as wf, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { KEEP_DAYS, AUTO_DAYS, DAY_MS, newestMtime, dirSize, ageBucket } from "./claude-cleanup-lib.mjs";
+import { KEEP_DAYS, AUTO_DAYS, DAY_MS, newestMtime, dirSize, ageBucket, activeInstallPaths, pluginPruneCandidates } from "./claude-cleanup-lib.mjs";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "cc-"));
 const setMtime = (p, ms) => utimesSync(p, new Date(ms), new Date(ms));
@@ -35,5 +35,28 @@ test("dirSize sums file bytes recursively", () => {
   writeFileSync(join(d, "a"), "12345");           // 5
   mkdirSync(join(d, "s")); writeFileSync(join(d, "s", "b"), "678"); // 3
   assert.equal(dirSize(d), 8);
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("pluginPruneCandidates keeps active installPaths, trashes the rest, keeps project-scope", () => {
+  const d = tmp();
+  const cache = join(d, "plugins", "cache", "mkt", "sp");
+  for (const v of ["6.1.1", "6.2.0"]) mkd(join(cache, v), { recursive: true });
+  const projCache = join(d, "plugins", "cache", "mkt", "kotlin-lsp", "1.0.0");
+  mkd(projCache, { recursive: true });
+  mkd(join(d, "plugins"), { recursive: true });
+  wf(join(d, "plugins", "installed_plugins.json"), JSON.stringify({ plugins: {
+    "sp@mkt": [{ scope: "user", installPath: join(cache, "6.2.0") }],
+    "kotlin-lsp@mkt": [{ scope: "project", installPath: projCache }],
+  }}));
+  const cand = pluginPruneCandidates(d);
+  assert.deepEqual(cand, [join(cache, "6.1.1")]);          // only the stale version
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("pluginPruneCandidates fail-safe: missing manifest → [] (never guess)", () => {
+  const d = tmp(); mkd(join(d, "plugins", "cache", "mkt", "sp", "6.2.0"), { recursive: true });
+  assert.deepEqual(pluginPruneCandidates(d), []);
+  assert.equal(activeInstallPaths(d), null);
   rmSync(d, { recursive: true, force: true });
 });

@@ -46,3 +46,39 @@ export function ageBucket(mtimeMs, nowMs) {
   if (ageDays <= AUTO_DAYS) return "list";
   return "auto";
 }
+
+export function activeInstallPaths(dir = claudeDir()) {
+  const f = join(dir, "plugins", "installed_plugins.json");
+  let parsed; try { parsed = JSON.parse(readFileSync(f, "utf8")); } catch { return null; }
+  const set = new Set();
+  const plugins = parsed && parsed.plugins;
+  if (plugins && typeof plugins === "object") {
+    for (const entries of Object.values(plugins)) {
+      if (!Array.isArray(entries)) continue;
+      for (const e of entries) if (e && e.installPath) set.add(e.installPath);
+    }
+  }
+  return set;
+}
+
+// Version dirs under plugins/cache/<mkt>/<plugin>/ whose full path is NOT an active installPath.
+export function pluginPruneCandidates(dir = claudeDir()) {
+  const active = activeInstallPaths(dir);
+  if (active === null) return []; // fail-safe: never prune when we can't tell what's active
+  const cacheRoot = join(dir, "plugins", "cache");
+  const out = [];
+  let mkts = []; try { mkts = readdirSync(cacheRoot); } catch { return out; }
+  for (const mkt of mkts) {
+    let plugs = []; try { plugs = readdirSync(join(cacheRoot, mkt)); } catch { continue; }
+    for (const plug of plugs) {
+      const plugDir = join(cacheRoot, mkt, plug);
+      let vers = []; try { vers = readdirSync(plugDir); } catch { continue; }
+      for (const ver of vers) {
+        const verPath = join(plugDir, ver);
+        let st; try { st = statSync(verPath); } catch { continue; }
+        if (st.isDirectory() && !active.has(verPath)) out.push(verPath);
+      }
+    }
+  }
+  return out;
+}
