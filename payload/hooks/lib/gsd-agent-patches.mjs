@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { isContextModeActive, EXCLUDED_AGENTS } from "./context-mode-gsd-agents.mjs";
+import { setFrontmatterField } from "./gsd-patch-frontmatter.mjs";
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 const MARKER_RE = /^<!--\s*CURATED:NOEDIT\s*-->$/;
@@ -85,6 +86,9 @@ function legacyMatch(content, patch) {
   return null;
 }
 function isPatchCurrent(content, patch) {
+  // Frontmatter patches (§6.1 effort re-tune) have no version marker — "current" means the
+  // setter would NOT change the value (already at `to`, a foreign user value, or no such key).
+  if (patch.kind === "frontmatter") return setFrontmatterField(content, patch).kind !== "applied";
   const marked = findMarkedSpan(content, patch.id);
   return !!marked && marked.version === patch.version;
 }
@@ -553,6 +557,24 @@ export const PATCHES = [
     insertAnchor: "Exceptions where `tdd=\"true\"` is not needed: `type=\"checkpoint:*\"` tasks, configuration-only files, documentation, migration scripts, glue code wiring existing tested components, styling-only changes.",
     insertMode: "after",
   },
+  {
+    // §6.1 Opus 5 effort re-tune. NOT a marker-wrapped block — a frontmatter scalar mutation
+    // (`effort: low` -> `medium`) applied via setFrontmatterField (kind: "frontmatter").
+    // gsd-plan-checker is a judgment role that shipped at `low` while pinned to opus — the
+    // least-capable effort on the most expensive tier. `from` is a list so a future re-tune can
+    // add the prior target and still catch a machine still sitting on the original `low`.
+    id: "plan-checker-effort",
+    kind: "frontmatter",
+    appliesTo: (name) => name === "gsd-plan-checker.md",
+    key: "effort", from: ["low"], to: "medium",
+  },
+  {
+    // §6.1: gsd-codebase-mapper also ran `low` while pinned to opus; bump to `medium`.
+    id: "codebase-mapper-effort",
+    kind: "frontmatter",
+    appliesTo: (name) => name === "gsd-codebase-mapper.md",
+    key: "effort", from: ["low"], to: "medium",
+  },
 ];
 
 /* ---------- retired patches: best-effort cleanup of content a NOW-REMOVED entry above once
@@ -670,7 +692,7 @@ export function checkRetiredGsdAgentPatches({ claudeDir }) {
 
 /* ---------- write: apply every pending patch (only called explicitly, see file header) ---------- */
 export function applyGsdAgentPatches({ claudeDir }) {
-  const result = { applied: [], upgraded: [], skippedCurated: [], skippedNoAnchor: [], removedRetired: [] };
+  const result = { applied: [], upgraded: [], skippedCurated: [], skippedNoAnchor: [], skippedForeign: [], skippedNoKey: [], removedRetired: [] };
   for (const name of listAgentFiles(claudeDir)) {
     const applicable = PATCHES.filter((p) => p.appliesTo(name, claudeDir));
     const applicableRetired = RETIRED_PATCHES.filter((p) => p.appliesTo(name, claudeDir));
@@ -681,6 +703,14 @@ export function applyGsdAgentPatches({ claudeDir }) {
     if (isCurated(content)) { result.skippedCurated.push(name); continue; }
     let changed = false;
     for (const patch of applicable) {
+      if (patch.kind === "frontmatter") {
+        // §6.1 effort re-tune: value-compare mutation, not a marker-wrapped block insertion.
+        const { content: fmUpdated, kind: fmKind } = setFrontmatterField(content, patch);
+        if (fmKind === "applied") { content = fmUpdated; changed = true; result.applied.push(`${name}:${patch.id}`); }
+        else if (fmKind === "skippedForeign") result.skippedForeign.push(`${name}:${patch.id}`);
+        else if (fmKind === "noKey") result.skippedNoKey.push(`${name}:${patch.id}`);
+        continue; // fmKind === null -> already current, nothing to report
+      }
       const { content: updated, kind } = applyOrUpgradePatch(content, patch);
       if (kind === null) continue; // already current
       if (kind === "noAnchor") { result.skippedNoAnchor.push(`${name}:${patch.id}`); continue; }

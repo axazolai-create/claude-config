@@ -427,6 +427,7 @@ if (FULL) {
     const { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } =
       await import("./lib/gsd-agent-patches.mjs");
     const { checkGsdWorkflowPatches } = await import("./lib/gsd-workflow-patches.mjs");
+    const { checkGsdSkillPatches } = await import("./lib/gsd-skill-patches.mjs");
 
     // ---- gsd-* agents: add the context-mode MCP tool, only if that plugin is active ----
     // Machine-wide, not project-scoped (gsd-* agents live in ~/.claude/agents/, owned by the
@@ -474,6 +475,15 @@ if (FULL) {
       if (wfFiles.length)
         notes.push(`gsd-core workflow patch pending for ${wfFiles.join(", ")} ` +
           `(routes verify_isolated="true" plans to gsd-executor-decomposing) - ` +
+          `run /init-session to apply.`);
+
+      // Same check-only/apply-gated split for the §6.1 effort re-tune of gsd-* skills
+      // (skills/gsd-*/SKILL.md — frontmatter scalar patches, see gsd-skill-patches.mjs).
+      const skPending = safe(() => checkGsdSkillPatches({ claudeDir })) || {};
+      const skFiles = Object.keys(skPending);
+      if (skFiles.length)
+        notes.push(`gsd-* skill effort patch pending for ${skFiles.length} skill(s) ` +
+          `(${skFiles.slice(0, 5).join(", ")}${skFiles.length > 5 ? ", ..." : ""}) - ` +
           `run /init-session to apply.`);
 
       // Standing invariant, not a pending patch: an agent granting `Agent` with no anti-recursion

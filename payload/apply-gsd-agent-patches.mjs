@@ -12,11 +12,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { applyGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } from "./hooks/lib/gsd-agent-patches.mjs";
 import { applyGsdWorkflowPatches } from "./hooks/lib/gsd-workflow-patches.mjs";
+import { applyGsdSkillPatches } from "./hooks/lib/gsd-skill-patches.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const claudeDir = process.argv[2] || join(CLAUDE_DIR);
 const result = applyGsdAgentPatches({ claudeDir });
 const wfResult = applyGsdWorkflowPatches({ claudeDir });
+const skResult = applyGsdSkillPatches({ claudeDir });
 
 if (result.applied.length) {
   console.log(`Applied ${result.applied.length} patch(es):`);
@@ -33,6 +35,10 @@ if (result.skippedCurated.length)
   console.log(`Skipped (curated, left untouched): ${result.skippedCurated.join(", ")}`);
 if (result.skippedNoAnchor.length)
   console.log(`Skipped (anchor text not found - file may have changed upstream): ${result.skippedNoAnchor.join(", ")}`);
+if (result.skippedForeign.length)
+  console.log(`Skipped effort (set to a non-default value by hand, left as-is): ${result.skippedForeign.join(", ")}`);
+if (result.skippedNoKey.length)
+  console.log(`Skipped effort (no effort key found - file may have changed upstream): ${result.skippedNoKey.join(", ")}`);
 if (result.removedRetired.length) {
   console.log(`Cleaned up ${result.removedRetired.length} retired-patch leftover(s):`);
   for (const entry of result.removedRetired) console.log(`  - ${entry}`);
@@ -50,6 +56,17 @@ if (wfResult.skippedCurated.length)
   console.log(`Skipped (curated): ${wfResult.skippedCurated.join(", ")}`);
 if (wfResult.skippedNoAnchor.length)
   console.log(`Skipped (anchor not found - gsd-core execute-phase.md may have changed upstream): ${wfResult.skippedNoAnchor.join(", ")}`);
+
+if (skResult.applied.length) {
+  console.log(`Applied ${skResult.applied.length} skill effort patch(es):`);
+  for (const entry of skResult.applied) console.log(`  - ${entry}`);
+}
+if (skResult.skippedForeign.length)
+  console.log(`Skipped skill effort (non-default value, left as-is): ${skResult.skippedForeign.join(", ")}`);
+if (skResult.skippedCurated.length)
+  console.log(`Skipped skill (curated): ${skResult.skippedCurated.join(", ")}`);
+if (skResult.skippedNoKey.length)
+  console.log(`Skipped skill (no effort key - may have changed upstream): ${skResult.skippedNoKey.join(", ")}`);
 
 const unguarded = checkRecursiveAgentSpawnGuardrail({ claudeDir });
 if (unguarded.length) {
