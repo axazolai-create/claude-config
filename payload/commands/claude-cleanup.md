@@ -14,7 +14,9 @@ for 7 days before an automatic retention sweep purges it.
 
 **Categories the engine considers:**
 - **ephemeral** — `paste-cache`, `shell-snapshots`, `logs`, `cache`, `session-env`, `daemon`.
-  Every immediate child is proposed regardless of age (these are inherently disposable).
+  Age-guarded like sessions/temp: children under 7 days old are kept (this protects the
+  running session's transient files), children 7 days or older are proposed (no list-checker
+  tier — straight to the removal set).
 - **age** — `file-history`, `jobs`, `tasks`, `backups`, `gsd-user-files-backup`,
   `gsd-migration-journal`. Only children older than 14 days are proposed.
 - **session** — `projects/<slug>/<uuid>{.jsonl,/}`. The literal `memory` entry is always
