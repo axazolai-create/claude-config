@@ -89,6 +89,9 @@
   **Superseded context (2026-07-27):** `init-stack.md`'s steps 6-11 (including this fallow
   step 8) were later deleted wholesale in the GSD-free rewrite `eaf1a50` — the interactive
   fallow proposal no longer exists anywhere. See RISK-INITSTACK-001 for the current state.
+  **Re-resolved (2026-07-27):** base/lite now receive fallow via the guarded Superpowers-review
+  graft (`hooks/lib/superpowers-fallow-graft.mjs`, ships to all profiles) — see
+  RISK-INITSTACK-001's resolution note for the full mechanism.
 - **Context:** `gsd-config-patch.mjs`'s tier2 default sets `code_quality.fallow.enabled` to
   `true` whenever the project root has a `package.json` — deliberately without checking
   whether the `fallow` binary is actually installed (see the comment above
@@ -507,8 +510,9 @@
 
 ## RISK-INITSTACK-001 — `/init-stack` GSD-free rewrite deleted steps 6-11; ~24 stale references + 2 dropped capabilities
 
-- **Status:** Partially resolved (2026-07-27) — the stale references are fixed; reinstating the two
-  genuinely-dropped capabilities is a tracked design task.
+- **Status:** Resolved (2026-07-27) — the stale references were fixed first; the two
+  genuinely-dropped capabilities have now been reinstated (a third, `claude_orchestration`, is
+  deliberately retired — see below).
 - **Context:** commit `eaf1a50` rewrote `payload/commands/init-stack.md` into a single "GSD-free" doc
   shared by all three profiles and, in doing so, **deleted old steps 6-11 wholesale** (not renumbered):
   the stack-aware test/build-command proposal, the `claude_orchestration` pilot ask, the `fallow`
@@ -526,16 +530,30 @@
   `claude_orchestration` "run /init-stack step N" promises now state the step was removed and cite this
   risk id; the orphaned `gsd-claude-orchestration-pilot.md` gets a dormant-doc note (preserved, not
   deleted). **No functionality was reinstated.**
-- **Open (design task — Category II):** two capabilities were genuinely dropped, not just mislabeled —
-  (1) the stack-aware test/build-command proposal and (2) the `claude_orchestration` pilot ask — and
-  `fallow`'s install-proposal never reached base/lite. Reinstating them must mount in the orchestrator
-  that owns code-review **per profile — GSD's gates in full, Superpowers' gates in base/lite** (NOT
-  universally Superpowers, which would strip GSD in full); profile-membership + install gating should
-  reuse the `pnpm-phantom-fix` stack-marker pattern, not GSD-coupling. See memory
-  `gsd-superpowers-orchestration-boundary`.
-- **Residual:** until that task ships, base/lite get no `fallow` awareness and `full` lost the
-  interactive test/build + orchestration asks (gsd-core's generic auto-detect still covers test/build;
-  the orchestration-pilot doc is dormant-but-preserved). Accepted for now.
+- **Category-II reinstatement (done, 2026-07-27):** three capabilities were tracked; two were
+  genuinely reinstated, one deliberately retired.
+  1. **Fallow** (`fallow`'s install-proposal never reaching base/lite, and RISK-FALLOW-001) —
+     reinstated via a `.planning/`-guarded graft into Superpowers' own code-review flow
+     (`hooks/lib/superpowers-fallow-graft.mjs`): it grafts the fallow devDependency proposal
+     into the Superpowers reviewer path, ships in **all profiles**, and is inert (no-op) inside
+     GSD projects (detected via the `.planning/` marker) so GSD's own gate stays the sole
+     enforcer there — no duplicate prompt, no cross-methodology stomp.
+  2. **Stack-aware test/build-command proposal** — reinstated as `bin/detect-stack-commands.mjs`
+     + `bin/lib/stack-commands.mjs`, wired into the rules compiler, which now emits a
+     `## Detected commands` section into `stack-rules.md` (rebuild-safe: re-derived from the
+     project's stack markers on every rebuild, not hand-maintained).
+  3. **`claude_orchestration` pilot ask — deliberately retired, not reinstated.** Rationale:
+     GSD-only relevance, narrow value versus the interactive-ask cost, fail-closed by design,
+     and the gate it fed was usually closed in practice anyway. The reference doc
+     `payload/references/gsd-claude-orchestration-pilot.md` is retained as-is (dormant, not
+     deleted) for future reference; no interactive restore was built and none is planned.
+  Profile-membership for both reinstated capabilities follows the `pnpm-phantom-fix`
+  stack-marker pattern (not GSD-coupling), per memory `gsd-superpowers-orchestration-boundary`.
+  All-profiles shipping is asserted by a regression test in `variants.test.mjs`
+  ("Category-II files ship to all profiles").
+- **Residual:** none outstanding for capabilities #1 and #2. Capability #3 stays permanently
+  unreinstated by design — if the orchestration-pilot idea is revisited later, it starts fresh
+  from the dormant reference doc rather than resuming this risk.
 
 ## RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 

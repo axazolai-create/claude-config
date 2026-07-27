@@ -64,6 +64,19 @@ test("profile chain is a strict subset: lite ⊂ base ⊂ full", () => {
   assert.ok(base.size < full.size && lite.size < base.size, "each step must be a proper subset");
 });
 
+test("Category-II files ship to all profiles (fallow graft + stack-commands)", () => {
+  const expected = [
+    "hooks/lib/superpowers-fallow-graft.mjs",
+    "bin/detect-stack-commands.mjs",
+    "bin/lib/stack-commands.mjs",
+  ];
+  for (const variant of ["full", "base", "lite"]) {
+    const rels = new Set(resolveVariant({ repoRoot: ROOT, variant }).rels);
+    for (const f of expected) assert.ok(rels.has(f), `${variant} missing ${f}`);
+    assert.ok(![...rels].some((r) => r.endsWith(".test.mjs")), `${variant} leaks a .test.mjs`);
+  }
+});
+
 test("base drops all GSD, keeps neo4j opt-in and design/infra keep-set", () => {
   const base = resolveVariant({ repoRoot: ROOT, variant: "base" });
   for (const r of base.rels) {
