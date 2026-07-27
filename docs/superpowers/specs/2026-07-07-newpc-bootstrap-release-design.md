@@ -1,7 +1,7 @@
 # Design: New-PC Bootstrap + v1.0.0 Release
 
 Date: 2026-07-07
-Repo: `axazolai-create/claude-config` (default branch `master`)
+Repo: `axazolai/claude-config` (default branch `master`)
 Status: Approved (design), pending implementation plan
 
 ## Goal
@@ -33,10 +33,10 @@ Invocation:
 
 ```
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 ```
 
 Only the tiny bootstrap is fetched up front (executed on the fly by `| bash` / `| iex`); the
@@ -51,7 +51,7 @@ full package is pulled as an archive by the bootstrap itself.
    - POSIX: `curl -fsSL .../bootstrap.sh | bash -s -- --ref v1.0.0` (also honor `REF` env).
    - Windows: `$env:CLAUDE_CONFIG_REF='v1.0.0'; irm .../bootstrap.ps1 | iex`.
 3. **Download** one URL that accepts branch, tag, or SHA:
-   `https://github.com/axazolai-create/claude-config/archive/<ref>.tar.gz`
+   `https://github.com/axazolai/claude-config/archive/<ref>.tar.gz`
    (302 → codeload; follow redirects: curl `-L`, IWR follows by default).
 4. **Extract** into a temp dir with `tar -xzf <archive> -C <tmp> --strip-components=1` so
    `setup.mjs` lands directly in `<tmp>` (top archive folder name is irrelevant).
