@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, mkdirSync as mkd, writeFileSync, writeFileSync as wf, utimesSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, mkdirSync as mkd, writeFileSync, writeFileSync as wf, utimesSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, sep } from "node:path";
-import { KEEP_DAYS, AUTO_DAYS, DAY_MS, newestMtime, dirSize, ageBucket, activeInstallPaths, pluginPruneCandidates, buildPlan } from "./claude-cleanup-lib.mjs";
+import { KEEP_DAYS, AUTO_DAYS, DAY_MS, newestMtime, dirSize, ageBucket, activeInstallPaths, pluginPruneCandidates, buildPlan, applyPlan, restoreBatch, purgeRetention, trashRoot, listTrashBatches } from "./claude-cleanup-lib.mjs";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "cc-"));
 const setMtime = (p, ms) => utimesSync(p, new Date(ms), new Date(ms));
@@ -107,5 +107,38 @@ test("buildPlan: excludeUuids keeps a matching session even if old", () => {
   const { d, now } = fakeTree();
   const plan = buildPlan({ dir: d, tempRoot: join(d, "__notemp"), nowMs: now, excludeUuids: [UUID] });
   assert.ok(!plan.items.some((i) => i.absPath.includes(UUID) && !i.absPath.includes("memory")), "excluded uuid not trashed");
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("applyPlan moves items to a batch + manifest; restore puts them back", () => {
+  const d = tmp(); const now = 1000 * DAY_MS;
+  const victim = join(d, "logs", "old.log"); mkdirSync(dirname(victim), { recursive: true }); writeFileSync(victim, "data");
+  const items = [{ absPath: victim, size: 4, category: "ephemeral", reason: "ephemeral:logs", mtimeMs: statSync(victim).mtimeMs, bucket: "auto" }];
+  const res = applyPlan({ dir: d, items, nowMs: now, ts: "20260727T000000Z" });
+  assert.equal(res.moved, 1); assert.ok(!existsSync(victim), "moved out of place");
+  assert.ok(existsSync(join(res.batchDir, "manifest.json")));
+  const rr = restoreBatch({ dir: d, ts: "20260727T000000Z" });
+  assert.equal(rr.restored, 1); assert.ok(existsSync(victim), "restored to original path");
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("applyPlan TOCTOU: item whose mtime changed since scan is skipped", () => {
+  const d = tmp(); const now = 1000 * DAY_MS;
+  const v = join(d, "logs", "x"); mkdirSync(dirname(v), { recursive: true }); writeFileSync(v, "d");
+  const items = [{ absPath: v, size: 1, category: "ephemeral", reason: "r", mtimeMs: statSync(v).mtimeMs - 999, bucket: "auto" }]; // stale recorded mtime
+  const res = applyPlan({ dir: d, items, nowMs: now, ts: "T1" });
+  assert.equal(res.skipped, 1); assert.equal(res.moved, 0); assert.ok(existsSync(v), "left in place");
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("purgeRetention removes only batches older than retentionDays", () => {
+  const d = tmp(); const now = 1000 * DAY_MS;
+  const root = trashRoot(d); mkdirSync(join(root, "old"), { recursive: true }); mkdirSync(join(root, "new"), { recursive: true });
+  writeFileSync(join(root, "old", "manifest.json"), JSON.stringify({ ts: "old", entries: [] }));
+  writeFileSync(join(root, "new", "manifest.json"), JSON.stringify({ ts: "new", entries: [] }));
+  setMtime(join(root, "old"), now - 10 * DAY_MS); setMtime(join(root, "old", "manifest.json"), now - 10 * DAY_MS);
+  setMtime(join(root, "new"), now - 1 * DAY_MS); setMtime(join(root, "new", "manifest.json"), now - 1 * DAY_MS);
+  const removed = purgeRetention({ dir: d, nowMs: now, retentionDays: 7 });
+  assert.deepEqual(removed, ["old"]); assert.ok(!existsSync(join(root, "old")) && existsSync(join(root, "new")));
   rmSync(d, { recursive: true, force: true });
 });

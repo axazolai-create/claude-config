@@ -148,3 +148,72 @@ export function buildPlan({ dir = claudeDir(), tempRoot, nowMs, excludeUuids = [
   const totals = { count: items.length, bytes: items.reduce((a, i) => a + i.size, 0) };
   return { items, listCheck, totals };
 }
+
+export function trashRoot(dir = claudeDir()) { return join(dir, ".cleanup-trash"); }
+
+function moveInto(src, destDir) {
+  mkdirSync(destDir, { recursive: true });
+  const dest = join(destDir, basename(src));
+  try { renameSync(src, dest); }
+  catch { // cross-device: copy then remove
+    const st = statSync(src);
+    if (st.isDirectory()) {
+      mkdirSync(dest, { recursive: true });
+      for (const e of readdirSync(src)) moveInto(join(src, e), dest);
+      rmSync(src, { recursive: true, force: true });
+    } else { copyFileSync(src, dest); rmSync(src, { force: true }); }
+  }
+  return dest;
+}
+
+export function applyPlan({ dir = claudeDir(), items, nowMs, ts }) {
+  const batchDir = join(trashRoot(dir), ts);
+  mkdirSync(batchDir, { recursive: true });
+  const entries = []; let moved = 0, bytes = 0, skipped = 0;
+  let idx = 0;
+  for (const it of items) {
+    const st = statOr(it.absPath);
+    if (!st) { skipped++; continue; }
+    // TOCTOU: became active since scan → leave alone (allow tiny fs rounding)
+    const liveM = st.isDirectory() ? newestMtime(it.absPath) : st.mtimeMs;
+    if (Math.abs(liveM - it.mtimeMs) > 1) { skipped++; continue; }
+    const slot = join(batchDir, String(idx++)); // unique slot avoids basename collisions
+    const dest = moveInto(it.absPath, slot);
+    entries.push({ originalAbsPath: it.absPath, size: it.size, category: it.category, reason: it.reason, movedAt: nowMs, slot: basename(slot) });
+    moved++; bytes += it.size;
+  }
+  writeFileSync(join(batchDir, "manifest.json"), JSON.stringify({ ts, entries }, null, 2), "utf8");
+  return { batchDir, moved, bytes, skipped };
+}
+
+export function listTrashBatches(dir = claudeDir()) {
+  const root = trashRoot(dir); const out = [];
+  for (const e of safeReaddir(root)) {
+    if (!e.isDirectory()) continue;
+    const p = join(root, e.name); out.push({ ts: e.name, dir: p, mtimeMs: statOr(p)?.mtimeMs ?? 0 });
+  }
+  return out;
+}
+
+export function purgeRetention({ dir = claudeDir(), nowMs, retentionDays = RETENTION_DAYS }) {
+  const removed = [];
+  for (const b of listTrashBatches(dir)) {
+    if ((nowMs - b.mtimeMs) / DAY_MS > retentionDays) { rmSync(b.dir, { recursive: true, force: true }); removed.push(b.ts); }
+  }
+  return removed;
+}
+
+export function restoreBatch({ dir = claudeDir(), ts }) {
+  const batchDir = join(trashRoot(dir), ts);
+  let manifest; try { manifest = JSON.parse(readFileSync(join(batchDir, "manifest.json"), "utf8")); } catch { return { restored: 0, skipped: 0 }; }
+  let restored = 0, skipped = 0;
+  for (const e of manifest.entries || []) {
+    const stored = join(batchDir, e.slot, basename(e.originalAbsPath));
+    if (existsSync(e.originalAbsPath) || !existsSync(stored)) { skipped++; continue; } // never clobber
+    mkdirSync(dirname(e.originalAbsPath), { recursive: true });
+    moveInto(join(batchDir, e.slot, basename(e.originalAbsPath)), dirname(e.originalAbsPath));
+    restored++;
+  }
+  if (skipped === 0) rmSync(batchDir, { recursive: true, force: true });
+  return { restored, skipped };
+}
