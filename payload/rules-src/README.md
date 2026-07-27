@@ -135,7 +135,7 @@ generatedAt: <ISO timestamp>
 
 ## templates/
 
-Project-root scaffold files, applied during the build (step 9) — not rules, never compiled
+Project-root scaffold files, applied during the build (step 10) — not rules, never compiled
 into the snapshot:
 
 - `next.AGENTS.md` -> copy to the project root as `AGENTS.md` when the Next stack is
