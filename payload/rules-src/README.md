@@ -105,15 +105,19 @@ generatedAt: <ISO timestamp>
 ---
 ```
 
-6. **Ensure `<project>/.claude/CLAUDE.md` exists** and contains a line `@stack-rules.md`.
+6. **Detected commands (rebuild-safe):** run `node ~/.claude/bin/detect-stack-commands.mjs --root <projectRoot>`
+   and include its `## Detected commands` block verbatim as a section of the snapshot. It derives
+   exact test/build commands from the same stack markers this snapshot fingerprints, so every
+   rebuild reproduces it. Do not hand-edit the block — change the stack or the lookup instead.
+7. **Ensure `<project>/.claude/CLAUDE.md` exists** and contains a line `@stack-rules.md`.
    Write the snapshot BEFORE adding the import — a dangling import target triggers an
    approval dialog.
-7. **Root `CLAUDE.md`**: only when it exists AND is not `CURATED:NOEDIT`-marked, ensure a
+8. **Root `CLAUDE.md`**: only when it exists AND is not `CURATED:NOEDIT`-marked, ensure a
    one-line pointer to `.claude/CLAUDE.md`. Never create a root `CLAUDE.md`; never edit a
    curated one (the deny hook blocks it anyway).
-8. **Gitignore**: in a git repo, ensure `.claude/stack-rules.md` is listed in `.gitignore`
+9. **Gitignore**: in a git repo, ensure `.claude/stack-rules.md` is listed in `.gitignore`
    (machine-generated personal config, not for the project's repo).
-9. **Apply `templates/`** (see below).
+10. **Apply `templates/`** (see below).
 
 ## Adding a rule
 
