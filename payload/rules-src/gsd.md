@@ -82,6 +82,26 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   own wave/plan model onto the `Workflow` tool's `parallel()`/`pipeline()` primitives, with branching
   fixed by a generated script instead of an agent spawning further agents at inference time.
 
+### Delegation width: cap it, never encourage it
+
+The depth boundary above bounds how *deep* the dispatch tree goes; this bounds how *wide*. Opus 5
+reaches for subagents **more** readily than Opus 4.8 did, so 4.8-era "delegate more" guidance is
+now actively harmful — the correction runs the opposite direction.
+
+- **Delegate only when the payoff clears the context-rebuild overhead.** A subagent starts cold:
+  briefing it and merging its result back costs real tokens and latency. If you can finish the
+  job in a handful of your own tool calls, do that instead of spawning.
+- **Never delegate review or verification.** Checking your own work is not a reason to spawn a
+  subagent — Opus 5 verifies itself (see the `model-selection-policy` skill). A separate
+  *reviewer* owned by CI/GSD is a different thing and stays.
+- **Don't split one modest job across parallel agents.** If a single subagent can do it, use one,
+  not several; keep spawn counts low.
+- **≤20 parallel subagents without an explicit user request.** Above that, ask first.
+- For worktree waves, the existing one-dispatch-per-turn contention rule overrides the "all
+  `Agent` calls in one message" form — issue them paced, not as a single burst.
+- **Brief precisely once, then trust the result.** Don't re-brief mid-flight and don't redo a
+  subagent's work yourself; that doubles the cost the delegation was meant to save.
+
 ### The one sanctioned depth-3 exception: `gsd-executor-decomposing` + `gsd-task-verifier`
 
 - **What it is:** a fork of `gsd-executor` (`payload/agents/gsd-executor-decomposing.md`) that

@@ -33,7 +33,7 @@ export function projectNameOf(root) {
 
 // Strips a trailing dated-snapshot suffix ("-YYYYMMDD") from a model id, e.g.
 // "claude-haiku-4-5-20251001" -> "claude-haiku-4-5". Aliased ids that already carry no date
-// suffix (e.g. "claude-sonnet-5", "claude-opus-4-8") pass through unchanged.
+// suffix (e.g. "claude-sonnet-5", "claude-opus-5") pass through unchanged.
 export function normalizeModel(model) {
   return model ? model.replace(/-\d{8}$/, "") : model;
 }
