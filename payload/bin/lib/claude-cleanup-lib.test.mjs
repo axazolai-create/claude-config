@@ -78,8 +78,9 @@ function fakeTree() {
   const d = tmp(); const now = 1000 * DAY_MS;
   const mk = (p) => (mkdirSync(dirname(p), { recursive: true }), writeFileSync(p, "x"), p);
   const age = (p, days) => setMtime(p, now - days * DAY_MS);
-  // ephemeral
-  age(mk(join(d, "paste-cache", "p1")), 1);
+  // ephemeral: old one is swept, a fresh (<7d) one is guarded (protects the running session)
+  age(mk(join(d, "paste-cache", "p1")), 30);
+  age(mk(join(d, "paste-cache", "p-recent")), 1);
   // memory MUST be preserved
   mk(join(d, "projects", "slug", "memory", "MEMORY.md"));
   // sessions: one old (auto), one mid (list), one fresh (keep)
@@ -94,7 +95,8 @@ test("buildPlan: auto sessions trashed, mid listed, fresh kept, memory never tou
   const { d, now } = fakeTree();
   const plan = buildPlan({ dir: d, tempRoot: join(d, "__notemp"), nowMs: now, excludeUuids: [] });
   const paths = plan.items.map((i) => i.absPath);
-  assert.ok(paths.some((p) => p.endsWith(join("paste-cache", "p1"))), "ephemeral trashed");
+  assert.ok(paths.some((p) => p.endsWith(join("paste-cache", "p1"))), "old ephemeral trashed");
+  assert.ok(!paths.some((p) => p.endsWith(join("paste-cache", "p-recent"))), "recent (<7d) ephemeral guarded — protects running session");
   assert.ok(paths.some((p) => p.endsWith(`${UUID}.jsonl`)), "auto session .jsonl trashed");
   assert.ok(paths.some((p) => p.endsWith(join("slug", UUID))), "auto session dir trashed");
   assert.ok(!paths.some((p) => p.includes(`${sep}memory${sep}`) || p.endsWith("memory")), "memory NEVER in plan");
@@ -107,6 +109,24 @@ test("buildPlan: excludeUuids keeps a matching session even if old", () => {
   const { d, now } = fakeTree();
   const plan = buildPlan({ dir: d, tempRoot: join(d, "__notemp"), nowMs: now, excludeUuids: [UUID] });
   assert.ok(!plan.items.some((i) => i.absPath.includes(UUID) && !i.absPath.includes("memory")), "excluded uuid not trashed");
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("buildPlan: temp dir respects excludeUuids", () => {
+  const d = tmp(); const now = 1000 * DAY_MS;
+  const tempRoot = join(d, "__temp");
+  const tempDir = join(tempRoot, "slug", UUID, "scratchpad");
+  mkdirSync(tempDir, { recursive: true });
+  const f = join(tempDir, "file.txt"); writeFileSync(f, "x"); setMtime(f, now - 30 * DAY_MS);
+
+  const withoutExclude = buildPlan({ dir: d, tempRoot, nowMs: now, excludeUuids: [] });
+  const allWithout = withoutExclude.items.concat(withoutExclude.listCheck);
+  assert.ok(allWithout.some((i) => i.category === "temp" && i.absPath.includes(UUID)), "old temp dir proposed without excludes");
+  assert.ok(withoutExclude.items.some((i) => i.category === "temp" && i.absPath.includes(UUID)), "old temp dir lands in items (auto bucket)");
+
+  const withExclude = buildPlan({ dir: d, tempRoot, nowMs: now, excludeUuids: [UUID] });
+  const allWith = withExclude.items.concat(withExclude.listCheck);
+  assert.ok(!allWith.some((i) => i.absPath.includes(UUID)), "excluded temp uuid absent from the whole plan");
   rmSync(d, { recursive: true, force: true });
 });
 

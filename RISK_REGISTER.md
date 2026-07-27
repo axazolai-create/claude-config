@@ -585,16 +585,18 @@
   (never deletes) into a timestamped `~/.claude/.cleanup-trash/<ts>/` batch with a
   `manifest.json`; batches auto-purge only after a 7-day retention window; `restore --ts
   <ts>` moves everything back (no-clobber). (4) **Running-session guard** — a `<7d` KEEP
-  window, an explicit `--exclude-session <uuid>` flag, and a TOCTOU mtime-changed skip
-  re-checked at apply time. (5) **Plugin-prune fail-safe** — an unreadable or mis-shaped
-  `installed_plugins.json` causes the pruner to prune nothing rather than guess.
-- **Residual:** two known gaps, both accepted. (a) A cross-device **directory** move
-  interrupted mid-recursion can leave stray copies in the batch slot that are not recorded
-  in `manifest.json` — the bytes physically survive under `.cleanup-trash` but are not
+  window that also applies to ephemeral dirs (logs/session-env/daemon/shell-snapshots/
+  cache/paste-cache), so the currently-running session's own transient files are protected
+  by age alone; on top of that, sessions/temp additionally exclude the current session by
+  its exact UUID via an explicit `--exclude-session <uuid>` flag; and a TOCTOU
+  mtime-changed skip re-checked at apply time. (5) **Plugin-prune fail-safe** — an
+  unreadable or mis-shaped `installed_plugins.json` causes the pruner to prune nothing
+  rather than guess.
+- **Residual:** one known gap, accepted. A cross-device **directory** move interrupted
+  mid-recursion can leave stray copies in the batch slot that are not recorded in
+  `manifest.json` — the bytes physically survive under `.cleanup-trash` but are not
   auto-restorable via `restore`. Pre-existing edge case; possible future hardening is
-  copy-all-then-remove for directories instead of a rename/move. (b) The `--exclude-slug`,
-  `--keep-under`, and `--older-than` CLI flags are parsed but not yet wired into
-  `buildPlan` — they are no-ops today. Not a safety gap on its own (the running session is
-  still protected by `--exclude-session <uuid>` plus the age-based KEEP window, independent
-  of these flags), but misleading CLI surface. Flagged for a follow-up: either wire them in
-  or drop them.
+  copy-all-then-remove for directories instead of a rename/move. (The `--exclude-slug`,
+  `--keep-under`, and `--older-than` CLI flags were REMOVED — YAGNI, they were parsed but
+  never wired into `buildPlan`; the running session stays protected by
+  `--exclude-session <uuid>` plus the age-based KEEP window.)

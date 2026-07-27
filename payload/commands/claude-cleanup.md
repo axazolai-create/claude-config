@@ -36,17 +36,17 @@ Follow these steps:
    older than 7 days — pure retention housekeeping, unrelated to what you're about to scan.
    Note what it reports (`Purged N trash batch(es): ...`) before moving on.
 
-2. **Scan.** Derive `TEMP_ROOT`, the current `<slug>`, and the current `<session-uuid>` from
-   the scratchpad directory path given in your environment info. That path has the shape
-   `<TEMP_ROOT>/<slug>/<session-uuid>/scratchpad` — so:
-   - `<session-uuid>` = the name of the scratchpad's parent directory,
-   - `<slug>` = that directory's parent,
-   - `<TEMP_ROOT>` = that directory's parent.
+2. **Scan.** Derive `TEMP_ROOT` and the current `<session-uuid>` from the scratchpad directory
+   path given in your environment info. That path has the shape
+   `<TEMP_ROOT>/<slug>/<session-uuid>/scratchpad` — walking up from the scratchpad:
+   - `<session-uuid>` = the scratchpad's parent directory,
+   - `<slug>` = the uuid dir's parent (one level up from `<session-uuid>`),
+   - `<TEMP_ROOT>` = the slug dir's parent — i.e. **two levels above** `<session-uuid>`.
 
    Then run:
 
    ```
-   node ~/.claude/bin/claude-cleanup.mjs scan --temp-root "<TEMP_ROOT>" --exclude-session "<session-uuid>" --exclude-slug "<slug>"
+   node ~/.claude/bin/claude-cleanup.mjs scan --temp-root "<TEMP_ROOT>" --exclude-session "<session-uuid>"
    ```
 
    This is read-only — it only inspects the filesystem and prints a JSON plan
@@ -105,12 +105,16 @@ Follow these steps:
 
    If the user says no, stop here — nothing is written or moved.
 
+   To force-purge all trash immediately, bypassing the 7-day retention window, run
+   `node ~/.claude/bin/claude-cleanup.mjs empty-trash` (irreversible — only offer this if the
+   user explicitly asks for it).
+
 **Safety notes:**
 - This command never runs unattended: every removal requires the dry-run report, the
   list-checker decision (when applicable), and a final explicit confirmation.
 - `memory/`, active configuration, virtualenvs, and the currently running session/scratchpad
   are never in scope — the engine is allowlist-based by category root and always excludes the
-  current session/slug and the literal `memory` entry.
+  current session (by UUID) and the literal `memory` entry.
 - Everything moved is reversible: it lives under `~/.claude/.cleanup-trash/<ts>/` with a
   `manifest.json` recording original paths, and `restore --ts <ts>` puts it back — until the
   7-day retention window closes and a `purge-retention` run clears it out.

@@ -96,10 +96,18 @@ export function buildPlan({ dir = claudeDir(), tempRoot, nowMs, excludeUuids = [
   const push = (arr, absPath, category, reason, mtimeMs) =>
     arr.push({ absPath, size: statOr(absPath)?.isDirectory() ? dirSize(absPath) : (statOr(absPath)?.size ?? 0), category, reason, mtimeMs, bucket: ageBucket(mtimeMs, nowMs) });
 
-  // Ephemeral: trash each immediate child of the dir (dir itself stays).
+  // Ephemeral: each immediate child of the dir (dir itself stays), guarded by age — a <7d
+  // ("keep") child is skipped, which protects the currently-running session's own transient
+  // files (logs/session-env/daemon/shell-snapshots/cache/paste-cache). No list-checker here:
+  // both "list" and "auto" age buckets are swept straight into items.
   for (const name of EPHEMERAL) {
     const root = join(dir, name);
-    for (const e of safeReaddir(root)) push(items, join(root, e.name), "ephemeral", `ephemeral:${name}`, newestMtime(join(root, e.name)));
+    for (const e of safeReaddir(root)) {
+      const p = join(root, e.name);
+      const m = e.isDirectory() ? newestMtime(p) : (statOr(p)?.mtimeMs ?? 0);
+      if (ageBucket(m, nowMs) === "keep") continue;
+      push(items, p, "ephemeral", `ephemeral:${name}`, m);
+    }
   }
   // Age dirs: each immediate child, only if > AUTO_DAYS.
   for (const name of AGE_DIRS) {

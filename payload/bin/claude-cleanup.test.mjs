@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { parseArgs } from "./claude-cleanup.mjs";
 
 test("parseArgs: scan with excludes + temp-root", () => {
-  const { cmd, opts } = parseArgs(["scan", "--temp-root", "C:/t", "--exclude-session", "u1", "--exclude-session", "u2", "--exclude-slug", "s"]);
+  const { cmd, opts } = parseArgs(["scan", "--temp-root", "C:/t", "--exclude-session", "u1", "--exclude-session", "u2"]);
   assert.equal(cmd, "scan"); assert.equal(opts.tempRoot, "C:/t");
-  assert.deepEqual(opts.excludeSession, ["u1", "u2"]); assert.equal(opts.excludeSlug, "s");
+  assert.deepEqual(opts.excludeSession, ["u1", "u2"]);
 });
 test("parseArgs: restore --ts", () => {
   const { cmd, opts } = parseArgs(["restore", "--ts", "T1"]);
