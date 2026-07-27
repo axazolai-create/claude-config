@@ -36,11 +36,15 @@ A public GitHub repository, three long-lived branches (user decision 2026-07-27)
 
 | Branch | Contents | Written by |
 |---|---|---|
-| `original` | Pristine upstream snapshots. One commit per upstream release, tagged with the upstream version. | The updater, never by hand |
+| `original` | Pristine upstream snapshots. One commit per upstream release, tagged with the upstream version. This is the recorded base `main` was built from, not merely a copy of upstream. | The updater, never by hand |
 | `patch` | The working materials: the rename transform, its rule set, the keep-list, and our own additive deltas as discrete patch files. | By hand |
 | `main` | The finished plugin: `original` with `patch` applied. Installable as-is, and carries `.claude-plugin/marketplace.json` so the repository is its own marketplace. | The updater, never by hand |
 
 `main` is generated. Hand-editing it is a mistake the updater must detect and refuse to overwrite silently — a change on `main` that is not derivable from `original` + `patch` means someone edited the output instead of the source.
+
+**Why `original` is a branch of ours and not a tracking ref.** If the fork is created with GitHub's fork button, upstream's history is already present, and it is tempting to drop `original` and rebuild from `upstream/main` instead. That breaks acceptance criterion 2: a byte-for-byte rebuild is only checkable against an immutable base, and `upstream/main` moves. Worse, upstream is free to force-push, rebase, or delete a tag, at which point "which tree is the current `main` built from" becomes unanswerable — and the determinism guarantee degrades into a claim nobody can verify. `original` holds the objects in our own repository, one commit per release, so the question always has an answer and the answer does not depend on upstream's history staying put.
+
+Whether the repository is additionally a GitHub fork is a separate and much smaller question — it affects PR ergonomics toward upstream, not the build.
 
 Public rather than private so `/plugin marketplace add` works on a new machine with no git authentication, which is what the bootstrap install depends on.
 
