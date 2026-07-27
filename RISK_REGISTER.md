@@ -600,3 +600,90 @@
   `--keep-under`, and `--older-than` CLI flags were REMOVED — YAGNI, they were parsed but
   never wired into `buildPlan`; the running session stays protected by
   `--exclude-session <uuid>` plus the age-based KEEP window.)
+
+## RISK-ULTRAPOWERS-001 — Rebrand patch carries maintenance debt on every upstream release
+
+- **Status:** Open (accepted, 2026-07-27)
+- **Context:** the Ultrapowers rebrand patches `superpowers@claude-plugins-official` in the
+  plugin cache. The source analysis chose an additive package precisely to avoid fighting a
+  fast-moving upstream; the patch reintroduces that fight for a cosmetic benefit. Precedent
+  exists (`gsd-core-patches/`) and so does the incident it caused — the claude-config layer had
+  to be restored by hand after a `/gsd-update`.
+- **Mitigation:** rules-plus-hashes instead of stored post-patch copies, so edits outside the
+  patched region apply cleanly; a cost log (`ultrapowers-patches/cost-log.jsonl`) records rules
+  broken, new mentions, and manual minutes per upstream version; a pre-agreed rollback trigger
+  (two consecutive updates needing table rework, or one costing >30 min) makes `session-init`
+  surface "reconsider: prose-only rebrand, or an honest fork" rather than "reapply patches".
+- **Residual:** upstream can restructure a patched file wholesale at any release. Accepted
+  knowingly by the user; the trigger converts accumulated annoyance into a number.
+
+## RISK-ULTRAPOWERS-002 — Rebrand is machine-wide and cannot be gated per project
+
+- **Status:** Open (accepted, 2026-07-27)
+- **Context:** the patch lands in `~/.claude/plugins/cache/.../superpowers/`, which has no
+  project root. The `.planning`-based predicate that disables Ultrapowers inside GSD projects
+  under the `full` profile therefore cannot reach it: in a GSD project, Superpowers skills still
+  present themselves as Ultrapowers.
+- **Mitigation:** none available. The two alternatives were rejected on inspection — patching
+  only skills GSD never calls is a half-measure that complicates the table, and suppressing the
+  patch when any GSD project exists is unimplementable because the machine has no project list.
+- **Residual:** cosmetic confusion inside GSD projects. Brand renaming of a foreign skill package
+  does not affect the GSD process itself. Accepted.
+
+## RISK-ULTRAPOWERS-003 — Blind replacement would break `superpowers:` skill resolution
+
+- **Status:** Open (mitigated by design)
+- **Context:** the skill namespace derives from the plugin directory name, which the rebrand
+  deliberately does not touch. A naive `\bSuperpowers\b` -> `Ultrapowers` pass rewrites the prefix
+  in `superpowers:writing-plans` as well. The failure is delayed: the file still reads correctly
+  and only the invocation fails, at use time.
+- **Mitigation:** the classification table assigns every mention to exactly one bucket, and
+  protective buckets (`invocation`, `plugin-path`) are applied first and consume their matches
+  before `brand` runs. A regression test asserts that no `invocation`-bucket match is ever
+  rewritten. Layer acceptance is arithmetic: per-bucket counts plus the ignore list must sum to
+  the 119 mentions measured in 6.2.0, so a lost or misfiled mention shows up by subtraction.
+- **Residual:** a new upstream mention shape that resembles neither bucket. Caught by the drift
+  detector's "extend the table" red flag, which blocks green status.
+
+## RISK-ULTRAPOWERS-004 — Ignore-list rot devalues the drift flag
+
+- **Status:** Open (mitigated by design)
+- **Context:** 29 of 119 mentions live in foreign-harness packaging (`scripts/*codex*`,
+  `references/{gemini,pi}-tools.md`, `.opencode/`, `.pi/`) and are skipped deliberately. Without
+  an explicit ignore list the detector would raise a red flag on them every run; a flag that is
+  always red stops being read, and the genuine one dies with it.
+- **Mitigation:** every ignore entry carries a recorded reason and `/up-doctor` prints them, so a
+  silent skip is impossible — the same rule Ц.4 of the source analysis imposes on the duplication
+  audit, for the same reason.
+- **Residual:** an entry can be ignored for a reason that later stops being true. Reviewed
+  whenever the cost log records an upstream version bump.
+
+## RISK-ULTRAPOWERS-005 — Migration can mis-pair spec and plan documents
+
+- **Status:** Open (mitigated by design)
+- **Context:** migration into `.ultrapowers/phases/<NN>-<slug>/` must pair 21 specs with 13 plans
+  in `docs/superpowers/`. Pairing is guessed from date and slug, not derived; some files pair with
+  nothing (`2026-07-26-phase2-design-skills-HANDOFF.md`). A silent wrong pairing buries a design
+  document under an unrelated phase.
+- **Mitigation:** migration proposes and does not act — it prints the full mapping plus the
+  unpaired list and waits for confirmation, the same rule Т.4 sets for the resume hook. `git mv`
+  preserves history. Unpaired files go to `.ultrapowers/archive/` intact rather than being guessed
+  at. Acceptance counts files in and out.
+- **Residual:** a confirmed-but-wrong pairing. Recoverable — `git mv` keeps history, so the move
+  is reversible.
+
+## RISK-ULTRAPOWERS-006 — Agent registry adds resident context cost every session
+
+- **Status:** Open (accepted with a budget)
+- **Context:** agent names and descriptions are injected into the system prompt every session.
+  Measured on this machine: 37 installed agents = 8 381 chars = **~2 330 tokens resident**,
+  average description 206 chars, spread 72-599. The Ultrapowers registry adds 39 more. For
+  comparison, the resident weight this project criticized in Buildomator (приложение Б) was
+  5 290 tokens — so an unbudgeted registry reaches ~40 % of the thing we called unacceptable.
+- **Mitigation:** the registry does not ship to the `full` profile at all, where GSD's ~33 agents
+  already occupy that slot (both together would be ~4 530 tokens); a description-length budget
+  with a failing test guards `base`/`lite`; a lazy-description mode for rare heavy agents is an
+  open question for layer 3 (the platform does this for tools via `ToolSearch`; no documented
+  agent equivalent).
+- **Residual:** ~1 300-2 200 tokens resident in `base`/`lite`, deliberately spent to buy per-agent
+  tier selection. Accepted.
