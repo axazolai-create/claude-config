@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, mkdirSync as mkd, writeFileSync, writeFileSync as wf, utimesSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, mkdirSync, mkdirSync as mkd, writeFileSync, writeFileSync as wf, utimesSync, rmSync, existsSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, sep } from "node:path";
 import { KEEP_DAYS, AUTO_DAYS, DAY_MS, newestMtime, dirSize, ageBucket, activeInstallPaths, pluginPruneCandidates, buildPlan, applyPlan, restoreBatch, purgeRetention, trashRoot, listTrashBatches } from "./claude-cleanup-lib.mjs";
@@ -128,6 +128,30 @@ test("applyPlan TOCTOU: item whose mtime changed since scan is skipped", () => {
   const items = [{ absPath: v, size: 1, category: "ephemeral", reason: "r", mtimeMs: statSync(v).mtimeMs - 999, bucket: "auto" }]; // stale recorded mtime
   const res = applyPlan({ dir: d, items, nowMs: now, ts: "T1" });
   assert.equal(res.skipped, 1); assert.equal(res.moved, 0); assert.ok(existsSync(v), "left in place");
+  rmSync(d, { recursive: true, force: true });
+});
+
+test("applyPlan writes manifest unconditionally and never orphans moved siblings when one item's move throws", () => {
+  const d = tmp(); const now = 1000 * DAY_MS;
+  const ts = "T-orphan";
+  const batchDir = join(trashRoot(d), ts);
+  mkdirSync(batchDir, { recursive: true });
+  writeFileSync(join(batchDir, "0"), "blocker"); // pre-occupy slot 0 as a file so moveInto's mkdirSync throws for the first item
+  const bad = join(d, "logs", "bad"); mkdirSync(dirname(bad), { recursive: true }); writeFileSync(bad, "b");
+  const good = join(d, "logs", "good"); writeFileSync(good, "g");
+  const items = [
+    { absPath: bad, size: 1, category: "ephemeral", reason: "r", mtimeMs: statSync(bad).mtimeMs, bucket: "auto" },
+    { absPath: good, size: 1, category: "ephemeral", reason: "r", mtimeMs: statSync(good).mtimeMs, bucket: "auto" },
+  ];
+  const res = applyPlan({ dir: d, items, nowMs: now, ts });
+  assert.equal(res.moved, 1); assert.equal(res.skipped, 1);
+  assert.ok(existsSync(bad), "item whose move threw is left in place, not orphaned");
+  assert.ok(!existsSync(good), "sibling item still moved despite the earlier throw");
+  const manifestPath = join(res.batchDir, "manifest.json");
+  assert.ok(existsSync(manifestPath), "manifest always written, even though one item threw");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  assert.equal(manifest.entries.length, 1);
+  assert.equal(manifest.entries[0].originalAbsPath, good);
   rmSync(d, { recursive: true, force: true });
 });
 

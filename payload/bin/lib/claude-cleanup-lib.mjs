@@ -155,7 +155,8 @@ function moveInto(src, destDir) {
   mkdirSync(destDir, { recursive: true });
   const dest = join(destDir, basename(src));
   try { renameSync(src, dest); }
-  catch { // cross-device: copy then remove
+  catch (err) {
+    if (err?.code !== "EXDEV") throw err; // only fall back for cross-device; anything else propagates
     const st = statSync(src);
     if (st.isDirectory()) {
       mkdirSync(dest, { recursive: true });
@@ -171,18 +172,25 @@ export function applyPlan({ dir = claudeDir(), items, nowMs, ts }) {
   mkdirSync(batchDir, { recursive: true });
   const entries = []; let moved = 0, bytes = 0, skipped = 0;
   let idx = 0;
-  for (const it of items) {
-    const st = statOr(it.absPath);
-    if (!st) { skipped++; continue; }
-    // TOCTOU: became active since scan → leave alone (allow tiny fs rounding)
-    const liveM = st.isDirectory() ? newestMtime(it.absPath) : st.mtimeMs;
-    if (Math.abs(liveM - it.mtimeMs) > 1) { skipped++; continue; }
-    const slot = join(batchDir, String(idx++)); // unique slot avoids basename collisions
-    const dest = moveInto(it.absPath, slot);
-    entries.push({ originalAbsPath: it.absPath, size: it.size, category: it.category, reason: it.reason, movedAt: nowMs, slot: basename(slot) });
-    moved++; bytes += it.size;
+  try {
+    for (const it of items) {
+      try {
+        const st = statOr(it.absPath);
+        if (!st) { skipped++; continue; }
+        // TOCTOU: became active since scan → leave alone (allow tiny fs rounding)
+        const liveM = st.isDirectory() ? newestMtime(it.absPath) : st.mtimeMs;
+        if (Math.abs(liveM - it.mtimeMs) > 1) { skipped++; continue; }
+        const slot = join(batchDir, String(idx++)); // unique slot avoids basename collisions
+        const dest = moveInto(it.absPath, slot);
+        entries.push({ originalAbsPath: it.absPath, size: it.size, category: it.category, reason: it.reason, movedAt: nowMs, slot: basename(slot) });
+        moved++; bytes += it.size;
+      } catch { skipped++; } // never let one bad item orphan already-moved siblings; original stays in place
+    }
+  } finally {
+    // Unconditional: whatever actually moved must always be recorded/restorable, even on an
+    // unexpected throw from something above the per-item try (e.g. batchDir became unwritable).
+    writeFileSync(join(batchDir, "manifest.json"), JSON.stringify({ ts, entries }, null, 2), "utf8");
   }
-  writeFileSync(join(batchDir, "manifest.json"), JSON.stringify({ ts, entries }, null, 2), "utf8");
   return { batchDir, moved, bytes, skipped };
 }
 
