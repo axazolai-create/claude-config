@@ -13,3 +13,4 @@ node_modules/
 .reference/
 .test/
 .planning/
+/.idea/
