@@ -680,17 +680,20 @@ Commit message subject: `feat(ultrapowers): apply layer with version-keyed hash 
 
 **Interfaces:**
 - Consumes: `checkUltrapowersPatches` (Task 4), manifests written by `applyUltrapowersPatches`.
-- Produces: `detectDrift({ pluginRoot, ignoreEntries, manifestDir }) -> { state: "green"|"reapply"|"extend", reasons: string[], details: { missingManifest, revertedFiles, unclassified } }`
+- Produces: `detectDrift({ pluginRoot, ignoreEntries, manifestDir }) -> { state: "green"|"reapply"|"extend"|"unknown", reasons: string[], details: { missingManifest, revertedFiles, unclassified } }`
 
-The three states, restated so the implementer does not have to re-derive them:
+The four states, restated so the implementer does not have to re-derive them:
 
 | State | Condition | Meaning |
 |---|---|---|
-| `green` | Manifest for this version exists and every live file hashes to its recorded `after` | Patches are in place |
+| `green` | Manifest for this version exists and every live file hashes to its recorded `after` | Patches are in place. Also used when the plugin is not installed at all — there is genuinely nothing to do |
 | `reapply` | No manifest for the installed version, or a file hashes to its recorded `before` | Plugin updated, or patches were lost by a reinstall |
 | `extend` | Any occurrence outside the ignore list matches no rule | Upstream describes itself in a new way our table does not know |
+| `unknown` | The detector itself failed — unreadable manifest, malformed JSON, any internal throw | The check did not run. Not an answer about the patches |
 
 `extend` outranks `reapply`: a table that cannot classify the current text would produce a wrong patch if re-applied blindly.
+
+**On `unknown` (user decision 2026-07-27, overriding the spec's plain fail-open).** The detector still never throws and never blocks a session — that constraint holds. But it must not answer `green`, because a broken detector would then be indistinguishable from a working one that found nothing wrong, and silence would read as health. `unknown` keeps the fail-open behaviour while keeping the two states nameable apart. Callers treat `unknown` as "do not apply, tell the user the check failed".
 
 - [ ] **Step 1: Write the failing test**
 
@@ -750,9 +753,26 @@ test("extend when an occurrence matches no rule, and it outranks reapply", () =>
   rmSync(root, { recursive: true, force: true });
 });
 
-test("detectDrift never throws on an unreadable plugin root", () => {
+test("an absent plugin is green, not unknown - there is genuinely nothing to do", () => {
   const d = detectDrift({ pluginRoot: join(tmpdir(), "does-not-exist-upd"), ignoreEntries: [], manifestDir: join(tmpdir(), "nope") });
-  assert.equal(typeof d.state, "string");
+  assert.equal(d.state, "green");
+  assert.match(d.reasons.join(" "), /not installed/);
+});
+
+test("an internal failure yields unknown, never green", () => {
+  const root = plugin("Superpowers is here.\n");
+  const manifestDir = join(root, "_m");
+  applyUltrapowersPatches({ pluginRoot: root, ignoreEntries: ENTRIES, manifestDir });
+  // corrupt the manifest: the detector cannot answer, and must not pretend it can
+  writeFileSync(join(manifestDir, "6.2.0.json"), "{ this is not json");
+  const d = detectDrift({ pluginRoot: root, ignoreEntries: ENTRIES, manifestDir });
+  assert.equal(d.state, "unknown");
+  assert.match(d.reasons.join(" "), /detector error/);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("detectDrift never throws", () => {
+  assert.doesNotThrow(() => detectDrift({ pluginRoot: 42, ignoreEntries: null, manifestDir: undefined }));
 });
 ```
 
@@ -764,10 +784,11 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Write the implementation**
 
 ```js
-// Three-state drift detector for the Ultrapowers rebrand. Fail-open: any internal error yields
-// state "green" with a reason, because a broken detector must never block a session.
-// "extend" outranks "reapply": re-applying a table that cannot classify the current text would
-// write a wrong patch. See RISK-ULTRAPOWERS-004.
+// Four-state drift detector for the Ultrapowers rebrand. Fail-open in the sense that matters -
+// it never throws and never blocks a session - but an internal failure yields "unknown", not
+// "green": a broken detector reporting the same word as a healthy one turns silence into a false
+// health signal. "extend" outranks "reapply": re-applying a table that cannot classify the
+// current text would write a wrong patch. See RISK-ULTRAPOWERS-004.
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -814,7 +835,7 @@ export function detectDrift({ pluginRoot, ignoreEntries, manifestDir }) {
     }
     return { state: "green", reasons: [], details };
   } catch (e) {
-    return { state: "green", reasons: [`detector error, failing open: ${e.message}`], details };
+    return { state: "unknown", reasons: [`detector error, check did not run: ${e.message}`], details };
   }
 }
 ```
@@ -822,7 +843,7 @@ export function detectDrift({ pluginRoot, ignoreEntries, manifestDir }) {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `node --test payload/hooks/lib/ultrapowers-patch-drift.test.mjs`
-Expected: PASS, 5 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1046,6 +1067,13 @@ console.log(`Plugin: ${pluginRoot}`);
 console.log(`Drift state: ${drift.state}`);
 for (const r of drift.reasons) console.log(`  - ${r}`);
 
+if (drift.state === "unknown") {
+  console.log("");
+  console.log("The drift check did not run - this is not a statement about the patches.");
+  console.log("Fix the cause above, then re-run. Nothing was applied.");
+  process.exit(0);
+}
+
 if (drift.state === "extend") {
   console.log("");
   console.log("The rename table does not cover every occurrence. Extend it before applying -");
@@ -1097,6 +1125,8 @@ Run the Ultrapowers patch checker and present its findings.
    - `reapply` - the plugin was updated or reinstalled. Tell the user to run `/init-stack`.
    - `extend` - upstream has occurrences the rename table does not cover. Show the file:line list
      and stop; do NOT apply, because a partial rebrand hides the gap.
+   - `unknown` - the check itself failed. Say exactly that: it is not a verdict on the patches.
+     Show the reason and stop. Never present `unknown` as if it were `green`.
 3. Print the ignore list with the reason for every entry, from
    `ultrapowers-patches/ignore.json`. Never summarize it away - a silent skip is the defect this
    list exists to prevent.
