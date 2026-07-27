@@ -101,3 +101,20 @@ test("regraftFallow never throws and no-ops when nothing resolves", () => {
   assert.equal(r.ok, false);
   assert.equal(r.reason, "no-skill-file");
 });
+
+test("regraftFallow success path grafts a resolved skill file", () => {
+  const d = tmp();
+  const install = join(d, "cache", "superpowers", "6.2.0");
+  const rev = join(install, "skills", "requesting-code-review");
+  mkdirSync(rev, { recursive: true });
+  writeFileSync(join(rev, "code-reviewer.md"), REVIEWER);
+  mkdirSync(join(d, "plugins"), { recursive: true });
+  writeFileSync(join(d, "plugins", "installed_plugins.json"), JSON.stringify({
+    plugins: { "superpowers@claude-plugins-official": [{ installPath: install }] },
+  }));
+  const r = regraftFallow({ claudeDir: d });
+  assert.equal(r.ok, true);
+  assert.equal(r.applied, true);
+  assert.ok(readFileSync(join(rev, "code-reviewer.md"), "utf8").includes(SENTINEL));
+  rmSync(d, { recursive: true, force: true });
+});
