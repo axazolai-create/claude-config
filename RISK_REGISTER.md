@@ -568,3 +568,33 @@
   planning.
 - **Residual:** none accepted yet — this risk is not closed until Stage 2 ships with the guard
   test green, or is deferred to its own spec.
+
+## RISK-CLEANUP-001 — `/claude-cleanup` could cause irreversible loss of user data
+
+- **Status:** Open (mitigated by design)
+- **Context:** `/claude-cleanup` scans and moves files under `~/.claude` (stale session
+  temp dirs, orphaned plugin state, prunable caches, etc.). A bug in scope, timing, or move
+  logic could destroy live config, active session state, or per-project data with no way to
+  get it back.
+- **Mitigation:** five independent layers, all implemented in Tasks 1-6. (1) **Allowlist-
+  only scan** — `buildPlan` never considers anything outside enumerated category roots, so
+  active config, `state/`, venvs (`security/`, `context-mode/`), and per-project `memory/`
+  are structurally out of scope, not merely filtered out after the fact. (2) **Dry-run-
+  first** — the command always renders a grouped report before anything moves; `apply`
+  requires explicit user confirmation. (3) **Reversible by construction** — apply MOVES
+  (never deletes) into a timestamped `~/.claude/.cleanup-trash/<ts>/` batch with a
+  `manifest.json`; batches auto-purge only after a 7-day retention window; `restore --ts
+  <ts>` moves everything back (no-clobber). (4) **Running-session guard** — a `<7d` KEEP
+  window, an explicit `--exclude-session <uuid>` flag, and a TOCTOU mtime-changed skip
+  re-checked at apply time. (5) **Plugin-prune fail-safe** — an unreadable or mis-shaped
+  `installed_plugins.json` causes the pruner to prune nothing rather than guess.
+- **Residual:** two known gaps, both accepted. (a) A cross-device **directory** move
+  interrupted mid-recursion can leave stray copies in the batch slot that are not recorded
+  in `manifest.json` — the bytes physically survive under `.cleanup-trash` but are not
+  auto-restorable via `restore`. Pre-existing edge case; possible future hardening is
+  copy-all-then-remove for directories instead of a rename/move. (b) The `--exclude-slug`,
+  `--keep-under`, and `--older-than` CLI flags are parsed but not yet wired into
+  `buildPlan` — they are no-ops today. Not a safety gap on its own (the running session is
+  still protected by `--exclude-session <uuid>` plus the age-based KEEP window, independent
+  of these flags), but misleading CLI surface. Flagged for a follow-up: either wire them in
+  or drop them.
