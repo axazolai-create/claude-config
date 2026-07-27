@@ -135,6 +135,20 @@ const FORBIDDEN = [
   "task-lifecycle-probe", "init-mcp",
 ];
 
+// Budgeted exceptions: token -> how many occurrences of it this file is allowed to carry.
+// A budget, not an exemption - exceeding it still fails, so a NEW leak of the same token is
+// caught while the reviewed one is permitted.
+//
+// `commands/init-stack.md` is unified across profiles and legitimately names GSD once: the
+// `.planning/config.json` `model_overrides` re-migration it documents (Phase 5 Part B, 0db8c6b)
+// genuinely ships in lite - `bin/init-stack.mjs` and `bin/lib/model-migration.mjs` are both in
+// the resolved lite set, verified 2026-07-27. Deleting the sentence would document lite as not
+// doing something it does; rewording it to drop the word would only hide the token, since
+// `.planning/` IS the GSD marker. The other twelve tokens stay fully enforced on this file.
+const TOKEN_BUDGET = {
+  "commands/init-stack.md": { gsd: 1 },
+};
+
 // Scope is deliberately NOT all of `skills/` — `skills/update-changelog/**` legitimately
 // mentions "GSD" (it's the changelog-writer's own instruction to STRIP any mention of GSD from
 // user-facing release notes, e.g. SKILL.md's "of every trace of AI tooling, GSD, ..." and
@@ -149,7 +163,16 @@ test("purity: resolved lite rules-src + overlay docs carry no forbidden tokens",
   const bad = [];
   for (const rel of scope) {
     const text = readFileSync(v.srcFor(rel), "utf8").toLowerCase();
-    for (const tok of FORBIDDEN) if (text.includes(tok)) bad.push(`${rel}: ${tok}`);
+    const budget = TOKEN_BUDGET[rel] ?? {};
+    for (const tok of FORBIDDEN) {
+      const found = text.split(tok).length - 1;
+      const allowed = budget[tok] ?? 0;
+      if (found > allowed) {
+        bad.push(allowed === 0
+          ? `${rel}: ${tok}`
+          : `${rel}: ${tok} x${found} (budget ${allowed})`);
+      }
+    }
   }
   assert.deepEqual(bad, [], bad.join("\n"));
 });
