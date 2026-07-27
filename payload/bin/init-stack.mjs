@@ -21,6 +21,7 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { STACK_PATHS, detect } from "./lib/stack-markers.mjs";
+import { migrateProjectModelConfig } from "./lib/model-migration.mjs";
 
 export { STACK_PATHS };
 
@@ -496,6 +497,27 @@ export function apply(enableIds, removeIds, stacks, opts = {}) {
   return 0;
 }
 
+// ---------- §6.3 project model-config re-migration (Phase 5 Part B) ----------
+// Surgically bring a GSD project's .planning/config.json model_overrides up to the current Opus 5
+// defaults (five roles haiku->sonnet, gsd-verifier sonnet->opus). Guarded on the file existing,
+// so a non-GSD project (or a base/lite user) is a silent no-op. Non-clobber: only a value still
+// holding the known-old default moves; a user-chosen value is left alone (see model-migration.mjs).
+// Runs on every explicit /init-stack invocation, independent of gsd-config-patch.mjs's one-time
+// gsdModelConfigPatched flag - a malformed config is left untouched, never corrupted.
+export function migrateProjectModelConfigFile(root = process.cwd()) {
+  const p = join(root, ".planning", "config.json");
+  if (!existsSync(p)) return { changes: [] };
+  let config;
+  try { config = JSON.parse(readFileSync(p, "utf8") || "{}"); }
+  catch { return { changes: [] }; }
+  const { config: next, changes } = migrateProjectModelConfig(config);
+  if (!changes.length) return { changes };
+  writeFileSync(p, JSON.stringify(next, null, 2) + "\n", "utf8");
+  console.log(`Re-migrated ${relative(root, p) || p} model_overrides to current defaults:`);
+  for (const c of changes) console.log(`  - ${c.role}: ${c.from} -> ${c.to}`);
+  return { changes };
+}
+
 // ---------- subprocess (install/marketplace-add) ----------
 // CLAUDE_INIT_STACK_SKIP_SUBPROCESS=1 short-circuits every actual shell-out (tests; hermetic
 // dry-runs) - mirrors setup.mjs's CLAUDE_SETUP_SKIP_PLUGINS=1 pattern for the same reason: never
@@ -837,6 +859,11 @@ function mainInner(argv, opts) {
     console.log(JSON.stringify({ id: pid, state }));
     return 0;
   }
+
+  // §6.3 re-migration: refresh this project's .planning/config.json model_overrides to current
+  // defaults (GSD projects only; silent no-op otherwise). Runs before stack work so it still
+  // fires in a GSD project with no detectable code stack.
+  migrateProjectModelConfigFile(root);
 
   const stacks = detect(root);
   if (!stacks.length) {

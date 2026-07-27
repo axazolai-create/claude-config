@@ -41,6 +41,7 @@ import { createInterface } from "node:readline";
 import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
 import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
+import { migrateSettingsModel } from "./payload/bin/lib/model-migration.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 
@@ -894,6 +895,23 @@ async function main() {
       // takeover of statusLine, but leave the user's own custom statusLine untouched.
       const curCmd = merged.statusLine && merged.statusLine.command;
       if (typeof curCmd === "string" && curCmd.includes("gsd-context-meter")) delete merged.statusLine;
+    }
+
+    // §6.3 Part B: a superseded session model (e.g. claude-opus-4-8) migrates to the current
+    // tier-preserving id. Aliases (opus/sonnet/...) and current ids are left as-is. Interactive:
+    // prompt, and on yes the new value rides the unified settings diff+choose below. BULK/non-TTY:
+    // report only - never rewrite the user's chosen session model unattended.
+    if (typeof merged.model === "string") {
+      const mm = migrateSettingsModel(merged.model);
+      if (mm.changed) {
+        if (INTERACTIVE) {
+          const yes = await ask(`\n    model "${mm.from}" looks superseded - migrate to "${mm.value}"? (y/N) > `);
+          if (yes.startsWith("y")) { merged.model = mm.value; summary.push(`model    ${mm.from} -> ${mm.value}`); }
+          else summary.push(`model    kept ${mm.from} (superseded; set ${mm.value} by hand to migrate)`);
+        } else {
+          summary.push(`model    ${mm.from} looks superseded - re-run interactively or set ${mm.value} by hand`);
+        }
+      }
     }
 
     const curStr = JSON.stringify(cur, null, 2);

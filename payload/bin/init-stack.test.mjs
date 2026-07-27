@@ -26,6 +26,7 @@ import {
   grab,
   main,
   readMaxPluginTier,
+  migrateProjectModelConfigFile,
 } from "./init-stack.mjs";
 
 const REPO_TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "setting-templates");
@@ -520,4 +521,67 @@ test("readMaxPluginTier: corrupt (invalid-JSON) manifest degrades to no cap, doe
   writeFileSync(join(configDir, "state", "bundle-manifest.json"), "{ not valid json", "utf8");
   assert.doesNotThrow(() => readMaxPluginTier(configDir));
   assert.equal(readMaxPluginTier(configDir), undefined);
+});
+
+// ---------- §6.3 project model-config re-migration (Phase 5 Part B) ----------
+function makeProjectRoot(configJson) {
+  const root = mkdtempSync(join(tmpdir(), "init-stack-planning-"));
+  if (configJson !== undefined) {
+    mkdirSync(join(root, ".planning"), { recursive: true });
+    writeFileSync(join(root, ".planning", "config.json"), configJson, "utf8");
+  }
+  return root;
+}
+
+test("migrateProjectModelConfigFile: rewrites old §6.3 overrides in .planning/config.json", () => {
+  const root = makeProjectRoot(JSON.stringify({
+    model_overrides: {
+      "gsd-pattern-mapper": "haiku", "gsd-ui-auditor": "haiku",
+      "gsd-verifier": "sonnet", "gsd-planner": "opus",
+    },
+  }, null, 2));
+  try {
+    const { changes } = migrateProjectModelConfigFile(root);
+    assert.equal(changes.length, 3);
+    const written = JSON.parse(readFileSync(join(root, ".planning", "config.json"), "utf8"));
+    assert.equal(written.model_overrides["gsd-pattern-mapper"], "sonnet");
+    assert.equal(written.model_overrides["gsd-ui-auditor"], "sonnet");
+    assert.equal(written.model_overrides["gsd-verifier"], "opus");
+    assert.equal(written.model_overrides["gsd-planner"], "opus", "untouched role preserved");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("migrateProjectModelConfigFile: idempotent second run makes no changes", () => {
+  const root = makeProjectRoot(JSON.stringify({ model_overrides: { "gsd-verifier": "sonnet" } }));
+  try {
+    migrateProjectModelConfigFile(root);
+    const before = readFileSync(join(root, ".planning", "config.json"), "utf8");
+    const { changes } = migrateProjectModelConfigFile(root);
+    assert.deepEqual(changes, []);
+    assert.equal(readFileSync(join(root, ".planning", "config.json"), "utf8"), before, "no rewrite");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("migrateProjectModelConfigFile: no .planning/config.json is a silent no-op", () => {
+  const root = makeProjectRoot(undefined);
+  try {
+    assert.deepEqual(migrateProjectModelConfigFile(root).changes, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("migrateProjectModelConfigFile: malformed config is left untouched, never throws", () => {
+  const root = makeProjectRoot("{ not valid json");
+  try {
+    assert.doesNotThrow(() => migrateProjectModelConfigFile(root));
+    assert.deepEqual(migrateProjectModelConfigFile(root).changes, []);
+    assert.equal(readFileSync(join(root, ".planning", "config.json"), "utf8"), "{ not valid json");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

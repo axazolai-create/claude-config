@@ -21,6 +21,9 @@ Any step that touches `.claude/settings.json` or the generated rules snapshot
 Run: `node ~/.claude/bin/init-stack.mjs`
 Parse the `STATUS_JSON` block (`stacks`, `plugins[]` with `state`, `present[]` already-enabled) and
 show me the human report (state per plugin, and which are already enabled).
+This same run also re-migrates a GSD project's `.planning/config.json` `model_overrides` to the
+current model defaults (surgical, non-clobbering; silent no-op when there's no `.planning/config.json`).
+Surface any `Re-migrated ...` lines it prints.
 
 ## 2. Stack-rules snapshot (build if missing or stale)
 `.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
