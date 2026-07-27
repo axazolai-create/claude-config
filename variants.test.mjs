@@ -109,12 +109,13 @@ test("lite drops base's universal infra + neo4j", () => {
 test("full variant is identity over payload/ (minus alwaysExclude)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
-  // full ships everything except the alwaysExclude families: the 2 task-lifecycle-probe
-  // entries (.mjs + .test.mjs) and every claude-md/ fragment (build input for
-  // assemble-claude-md.mjs — CLAUDE.md itself is assembled by setup.mjs, never copied as a
-  // payload rel). Nothing else leaks in.
-  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
+  // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
+  // .test.mjs), every **.test.mjs (tests are never shipped to any profile), and every
+  // claude-md/ fragment (build input for assemble-claude-md.mjs — CLAUDE.md itself is
+  // assembled by setup.mjs, never copied as a payload rel). Nothing else leaks in.
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/") || r.endsWith(".test.mjs")),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
+  assert.ok([...v.excludedSet].some((r) => r.endsWith(".test.mjs")), "**.test.mjs must be excluded from full");
   assert.ok([...v.excludedSet].some((r) => /task-lifecycle-probe/.test(r)), "task-lifecycle-probe must still be excluded");
   assert.ok([...v.excludedSet].some((r) => r.startsWith("claude-md/")), "claude-md/ fragments must be excluded from full too");
 });
@@ -218,14 +219,15 @@ test("optional groups are a no-op on full (already identity)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
   assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
   // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
-  // .test.mjs) and the claude-md/ fragments (build input, see the test above), nothing else
-  // leaks in. Non-vacuous: also assert the excluded set is non-empty and both families are
-  // actually present (not just "everything present passes an all-() over an empty set").
+  // .test.mjs), every **.test.mjs, and the claude-md/ fragments (build input, see the test
+  // above), nothing else leaks in. Non-vacuous: also assert the excluded set is non-empty and
+  // both families are actually present (not just "everything present passes an all-() over an empty set").
   assert.ok(v.excludedSet.size > 0, "excludedSet must not be empty");
   assert.ok([...v.excludedSet].some((r) => /task-lifecycle-probe/.test(r)), "task-lifecycle-probe must still be excluded");
   assert.ok([...v.excludedSet].some((r) => r.startsWith("claude-md/")), "claude-md/ fragments must be excluded from full too");
-  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/")),
+  assert.ok([...v.excludedSet].every((r) => /task-lifecycle-probe/.test(r) || r.startsWith("claude-md/") || r.endsWith(".test.mjs")),
     `unexpected exclusions on full: ${[...v.excludedSet].join(", ")}`);
+  assert.ok([...v.excludedSet].some((r) => r.endsWith(".test.mjs")), "**.test.mjs must be excluded from full");
 });
 
 test("hook registrations: lite keeps exactly the 7 lite hooks and no statusLine", () => {
