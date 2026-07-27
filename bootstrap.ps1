@@ -1,13 +1,13 @@
 #Requires -Version 5.1
 # Bootstrap installer for the curated ~/.claude config (Windows).
 # Fetches the package tarball (no git needed) and runs setup.mjs.
-#   irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+#   irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 #   $env:CLAUDE_CONFIG_REF='v1.0.0'; irm .../bootstrap.ps1 | iex     # pin to a release tag
 #   $env:CLAUDE_SETUP_ARGS='--replace-all'; irm .../bootstrap.ps1 | iex   # forward flags to setup.mjs
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'axazolai-create/claude-config'
+$Repo = 'axazolai/claude-config'
 $Ref  = if ($env:CLAUDE_CONFIG_REF) { $env:CLAUDE_CONFIG_REF } else { 'master' }
 $SetupArgs = if ($env:CLAUDE_SETUP_ARGS) { $env:CLAUDE_SETUP_ARGS -split '\s+' } else { @() }
 

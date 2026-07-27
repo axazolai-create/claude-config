@@ -44,7 +44,7 @@ async function main() {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch("https://api.github.com/repos/axazolai-create/claude-config/commits/master",
+    const res = await fetch("https://api.github.com/repos/axazolai/claude-config/commits/master",
       { signal: ctrl.signal, headers: { "User-Agent": "claude-config-update-check" } });
     clearTimeout(t);
     if (res.ok) {
@@ -72,7 +72,7 @@ export async function checkBundleUpdate(claudeDir) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch("https://api.github.com/repos/axazolai-create/claude-config/commits/master",
+    const res = await fetch("https://api.github.com/repos/axazolai/claude-config/commits/master",
       { signal: ctrl.signal, headers: { "User-Agent": "claude-config-update-check" } });
     if (!res.ok) return null;
     const j = await res.json();

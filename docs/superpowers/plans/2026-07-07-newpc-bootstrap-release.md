@@ -10,9 +10,9 @@
 
 ## Global Constraints
 
-- Repo: `axazolai-create/claude-config`, default branch `master`.
+- Repo: `axazolai/claude-config`, default branch `master`.
 - Default bootstrap ref: `master` HEAD; overridable to a tag/SHA.
-- Download URL form (accepts branch, tag, or SHA): `https://github.com/axazolai-create/claude-config/archive/<ref>.tar.gz`.
+- Download URL form (accepts branch, tag, or SHA): `https://github.com/axazolai/claude-config/archive/<ref>.tar.gz`.
 - Cross-platform mandatory: both scripts ship, identical behavior.
 - Hard prerequisite on target PC: `node` (fail loudly if missing). Also need `tar` + a downloader (`curl` POSIX / `Invoke-WebRequest` Windows) — all present on Win10 1803+/macOS/Linux.
 - `bootstrap.sh`: `set -euo pipefail`, quoted expansions, `command -v` dep checks, `trap` cleanup, shellcheck-clean.
@@ -28,7 +28,7 @@
 - Create: `bootstrap.sh`
 
 **Interfaces:**
-- Produces: a script fetchable at `raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh`, invoked as `curl -fsSL <url> | bash` (optionally `| bash -s -- --ref v1.0.0 [setup flags]`). Honors `REF` env; forwards non-`--ref` args to `setup.mjs`.
+- Produces: a script fetchable at `raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh`, invoked as `curl -fsSL <url> | bash` (optionally `| bash -s -- --ref v1.0.0 [setup flags]`). Honors `REF` env; forwards non-`--ref` args to `setup.mjs`.
 
 - [ ] **Step 1: Write `bootstrap.sh`**
 
@@ -36,12 +36,12 @@
 #!/usr/bin/env bash
 # Bootstrap installer for the curated ~/.claude config.
 # Fetches the package tarball (no git needed) and runs setup.mjs.
-#   curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash
 #   curl -fsSL .../bootstrap.sh | bash -s -- --ref v1.0.0        # pin to a release tag
 #   curl -fsSL .../bootstrap.sh | bash -s -- --replace-all       # forward flags to setup.mjs
 set -euo pipefail
 
-REPO="axazolai-create/claude-config"
+REPO="axazolai/claude-config"
 REF="${REF:-master}"
 SETUP_ARGS=()
 
@@ -114,13 +114,13 @@ git commit -m "feat(bootstrap): add POSIX tarball installer for new-PC setup"
 #Requires -Version 5.1
 # Bootstrap installer for the curated ~/.claude config (Windows).
 # Fetches the package tarball (no git needed) and runs setup.mjs.
-#   irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+#   irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 #   $env:CLAUDE_CONFIG_REF='v1.0.0'; irm .../bootstrap.ps1 | iex     # pin to a release tag
 #   $env:CLAUDE_SETUP_ARGS='--replace-all'; irm .../bootstrap.ps1 | iex   # forward flags to setup.mjs
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'axazolai-create/claude-config'
+$Repo = 'axazolai/claude-config'
 $Ref  = if ($env:CLAUDE_CONFIG_REF) { $env:CLAUDE_CONFIG_REF } else { 'master' }
 $SetupArgs = if ($env:CLAUDE_SETUP_ARGS) { $env:CLAUDE_SETUP_ARGS -split '\s+' } else { @() }
 
@@ -223,20 +223,20 @@ git commit -m "chore(setup): treat bootstrap.sh/ps1 as installer-meta (do not co
 
 ```
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 ```
 
 По умолчанию тянется `master` HEAD. Закрепиться на релиз-тег:
 
 ```
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash -s -- --ref v1.0.0
+curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash -s -- --ref v1.0.0
 
 # Windows PowerShell
-$env:CLAUDE_CONFIG_REF='v1.0.0'; irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+$env:CLAUDE_CONFIG_REF='v1.0.0'; irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 ```
 
 Проброс флагов в `setup.mjs` (напр. неинтерактивная замена): POSIX — `… | bash -s -- --replace-all`;
@@ -246,11 +246,11 @@ Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
 ```
 # Linux / macOS
-curl -fsSLO https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh
+curl -fsSLO https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh
 less bootstrap.sh && bash bootstrap.sh
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
 notepad bootstrap.ps1; .\bootstrap.ps1
 ```
 
@@ -343,13 +343,13 @@ git push origin v1.0.0
 
 - [ ] **Step 4: Verify the release tarball is live**
 
-Run: `curl -fsSL -o /dev/null -w "%{http_code}\n" https://github.com/axazolai-create/claude-config/archive/refs/tags/v1.0.0.tar.gz`
+Run: `curl -fsSL -o /dev/null -w "%{http_code}\n" https://github.com/axazolai/claude-config/archive/refs/tags/v1.0.0.tar.gz`
 Expected: `200`.
 
 - [ ] **Step 5 (manual, post-push): real end-to-end smoke test** on a clean shell / VM:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash -s -- --dry-run
 ```
 Expected: downloads, extracts, runs `setup.mjs --dry-run`, prints a plan with no errors.
 

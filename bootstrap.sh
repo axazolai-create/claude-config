@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Bootstrap installer for the curated ~/.claude config.
 # Fetches the package tarball (no git needed) and runs setup.mjs.
-#   curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash
 #   curl -fsSL .../bootstrap.sh | bash -s -- --ref v1.0.0        # pin to a release tag
 #   curl -fsSL .../bootstrap.sh | bash -s -- --replace-all       # forward flags to setup.mjs
 #   env vars (parity with Windows): CLAUDE_CONFIG_REF=<ref>  CLAUDE_SETUP_ARGS="<flags>"
 set -euo pipefail
 
-REPO="axazolai-create/claude-config"
+REPO="axazolai/claude-config"
 REF="${CLAUDE_CONFIG_REF:-${REF:-master}}"
 SETUP_ARGS=()
 
