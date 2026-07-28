@@ -527,7 +527,14 @@ node setup.mjs --skip-all      # all conflicts -> skip
 node setup.mjs --dry-run       # show what would be done, without writing
 node setup.mjs --md            # diffs as markdown ```diff
 node setup.mjs --doctor        # check registered hook paths
+node setup.mjs --uninstall-gsd # base/lite: move a foreign gsd-core to .cleanup-trash (reversible)
 ```
+
+`--uninstall-gsd` deliberately does **not** follow from `--replace-all`/`--merge-all`: those flags
+are about this bundle's own files, while gsd-core is a separate product, so removing it always
+needs its own consent. Outside a terminal and without the flag the step only prints a report.
+Nothing is deleted — everything moves into a dated `.cleanup-trash` batch (7-day rollback, the
+commands are printed on the spot); `~/.gsd/` and every project's `.planning/` are never touched.
 
 If run **not in a terminal** and with no flag, the default action for existing non-scripts is
 **merge**: `.json` is genuinely merged, curated `.md`/text is left as-is (nothing is written,

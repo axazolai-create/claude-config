@@ -26,12 +26,14 @@
  *     choice, etc.) that must never be silently clobbered. Same no-backup rule on (r)eplace.
  *
  * Flags (non-interactive / CI): --merge-all | --replace-all | --skip-all | --dry-run
+ *   --uninstall-gsd is deliberately NOT one of the bulk flags: those govern THIS bundle's own
+ *   files, while gsd-core is a separate product, so removing it always needs its own consent.
  * In a non-TTY without a bulk flag, curated/JSON conflicts default to MERGE (additive for JSON;
  * a no-op that leaves your file untouched for curated text - see above). This installer never
  * writes `.new` or `.bak` side files anywhere under ~/.claude - a diff is either shown for you
  * to act on, or the change is applied directly with no backup.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, readdirSync, rmSync, realpathSync, copyFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -42,6 +44,8 @@ import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
 import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
 import { migrateSettingsModel } from "./payload/bin/lib/model-migration.mjs";
+import { gsdCorePresent, buildGsdInventory, filterGsdHooks } from "./payload/bin/lib/gsd-core-detect.mjs";
+import { applyPlan, purgeRetention, trashRoot } from "./payload/bin/lib/claude-cleanup-lib.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
 import { knownMarketplaces } from "./payload/bin/init-stack.mjs";
@@ -77,6 +81,10 @@ const BULK = argv.has("--replace-all") ? "replace"
           : argv.has("--merge-all")   ? "merge"
           : argv.has("--skip-all")    ? "skip" : null;
 const DRY = argv.has("--dry-run");
+// Scripted consent for removing a FOREIGN gsd-core install. Never derived from BULK: --replace-all
+// /--merge-all say what to do with this bundle's own files, and stretching them over another
+// product would be consent the user never gave.
+const UNINSTALL_GSD = argv.has("--uninstall-gsd");
 const VARIANT_ARG = (() => {
   const a = [...argv].find((x) => x.startsWith("--variant="));
   return a ? a.slice("--variant=".length) : null;
@@ -552,6 +560,65 @@ async function pruneStale() {
     try { rmSync(d.dst, { recursive: true, force: true }); summary.push(`pruned   ${d.dst}`); }
     catch { summary.push(`prune-failed ${d.dst}`); }
   }
+}
+
+/* ---------- foreign gsd-core: report it, and offer a reversible removal (base/lite only) ----------
+ * gsd-core is a separate product installed by /gsd-update, not by this bundle. On base/lite it has
+ * no place here, but nothing about that justifies deleting it: every removal is a MOVE into the
+ * same .cleanup-trash batch /claude-cleanup already restores and expires after 7 days, and the
+ * decision is always the user's (default no; a non-TTY run reports and stops). Reach is bounded by
+ * buildGsdInventory, which only enumerates paths under CDIR and subtracts everything this run's
+ * manifest claims - so ~/.gsd/ and every project's .planning/ are out of range by construction,
+ * and no file this bundle owns can ever land in the batch. */
+async function detectForeignGsdCore() {
+  if (VARIANT === "full" || !gsdCorePresent(CDIR)) return;
+  const { items, categories, totalBytes } =
+    buildGsdInventory({ dir: CDIR, manifestRels: manifestNow.map((f) => f.rel) });
+  if (!items.length) return;
+
+  const version = safe(() => readFileSync(join(CDIR, "gsd-core", "VERSION"), "utf8").trim()) || "unknown";
+  log(`\ngsd-core ${version} is installed here and is not part of this bundle:`);
+  for (const c of categories) log(`  ${c.name.padEnd(10)} ${String(c.count).padStart(3)}  ${Math.round(c.bytes / 1024)} KB`);
+  log(`  total ${Math.round(totalBytes / 1024)} KB`);
+  log(`  ~/.gsd/ and every project's .planning/ are never touched.`);
+
+  if (!process.stdin.isTTY && !UNINSTALL_GSD) {
+    log(`  Reporting only (non-interactive). Run with --uninstall-gsd to remove it.`);
+    return;
+  }
+  if (!UNINSTALL_GSD && (await ask("  Move all of it to the cleanup trash? (y/N) > "))[0] !== "y") return;
+  if (DRY) { log(`  [dry-run] would move ${items.length} path(s)`); return; }
+
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const batchDir = join(trashRoot(CDIR), ts);
+  mkdirSync(batchDir, { recursive: true });
+  // Written BEFORE anything is edited, and into the batch itself so it ages out with it. This is a
+  // copy, not a moved file, which is why restoreBatch cannot put it back - see the rollback below.
+  const backup = join(batchDir, "settings.json.pre-gsd-uninstall");
+  if (existsSync(SETTINGS)) copyFileSync(SETTINGS, backup);
+
+  const res = applyPlan({ dir: CDIR, items, nowMs: Date.now(), ts });
+  log(`  moved ${res.moved} path(s), ${Math.round(res.bytes / 1024)} KB, skipped ${res.skipped}`);
+
+  if (existsSync(SETTINGS)) {
+    const curSettings = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8")));
+    if (curSettings) {
+      const { settings, removed } = filterGsdHooks(curSettings);
+      if (removed.length) {
+        writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + "\n", "utf8");
+        log(`  removed ${removed.length} gsd-* hook registration(s) from settings.json`);
+      }
+    }
+  }
+
+  // Order is load-bearing: a clean restoreBatch deletes the whole batch directory, backup included,
+  // so the settings copy has to be taken back first. It is also deliberately manual - replaying it
+  // automatically would revert every unrelated settings edit made since.
+  const fwd = (p) => p.replace(/\\/g, "/");
+  log(`  Rollback within 7 days, in this order:`);
+  log(`    cp "${fwd(backup)}" "${fwd(SETTINGS)}"`);
+  log(`    node "${fwd(join(CDIR, "bin", "claude-cleanup.mjs"))}" restore --ts ${ts}`);
+  purgeRetention({ dir: CDIR, nowMs: Date.now() });
 }
 
 // Best-effort: resolve the commit we just installed, for the update-check hook's baseline.
@@ -1134,6 +1201,10 @@ async function main() {
     pruneDroppedOptional(droppedOptional, profileDef, oldByRelEarly);
   }
   await pruneStale();
+  // After pruneStale, never before it: a file this bundle installed under `full` and no longer
+  // ships under base/lite (hooks/gsd-context-meter.mjs and friends) is pruneStale's to remove,
+  // under pruneStale's own gates - the detector must not claim it as foreign first.
+  await detectForeignGsdCore();
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
     const maxPluginTier = profilesOf(loadVariants(REPO_ROOT))[VARIANT]?.maxPluginTier;

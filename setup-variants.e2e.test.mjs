@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { resolveVariant } from "./variants.mjs";
 
@@ -216,6 +216,133 @@ test("--dry-run writes nothing for both variants", () => {
     assert.deepEqual(walk(dir), [], `dry-run wrote files (${variant})`);
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/* ---------- foreign gsd-core detector (base/lite only) ----------
+ * `run()` above is always non-TTY (spawnSync pipes stdin), so the interactive branch needs its own
+ * launcher: a driver module that forces process.stdin.isTTY before importing setup.mjs. Paired with
+ * --skip-all (BULK => INTERACTIVE=false) every OTHER prompt in setup.mjs is suppressed, so the one
+ * question the child asks is the detector's own and the scripted answer cannot be mis-consumed. */
+const TTY_DRIVER = (() => {
+  const p = join(mkdtempSync(join(tmpdir(), "cc-tty-")), "force-tty.mjs");
+  writeFileSync(p, "process.stdin.isTTY = true;\nawait import(process.env.SETUP_URL);\n");
+  return p;
+})();
+const runTty = (dir, args, answer) => spawnSync(process.execPath, [TTY_DRIVER, ...args], {
+  encoding: "utf8", input: answer, timeout: 120000,
+  env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CLAUDE_SETUP_SKIP_PLUGINS: "1",
+    SETUP_URL: pathToFileURL(join(ROOT, "setup.mjs")).href },
+});
+const GSD_FIXTURE = {
+  "gsd-core/VERSION": "0.0.0-test\n",
+  "gsd-core/lib/orchestrate.mjs": "x".repeat(3000),
+  "skills/gsd-probe/SKILL.md": "x",
+  "agents/gsd-planner.md": "x",
+  "hooks/gsd-probe.mjs": "x",
+  "hooks/lib/gsd-probe-lib.mjs": "x",
+};
+const GSD_REMOVED = ["gsd-core", "skills/gsd-probe", "agents/gsd-planner.md", "hooks/gsd-probe.mjs", "hooks/lib/gsd-probe-lib.mjs"];
+function plantGsdCore(dir) {
+  for (const [rel, body] of Object.entries(GSD_FIXTURE)) {
+    mkdirSync(join(dir, dirname(rel)), { recursive: true });
+    writeFileSync(join(dir, rel), body);
+  }
+  // Registered under an event settings.partial.json never declares, so the assertion below sees the
+  // detector's own filter and not the settings merge's claim-our-slots pass.
+  writeFileSync(join(dir, "settings.json"), JSON.stringify({
+    hooks: { Notification: [{ matcher: "", hooks: [{ type: "command", command: "node", args: [join(dir, "hooks", "gsd-probe.mjs")] }] }] },
+  }, null, 2) + "\n");
+}
+const gsdPresent = (dir) => existsSync(join(dir, "gsd-core/VERSION"));
+const batches = (dir) => (existsSync(join(dir, ".cleanup-trash")) ? readdirSync(join(dir, ".cleanup-trash")) : []);
+const NOT_REPORTED = /is installed here and is not part of this bundle/;
+
+test("--uninstall-gsd moves gsd-core to a trash batch, backs settings up first, drops only gsd hooks", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-gsd-"));
+  plantGsdCore(dir);
+
+  const dry = run(dir, ["--variant=base", "--uninstall-gsd", "--dry-run", "--skip-all"]);
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, /\[dry-run\] would move \d+ path\(s\)/);
+  assert.ok(gsdPresent(dir), "dry-run removed something");
+  assert.deepEqual(batches(dir), []);
+
+  const r = run(dir, ["--variant=base", "--uninstall-gsd", "--skip-all"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /gsd-core 0\.0\.0-test is installed here and is not part of this bundle/);
+  for (const rel of GSD_REMOVED) assert.ok(!existsSync(join(dir, rel)), `not removed: ${rel}`);
+
+  const ts = batches(dir);
+  assert.equal(ts.length, 1, `expected exactly one trash batch, got ${ts.join(", ")}`);
+  const batch = join(dir, ".cleanup-trash", ts[0]);
+  assert.ok(existsSync(join(batch, "manifest.json")), "batch manifest missing");
+  const backup = join(batch, "settings.json.pre-gsd-uninstall");
+  assert.ok(existsSync(backup), "pre-edit settings copy missing from the batch");
+  assert.equal(JSON.parse(readFileSync(backup, "utf8")).hooks.Notification.length, 1, "backup is not the PRE-edit copy");
+
+  const settings = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
+  assert.deepEqual(settings.hooks.Notification, [], "gsd hook entry not removed, or the key was deleted");
+
+  // restoreBatch deletes the whole batch (backup included), so the cp must be printed FIRST.
+  const cpAt = r.stdout.indexOf(`cp "`);
+  const restoreAt = r.stdout.indexOf(`restore --ts ${ts[0]}`);
+  assert.ok(cpAt !== -1, "rollback did not print a cp for settings.json");
+  assert.ok(restoreAt !== -1, "rollback did not print the batch restore command with this run's ts");
+  assert.ok(cpAt < restoreAt, "rollback prints restore before cp - restoring first destroys the backup");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("--replace-all is never consent to uninstall a foreign product", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-gsd-bulk-"));
+  plantGsdCore(dir);
+  const r = run(dir, ["--variant=base", "--replace-all"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, NOT_REPORTED);
+  assert.match(r.stdout, /Reporting only \(non-interactive\)/);
+  assert.ok(gsdPresent(dir), "--replace-all silently uninstalled a foreign product");
+  for (const rel of GSD_REMOVED) assert.ok(existsSync(join(dir, rel)), `removed without consent: ${rel}`);
+  assert.deepEqual(batches(dir), []);
+  assert.equal(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).hooks.Notification.length, 1,
+    "report-only must not edit settings.json");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("the detector never fires on full, nor when gsd-core is absent", () => {
+  const full = mkdtempSync(join(tmpdir(), "cc-gsd-full-"));
+  plantGsdCore(full);
+  const rf = run(full, ["--variant=full", "--uninstall-gsd", "--skip-all"]);
+  assert.equal(rf.status, 0, rf.stderr);
+  assert.doesNotMatch(rf.stdout, NOT_REPORTED);
+  assert.ok(gsdPresent(full), "full profile removed gsd-core");
+  assert.deepEqual(batches(full), []);
+  rmSync(full, { recursive: true, force: true });
+
+  const none = mkdtempSync(join(tmpdir(), "cc-gsd-none-"));
+  const rn = run(none, ["--variant=base", "--uninstall-gsd", "--skip-all"]);
+  assert.equal(rn.status, 0, rn.stderr);
+  assert.doesNotMatch(rn.stdout, NOT_REPORTED);
+  assert.deepEqual(batches(none), []);
+  rmSync(none, { recursive: true, force: true });
+});
+
+test("the interactive prompt defaults to no; only an explicit yes removes anything", () => {
+  for (const answer of ["n\n", "\n"]) {
+    const dir = mkdtempSync(join(tmpdir(), "cc-gsd-no-"));
+    plantGsdCore(dir);
+    const r = runTty(dir, ["--variant=base", "--skip-all"], answer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /Move all of it to the cleanup trash\? \(y\/N\)/);
+    assert.ok(gsdPresent(dir), `answer ${JSON.stringify(answer)} removed gsd-core`);
+    assert.deepEqual(batches(dir), []);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const yes = mkdtempSync(join(tmpdir(), "cc-gsd-yes-"));
+  plantGsdCore(yes);
+  const r = runTty(yes, ["--variant=base", "--skip-all"], "y\n");
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!gsdPresent(yes), "an explicit yes did not remove gsd-core");
+  assert.equal(batches(yes).length, 1);
+  rmSync(yes, { recursive: true, force: true });
 });
 
 test("phase3 design-stack files ship in every profile; test files excluded", () => {

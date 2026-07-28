@@ -815,3 +815,41 @@
   the fork's README and `plugin.json` description, stated as a fork rather than implied.
 - **Residual:** future releases could become unusable to us. The fork keeps working at whatever
   version we last merged, which is the whole point of holding the objects ourselves.
+
+## RISK-ULTRAPOWERS-009 — Removing foreign hook registrations weakens "only ever touch our own entries"
+
+- **Status:** Mitigated (2026-07-28, with the foreign gsd-core detector in `setup.mjs`)
+- **Context:** the settings merge in `setup.mjs` claims hook slots through `mentionsOurs(e)`, whose
+  basenames are collected dynamically from `settings.partial.json`. Foreign entries are therefore
+  safe *by construction* — the code cannot name a hook this bundle does not ship, so it cannot drop
+  one. `filterGsdHooks` deliberately breaks that property: it matches `hooks/gsd-*` by pattern and
+  removes registrations belonging to another product. It is the first code path in the installer
+  that can delete a settings entry it did not author.
+- **Mitigation:** containment rather than a stronger match. The path only runs on the `base`/`lite`
+  profiles *and* only when `~/.claude/gsd-core/VERSION` exists; the bulk flags (`--replace-all`,
+  `--merge-all`) are explicitly not consent, so scripted use needs the dedicated `--uninstall-gsd`
+  and a non-TTY run without it reports and stops; the interactive default is no. A copy of
+  `settings.json` is written into the cleanup-trash batch *before* the edit, and the exact `cp` that
+  restores it is printed. The match itself stays as narrow as it can be — `hooks/gsd-*` only, never
+  `hooks/lib/gsd-*`, because nothing registers a lib file as a hook and a broader pattern would be a
+  second place this code can reach outside its own files.
+- **Residual:** a third-party hook that happens to live at `hooks/gsd-<something>.mjs` and is not
+  gsd-core's would be de-registered along with it, on a machine that has gsd-core installed and a
+  user who consented to removing it. Reversible from the printed `cp`, and the file itself is only
+  moved, never deleted. Accepted: the alternative is reading gsd-core's own manifest, which would
+  couple this bundle to a foreign product's internal layout.
+
+## RISK-ULTRAPOWERS-010 — `/gsd-update` reinstalls gsd-core at any time
+
+- **Status:** Active (accepted, 2026-07-28)
+- **Context:** the detector only observes divergence at the moment `setup.mjs` runs. `/gsd-update`
+  is a separate tool the user can run whenever they like, and it will happily reinstall gsd-core
+  into a `base`/`lite` machine minutes after the detector removed it. Between two `setup.mjs` runs
+  the machine simply drifts, and nothing reports it.
+- **Mitigation:** none beyond re-running `node setup.mjs`, which reports the divergence again and
+  re-offers the removal. The removal is cheap to repeat because it is a move into a dated trash
+  batch, not a destructive uninstall.
+- **Residual:** deliberately not fixed. Enforcing gsd-core's absence at session start would mean a
+  hook that polices another product's installation on every session — a standing background
+  behaviour to remove software the user may have just deliberately installed. That is a worse
+  trade than periodic drift, and it is out of scope for this feature.
