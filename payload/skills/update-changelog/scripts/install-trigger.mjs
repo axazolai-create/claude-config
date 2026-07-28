@@ -40,7 +40,7 @@ export function ensurePostCommitHook(root) {
     '    *)',
     `      q="${shPath(join(HERE, 'queue.mjs'))}"`,
     '      if [ -f "$q" ] && ! node "$q" is-locked --root "$root"; then',
-    '        node "$q" append "$(git rev-parse HEAD)" --root "$root"',
+    '        node "$q" append "$(git rev-parse HEAD)" --root "$root" --classify',
     '      fi ;;',
     '  esac',
     'fi',
