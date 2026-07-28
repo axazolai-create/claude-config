@@ -88,6 +88,15 @@ session-start note flags it missing, or when the user asks for a rebuild:
    `mobile.md` and `kotlin.android.md` overlap on permissions/secrets); keep all version
    pins; copy every rule's "Avoid:" list VERBATIM — dedup may merge prose but must never
    drop an Avoid item. Write for an AI reader: terse, no narration, no history.
+
+   When more than the root carries markers, scope each rule section to the workspace it answers:
+   a `## apps/web — next` heading, then that stack's rules. Rules shared by every workspace stay
+   in one unscoped section at the top. A monorepo that states its frontend rules once, unscoped,
+   applies them to its backend too — which is how a Next rule ends up governing a Nest service.
+
+   Write rules **only for what was actually detected**. A project with no Python marker never
+   receives Python rules, and the snapshot says so explicitly — a `## Not detected` line listing
+   the layers deliberately absent — rather than leaving it to be inferred from omission.
 4. **Rewrite location-sensitive lines**: imports resolve relative to `.claude/`, so
    `@AGENTS.md` (from `node.next.md`) becomes `@../AGENTS.md` in the snapshot.
 5. **Write `<project>/.claude/stack-rules.md`** with this frontmatter (hash values come
@@ -98,10 +107,23 @@ session-start note flags it missing, or when the user asks for a rebuild:
 generated: stack-rules compiler   # machine-owned; edit rules-src and rebuild, not this file
 sourceHash: <16-hex>
 stackFingerprint: <16-hex>
-stacks: [next, telegram-node]
+stacks: {".": ["node"], "apps/web": ["next"], "apps/api": ["nest"]}
+markers: {".": ["node","pnpm-ws"], "apps/web": ["next","node"], "apps/api": ["nest","node"]}
 generatedAt: <ISO timestamp>
 ---
 ```
+
+`stacks:` and `markers:` are written as YAML flow mappings, which are also valid JSON. The
+desync check parses them with `JSON.parse` on one line, so the frontmatter can be a nested map
+without a YAML parser in a hook that must stay cheap.
+
+`markers:` is not a duplicate of `stackFingerprint`. The hash says *that* the stack changed;
+the map is what lets the next design session say *what* changed — `next appeared in apps/web`,
+`vite vanished from the root`. A hash alone cannot name either, and naming it is the whole
+value of the check.
+
+Take both values from `node ~/.claude/hooks/lib/stack-rules-check.mjs <root>`, which now
+reports `markers` per workspace. Never hand-write them.
 
 6. **Ensure `<project>/.claude/CLAUDE.md` exists** and contains a line `@stack-rules.md`.
    Write the snapshot BEFORE adding the import — a dangling import target triggers an
@@ -112,6 +134,12 @@ generatedAt: <ISO timestamp>
 8. **Gitignore**: in a git repo, ensure `.claude/stack-rules.md` is listed in `.gitignore`
    (machine-generated personal config, not for the project's repo).
 9. **Apply `templates/`** (see below).
+10. **Updating an existing snapshot after drift.** When `stack-rules-check.mjs` reports
+    `stale`, do NOT regenerate the snapshot from scratch. Add the `rules-src/` layers that
+    answer each `added` marker, remove the sections belonging to each `removed` marker, and
+    restamp `stackFingerprint` and `markers`. A full rebuild discards any hand-tuning in the
+    snapshot and produces a diff nobody can review. A `legacy` status means the snapshot
+    predates the `markers:` line: rebuild it once, fully, and it becomes comparable from then on.
 
 ## Adding a rule
 

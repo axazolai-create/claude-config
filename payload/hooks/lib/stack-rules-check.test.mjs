@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -277,6 +277,74 @@ test("workspace keys serialize in byte order, not the machine's collation order"
     '{".":["node","pnpm-ws"],"apps/aardvark":["node"],"apps/zebra":["node"],"packages/Web":["node"],"packages/tools":["node"],"packages/z-utils":["node"]}',
   );
 });
+
+// The compiler is prose, one copy per profile, and the snapshot it stamps is the only thing this
+// checker can read. A template that omits markers: - or writes it as a YAML block map - makes every
+// project it compiles permanently legacy, which no test of the checker alone can see.
+const repoRoot = join(import.meta.dirname, "..", "..", "..");
+const compilerDocs = ["payload/rules-src/README.md", "payload-lite/rules-src/README.md"];
+
+function frontmatterTemplate(relPath) {
+  const text = readFileSync(join(repoRoot, relPath), "utf8");
+  const m = text.match(/```yaml\r?\n---\r?\n([\s\S]*?)\r?\n---\r?\n```/);
+  assert.ok(m, `${relPath} documents no snapshot frontmatter`);
+  return m[1];
+}
+
+function stamp(template, root, srcDir) {
+  const markers = JSON.stringify(detectMarkersByWorkspace(root));
+  return template
+    .split(/\r?\n/)
+    .map((line) => {
+      if (line.startsWith("sourceHash:")) return `sourceHash: ${computeSourceHash(srcDir)}`;
+      if (line.startsWith("stackFingerprint:")) return `stackFingerprint: ${computeStackFingerprint(root)}`;
+      if (line.startsWith("markers:")) return `markers: ${markers}`;
+      if (line.startsWith("generatedAt:")) return "generatedAt: 2026-07-28T00:00:00.000Z";
+      return line;
+    })
+    .join("\n");
+}
+
+const compilableTrees = {
+  "a repository with no workspaces": { "package.json": pkg, "next.config.ts": "" },
+  "a monorepo with several workspaces": {
+    "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+    "package.json": pkg,
+    "apps/web/package.json": pkg,
+    "apps/web/next.config.ts": "",
+    "apps/api/package.json": pkg,
+    "apps/api/nest-cli.json": "{}",
+  },
+  "a workspace with no stack of its own": {
+    "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+    "package.json": pkg,
+    "apps/blank/package.json": pkg,
+  },
+};
+
+for (const doc of compilerDocs) {
+  test(`${doc} documents stacks and markers as workspace-keyed flow mappings`, () => {
+    const template = frontmatterTemplate(doc);
+    for (const key of ["stacks", "markers"]) {
+      const line = template.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+      assert.ok(line, `${doc} documents no ${key}: line`);
+      const value = JSON.parse(line[1]);
+      assert.ok(value && typeof value === "object" && !Array.isArray(value), `${doc}: ${key} is not a mapping`);
+      assert.ok("." in value, `${doc}: ${key} has no root key`);
+    }
+  });
+
+  for (const [tree, files] of Object.entries(compilableTrees)) {
+    test(`a snapshot compiled from ${doc} reads ok for ${tree}`, () => {
+      const root = repo(files);
+      const src = emptySrc();
+      snapshot(root, stamp(frontmatterTemplate(doc), root, src));
+      const r = checkStackRules(root, src);
+      assert.equal(r.status, "ok");
+      assert.deepEqual([r.added, r.removed], [[], []]);
+    });
+  }
+}
 
 test("a markers line that runs past two kilobytes is still compared", () => {
   const files = { "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\n", "package.json": pkg };
