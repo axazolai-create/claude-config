@@ -13,7 +13,7 @@ touched, tagged `vX.Y.Z`.
 
 ## 0. Guardrail — monorepo check, then React/Next
 
-Run `node .claude/skills/update-changelog/scripts/list-workspaces.mjs` from the repo root
+Run `node ~/.claude/skills/update-changelog/scripts/list-workspaces.mjs` from the repo root
 first. If `isMonorepo` is `true` (2+ directories with their own `package.json`), stop here
 and follow **Monorepo mode** below instead of the rest of this section — it re-uses steps
 1–4 per workspace, so read those first, but the outer flow (which commits touch which part,
@@ -21,7 +21,7 @@ how versions bump, how the final commit is composed) is different.
 
 If `isMonorepo` is `false`, continue as a single project:
 
-Run `node .claude/skills/update-changelog/scripts/detect-project.mjs` from the repo root.
+Run `node ~/.claude/skills/update-changelog/scripts/detect-project.mjs` from the repo root.
 If `isReactOrNext` is `false`, stop and tell the user this skill only applies to React/Next
 projects — do not proceed.
 
@@ -50,7 +50,7 @@ stop — don't touch any file.
 ## 2. Gather the commit range
 
 ```
-node .claude/skills/update-changelog/scripts/list-commits.mjs --branch <branch> --since <startHash>
+node ~/.claude/skills/update-changelog/scripts/list-commits.mjs --branch <branch> --since <startHash>
 ```
 
 Returns oldest-first JSON: `[{ hash, subject, body }, ...]`. This walks **full history**
@@ -190,7 +190,7 @@ Build the entries list **newest-first** (reverse of processing order, matching h
 Then apply it:
 
 ```
-node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-path>
+node ~/.claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-path>
 ```
 
 This prepends the entries to `changelog.json` (creating it at the repo root if it doesn't
@@ -241,8 +241,8 @@ commits aren't scoped to one workspace ahead of time).
 ### M2. Gather the commit range + which files each commit touched
 
 ```
-node .claude/skills/update-changelog/scripts/list-commits.mjs --branch <branch> --since <startHash>
-node .claude/skills/update-changelog/scripts/list-changed-files.mjs --branch <branch> --since <startHash>
+node ~/.claude/skills/update-changelog/scripts/list-commits.mjs --branch <branch> --since <startHash>
+node ~/.claude/skills/update-changelog/scripts/list-changed-files.mjs --branch <branch> --since <startHash>
 ```
 
 The second call returns `{ "<hash>": ["apps/backend/src/models/user.ts", ...], ... }` — look
@@ -283,9 +283,9 @@ Build one entries-list + `finalVersion` per **destination** part (same shape as 
 apply each with its own `--root`:
 
 ```
-node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-web.json> --root apps/web
-node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-backend.json> --root apps/backend
-node .claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-mobile.json> --root apps/mobile
+node ~/.claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-web.json> --root apps/web
+node ~/.claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-backend.json> --root apps/backend
+node ~/.claude/skills/update-changelog/scripts/write-changelog.mjs --entries-file <scratch-mobile.json> --root apps/mobile
 ```
 
 (Only for parts that are destinations — a source-only part like a changelog-less backend
@@ -300,7 +300,7 @@ For each entry written to a part's own `changelog.json`, also emit an aggregate 
 apply once:
 
 ```
-node .claude/skills/update-changelog/scripts/write-aggregate.mjs \
+node ~/.claude/skills/update-changelog/scripts/write-aggregate.mjs \
   --file <aggregatePath> --entries-file <scratch-aggregate.json>
 ```
 
@@ -342,7 +342,7 @@ the AI skill later **drains** the queue, processing the accumulated hashes in on
 ### Install
 
 ```
-node .claude/skills/update-changelog/scripts/install-trigger.mjs --root <repoRoot>
+node ~/.claude/skills/update-changelog/scripts/install-trigger.mjs --root <repoRoot>
 ```
 
 Idempotent; installs three things:
