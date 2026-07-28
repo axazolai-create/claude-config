@@ -13,6 +13,7 @@ import { join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { listWorkspaces } from "../../bin/lib/workspaces.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const sha16 = (s) => createHash("sha1").update(s).digest("hex").slice(0, 16);
@@ -82,7 +83,17 @@ export function detectMarkers(root) {
   return [...found].sort();
 }
 
-export const computeStackFingerprint = (root) => sha16(detectMarkers(root).join(","));
+// Root markers alone miss a monorepo's real stacks: in a pnpm workspace next.config.ts sits in
+// apps/web/, so the frontend never registers and its rules never arrive. Keys are workspace-
+// relative, "." for the root.
+export function detectMarkersByWorkspace(root) {
+  const out = { ".": detectMarkers(root) };
+  for (const w of listWorkspaces(root).workspaces) out[w.relDir] = detectMarkers(w.dir);
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+export const computeStackFingerprint = (root) =>
+  sha16(JSON.stringify(detectMarkersByWorkspace(root)));
 
 export function checkStackRules(root, srcDir = join(CLAUDE_DIR, "rules-src")) {
   const sourceHash = computeSourceHash(srcDir);
@@ -91,10 +102,15 @@ export function checkStackRules(root, srcDir = join(CLAUDE_DIR, "rules-src")) {
   let status = "missing";
   if (existsSync(snapshotPath)) {
     let head = "";
-    try { head = readFileSync(snapshotPath, "utf8").slice(0, 800); } catch { /* treat as missing */ }
+    try { head = readFileSync(snapshotPath, "utf8").slice(0, 2000); } catch { /* unreadable - not comparable */ }
     const oldSrc = (head.match(/^sourceHash:\s*(\S+)/m) || [])[1];
     const oldFp = (head.match(/^stackFingerprint:\s*(\S+)/m) || [])[1];
-    status = oldSrc === sourceHash && oldFp === stackFingerprint ? "ok" : "stale";
+    // A snapshot with a flat stacks: list predates workspace-aware fingerprints - its hash was
+    // computed over root markers only, so comparing it reports drift on every project at once
+    // and trains the user to ignore the check: the exact failure that disabled it on 2026-07-13.
+    // Reported, never flagged; upgraded on the next explicit rebuild.
+    if (!/^markers:\s*\{/m.test(head)) status = "legacy";
+    else status = oldSrc === sourceHash && oldFp === stackFingerprint ? "ok" : "stale";
   }
   return { status, sourceHash, stackFingerprint, snapshotPath };
 }
