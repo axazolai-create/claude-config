@@ -3,11 +3,17 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'n
 import { resolve } from "node:path";
 import { realpathSync } from "node:fs";
 import { execFileSync } from 'node:child_process';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MARK_START = '# >>> changelog-trigger >>>';
 const MARK_END = '# <<< changelog-trigger <<<';
+
+// The skill installs into the user-scope config dir, so sibling scripts are never under the
+// target repo. Resolve them from this file, and use forward slashes so the sh hook can source
+// the path on Windows too.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const shPath = (p) => p.replace(/\\/g, '/');
 
 export function ensureGitignore(root, entries) {
   const f = join(root, '.gitignore');
@@ -32,7 +38,7 @@ export function ensurePostCommitHook(root) {
     '  case "$msg" in',
     '    релиз:*|патч:*) : ;;',
     '    *)',
-    '      q="$root/.claude/skills/update-changelog/scripts/queue.mjs"',
+    `      q="${shPath(join(HERE, 'queue.mjs'))}"`,
     '      if [ -f "$q" ] && ! node "$q" is-locked --root "$root"; then',
     '        node "$q" append "$(git rev-parse HEAD)" --root "$root"',
     '      fi ;;',
@@ -73,7 +79,7 @@ if (isMainModule()) {
   let workspaces = [];
   try {
     const out = execFileSync('node',
-      [join(root, '.claude/skills/update-changelog/scripts/list-workspaces.mjs'), '--root', root],
+      [join(HERE, 'list-workspaces.mjs'), '--root', root],
       { encoding: 'utf8' });
     workspaces = (JSON.parse(out).workspaces || []).map(w => w.relDir);
   } catch { /* best-effort detection */ }

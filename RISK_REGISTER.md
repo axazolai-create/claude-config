@@ -21,10 +21,23 @@
   reduced by shrinking the silent gap before a tool call — emit the question or tool call early in
   a turn rather than after a long preamble — and by `/compact` on very long sessions.
 - **Residual:** turns still get lost. A real fix lives upstream; report via `/bug` when it
-  reproduces. **Unverified hypothesis, recorded as such:** every observed occurrence cut the turn
-  at the same structural point — an `AskUserQuestion` call issued after a long reasoning block,
-  late in a very large context — while an identical call early in the same session succeeded. That
-  is a correlation over a handful of events, not a demonstrated cause; do not treat it as diagnosed.
+  reproduces.
+- **Measured 2026-07-28, session `4dd4f96e` (2.1.220), n=4 — supersedes the earlier hypothesis.**
+  The prior note here guessed that `AskUserQuestion` after a long reasoning block was the
+  structural trigger. That is now refuted: in this session both `AskUserQuestion` calls succeeded,
+  one of them open for 30.8 s, while the four drops all cut *text* generation at intervals of
+  **20.0 / 20.0 / 20.0 / 27.2 s** from the previous transcript event. Three identical `20.0`
+  readings are a timer, not a spread, and it fires on **silence in the response stream** rather
+  than on any wall-clock cap for a turn — which is why the widget, streaming its own frames,
+  survived longer than the threshold.
+- **`CLAUDE_CODE_RESUME_INTERRUPTED_TURN=1` does not help.** It was active during that session —
+  `settings.json` mtime `10:00:24Z`, session start `10:00:51Z`, so the env was read at launch —
+  and no turn self-resumed; the user still had to signal each drop by hand. The name was inferred,
+  not documented, and it did not mean what it looked like. Keep the key (harmless) but do not
+  count it as mitigation.
+- **Working dodge:** issue a tool call within ~15 s of finishing a text block instead of
+  continuing to reason silently. This is the same advice as the Mitigation above, now with a
+  measured threshold behind it.
 
 ## RISK-BOOTSTRAP-001 — Remote code execution via `curl|bash` / `irm|iex` bootstrap
 
@@ -423,6 +436,38 @@
   completes. On the bulk path the same wrong id would instead surface as a printed manual command
   the user runs by hand, catching the failure before it executes. Accepted; revisit by
   confirming the id on a machine that has `gsd` installed via the marketplace.
+
+## RISK-VARIANT-003 — The gsd-core detector edits hook entries this bundle does not own
+
+- **Status:** Open (accepted at design time, 2026-07-28)
+- **Context:** the planned `base`/`lite` gsd-core detector removes `settings.json` hook entries
+  that reference `hooks/gsd-*`. Every other write in `setup.mjs` goes through `mentionsOurs(e)`
+  (`setup.mjs:824-847`), which matches only basenames drawn from `settings.partial.json` — so
+  foreign entries are left alone by construction. The detector is the first place that
+  deliberately matches something this bundle never installed, and gsd-core owns 12 live
+  registrations there.
+- **Mitigation:** the edit fires only under both gates — profile is `base`/`lite` **and**
+  `~/.claude/gsd-core/VERSION` exists — and only after explicit consent (`--replace-all` /
+  `--merge-all` deliberately do **not** grant it; `--uninstall-gsd` is the scripted path). A copy
+  of `settings.json` is written into the same `.cleanup-trash/<ts>/` batch before the edit, so
+  `restoreBatch()` restores registrations and files together inside the 7-day window.
+- **Residual:** a hand-added hook entry that happens to reference a `gsd-*` script would be
+  removed with the rest. It is restorable from the batch, but the user is not asked about it
+  separately. Accepted: the alternative is leaving dead registrations pointing at deleted files.
+
+## RISK-VARIANT-004 — `/gsd-update` reinstalls gsd-core behind the detector's back
+
+- **Status:** Open (accepted, 2026-07-28)
+- **Context:** gsd-core updates through its own `/gsd-update`, not through `setup.mjs`. On a
+  `base`/`lite` machine where the detector already removed it, a later `/gsd-update` — or any
+  fresh gsd-core install — puts all 71 skills, 34 agents and 23 hooks back, plus their
+  `settings.json` registrations.
+- **Mitigation:** none beyond re-detection. The detector observes the divergence at the next
+  `setup.mjs` run and offers removal again; nothing enforces the absence continuously.
+- **Residual:** between two `setup.mjs` runs the machine can sit in a state the chosen profile
+  says it should not be in, with no signal. A session-start guard was considered and left out of
+  scope — it would put a foreign-product check on every session start for a condition the user
+  creates deliberately.
 
 ## RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
 
