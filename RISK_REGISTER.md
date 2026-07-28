@@ -2,42 +2,45 @@
 
 ## RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
 
-- **Status:** Open (accepted; not fixable from this repository)
-- **Context:** Claude Code 2.1.220 intermittently ends a turn with `API Error: Connection closed
-  mid-response`. The streamed response terminates before the assistant message completes, so the
-  turn is lost mid-work. Observed repeatedly on 2026-07-27 in one long session. Ruled out on this
-  machine: no `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, no `ANTHROPIC_BASE_URL`, no
-  `NODE_EXTRA_CA_CERTS` — so not a proxy or TLS-interception artefact.
-- **Why the bundle cannot handle it:** the failure is in the CLI's API transport, below the hook
-  boundary. Claude Code's hook events are lifecycle events (`PreToolUse`, `PostToolUse`,
-  `UserPromptSubmit`, `Notification`, `Stop`, `SubagentStop`, `PreCompact`, `SessionStart`,
-  `SessionEnd`); none fires on a transport error, so nothing here can even observe it. A hook is
-  also an external process and could not resume a half-streamed message, which is CLI-owned state.
-  `claude --help` documents no `--retry`, `--timeout`, or reconnect flag, and the CLI now ships as
-  a native binary, so there is no bundle to inspect for an undocumented knob. Any "retry handling"
-  added to this repository would be theatre.
-- **Mitigation:** recovery is `claude --continue` / `claude --resume <session-id>`, which is why
-  session transcripts are worth keeping intact (see the 2026-07-27 relocation work). Exposure is
-  reduced by shrinking the silent gap before a tool call — emit the question or tool call early in
-  a turn rather than after a long preamble — and by `/compact` on very long sessions.
-- **Residual:** turns still get lost. A real fix lives upstream; report via `/bug` when it
-  reproduces.
-- **Measured 2026-07-28, session `4dd4f96e` (2.1.220), n=4 — supersedes the earlier hypothesis.**
-  The prior note here guessed that `AskUserQuestion` after a long reasoning block was the
-  structural trigger. That is now refuted: in this session both `AskUserQuestion` calls succeeded,
-  one of them open for 30.8 s, while the four drops all cut *text* generation at intervals of
-  **20.0 / 20.0 / 20.0 / 27.2 s** from the previous transcript event. Three identical `20.0`
-  readings are a timer, not a spread, and it fires on **silence in the response stream** rather
-  than on any wall-clock cap for a turn — which is why the widget, streaming its own frames,
-  survived longer than the threshold.
-- **`CLAUDE_CODE_RESUME_INTERRUPTED_TURN=1` does not help.** It was active during that session —
-  `settings.json` mtime `10:00:24Z`, session start `10:00:51Z`, so the env was read at launch —
-  and no turn self-resumed; the user still had to signal each drop by hand. The name was inferred,
-  not documented, and it did not mean what it looked like. Keep the key (harmless) but do not
-  count it as mitigation.
-- **Working dodge:** issue a tool call within ~15 s of finishing a text block instead of
-  continuing to reason silently. This is the same advice as the Mitigation above, now with a
-  measured threshold behind it.
+- **Status:** Root-caused 2026-07-28 — a LAN-side proxy timeout, not a Claude Code defect. Mitigated
+  in this repository; the permanent fix is on the router.
+- **Root cause:** the Keenetic gateway routes selected destinations into a TUN device served by
+  `hev-socks5-tunnel`, whose generated config carries `misc.read-write-timeout: 20000` (upstream
+  default is 60000). Any tunneled session with no payload for 20 s is closed and the client sees
+  ECONNRESET. Reproduced with a 20-line `node` script and no Claude Code involved: a mid-body gap
+  RSTs at exactly 20.0–20.1 s, 4/4; a pre-header gap 9/10 at ~21 s. Chain: PC → Mikrotik → Keenetic
+  → fwmark policy routing → `t2sN` → hev-socks5-tunnel → sing-box SOCKS5 → VLESS Reality → server.
+  The config is written by KeeneticOS (`interface ProxyN`, `proxy protocol socks5`) into
+  `/var/run/proxy-cfg-t2s*`, so it is regenerated on restart and not editable in place.
+- **How it was localized:** only proxied destinations fail — 30 s idle on an established TLS
+  connection survives to `ya.ru`/`github.com` (routed direct) and dies at 20.4 s to `example.com`
+  (routed through the tunnel). `curl -x socks5h://127.0.0.1:1083` from the router itself passed a
+  25 s gap (HTTP 200 in 25.9 s), exonerating sing-box, VLESS and the server and leaving only the
+  transparent layer. TCP keepalive at 5 s does not help (6/6 failures) because the timeout counts
+  payload, not packets — which is also why traffic on other sockets cannot keep a session alive.
+- **Refuted along the way:** CLI 2.1.220 (same version, same days, Opus 4.8 = 0 drops / 2009 turns
+  vs Opus 5 = 46 / 2515); the model and the `[1m]` beta (second PC runs identical `opus[1m]` with no
+  drops; the reproducer fails on opus-5 and sonnet-5 alike); context size and session length
+  (reproduces in a fresh headless run at ~15 k); the Opus 5 migration in this repo
+  (`model-migration.mjs` touches only `model` and `model_overrides`; no keepalive/poll knob exists
+  anywhere in `payload`). Opus 5 is an amplifier, not a cause — it pauses past 20 s more often.
+- **Why the client does not self-heal:** the binary retries a stale stream only while no text block
+  has been delivered — retrying afterwards would duplicate the text — so it finalizes and prints the
+  error instead. Visible drops are therefore only the after-text subset; the true rate is higher.
+  The message maps to cause `stale_connection` (a real socket error); the client's own stall
+  watchdog reports `Response stalled mid-stream` and did not fire here.
+- **Mitigation in this repository:** `CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING=1` in
+  `.claude/settings.json`. It streams tool-input JSON instead of buffering it server-side, so the
+  silent gap before a large `Write` never forms: 4/4 success with it against 0/4 without, on a
+  250-item single-`Write` reproducer (16/16 failures across all earlier control runs). It does not
+  cover a gap caused by deliberation alone — that case would not reproduce headlessly and is
+  untested. Recovery when a turn is still lost: `claude --continue` / `claude --resume <id>`.
+- **Permanent fix (outside this repository):** raise `read-write-timeout` on the router. It is not
+  exposed in the Keenetic CLI (`show running-config` lists no timeout for `interface ProxyN`), so
+  either report it to Keenetic or bind-mount a wrapper over `/usr/bin/hev-socks5-tunnel` that
+  rewrites the generated config before exec. Verify with a 25 s mid-body-gap HTTPS probe.
+- **`CLAUDE_CODE_RESUME_INTERRUPTED_TURN=1` does not help** — measured 2026-07-28, active at launch,
+  no turn self-resumed. The name was inferred, not documented. Harmless to keep, not a mitigation.
 
 ## RISK-BOOTSTRAP-001 — Remote code execution via `curl|bash` / `irm|iex` bootstrap
 

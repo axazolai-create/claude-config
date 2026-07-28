@@ -58,12 +58,22 @@ Attribution: the ADR shape follows the format `gsd-doc-classifier` recognises, a
 discipline comes from `grill-with-docs` in mattpocock/skills (MIT). Marker comment in the same
 style as `grilling-graft:v1` from delta 006.
 
-## Open decision
+## Decision taken 2026-07-28 (was: open)
 
-`brainstorming` currently writes specs to `docs/ultrapowers/specs/`. Moving that to `docs/specs/`
-puts them in the discovery path of `/gsd-ingest-docs` alongside `docs/adr/`, which is what makes
-the base-to-full transition free. It is a one-line change but it relocates every future spec, so
-it is called out here rather than folded in silently.
+The question was whether to move `brainstorming`'s spec output from `docs/ultrapowers/specs/` to
+`docs/specs/`, putting it in the discovery path of `/gsd-ingest-docs`.
+
+**Neither.** The spec is a phase document and lives at `.ultrapowers/phases/NN-slug/NN-SPEC.md`;
+`docs/specs/` is not created. ADRs move to `.ultrapowers/adr/NNNN-slug.md` for the same reason.
+
+Consequence, accepted knowingly: `/gsd-ingest-docs` scans `docs/adr/`, `docs/prd/`, `docs/specs/`
+and `docs/rfc/`, so neither specs nor ADRs migrate into a `.planning/` setup for free any more.
+The base-to-full bridge becomes explicit work rather than a property of where files sit.
+
+Planned in `docs/superpowers/plans/2026-07-28-ultrapowers-planning-tree.md` (delta `007`) and
+`…-design-records-and-stack-rules.md` (delta `010`). The delta numbering in this document is
+superseded: the build applies deltas in filename order, and a delta must be authored against the
+tree its predecessors produce, so design records became `010`.
 
 ## Out of scope
 

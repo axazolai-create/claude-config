@@ -3,6 +3,15 @@
 Date: 2026-07-28
 Status: approved, not yet planned
 
+> **Amended 2026-07-28, after the `.ultrapowers/` layout was approved.** Every path in this
+> document moves inside the tree: ADRs are `.ultrapowers/adr/NNNN-slug.md`, the glossary is
+> `.ultrapowers/GLOSSARY.md`, the register is `.ultrapowers/RISK_REGISTER.md`. The reasoning
+> below for choosing `docs/adr/` — that it is the discovery path of `/gsd-ingest-docs`, so ADRs
+> migrate into a `.planning/` setup for free — no longer holds, and the base-to-full bridge
+> becomes explicit work this design does not cover. Everything else stands: the four-section
+> register, the status vocabulary, the CLI split between deterministic and judgement, and the
+> non-blocking nudge hook.
+
 ## Context
 
 Four kinds of durable knowledge are wanted, three of which do not exist yet:
