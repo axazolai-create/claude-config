@@ -61,10 +61,10 @@ node setup.mjs
 
 ```
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 ```
 
 Проброс флагов в `setup.mjs` (напр. неинтерактивная замена): POSIX — `… | bash -s -- --replace-all`;
@@ -77,7 +77,7 @@ review-gated контент-патчи gsd-агентов (см. «gsd-core») �
 gsd-core третий шаг — безвредный no-op):
 
 ```powershell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 $cc = $env:CLAUDE_CONFIG_DIR; if (-not $cc) { $cc = Join-Path $HOME '.claude' }
 node (Join-Path $cc 'apply-gsd-agent-patches.mjs')
 ```
@@ -90,11 +90,11 @@ node (Join-Path $cc 'apply-gsd-agent-patches.mjs')
 
 ```
 # Linux / macOS
-curl -fsSLO https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh
+curl -fsSLO https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh
 less bootstrap.sh && bash bootstrap.sh
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
 notepad bootstrap.ps1; .\bootstrap.ps1
 ```
 

@@ -1,7 +1,7 @@
 # Design: Token Usage Log (hook + companion skill)
 
 Date: 2026-07-08
-Repo: `axazolai-create/claude-config`
+Repo: `axazolai/claude-config`
 Status: Approved (design), pending implementation plan
 
 ## Goal

@@ -62,10 +62,10 @@ Win10 1803+/macOS/Linux).
 
 ```
 # Linux / macOS
-curl -fsSL https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh | bash
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 ```
 
 Forwarding flags to `setup.mjs` (e.g. a non-interactive replace): POSIX — `… | bash -s -- --replace-all`;
@@ -78,7 +78,7 @@ block that does both at once (honours a `CLAUDE_CONFIG_DIR` relocation; on a fre
 without gsd-core the third step is a harmless no-op):
 
 ```powershell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 | iex
 $cc = $env:CLAUDE_CONFIG_DIR; if (-not $cc) { $cc = Join-Path $HOME '.claude' }
 node (Join-Path $cc 'apply-gsd-agent-patches.mjs')
 ```
@@ -92,11 +92,11 @@ node (Join-Path $cc 'apply-gsd-agent-patches.mjs')
 
 ```
 # Linux / macOS
-curl -fsSLO https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.sh
+curl -fsSLO https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.sh
 less bootstrap.sh && bash bootstrap.sh
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/axazolai-create/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
+irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps1 -OutFile bootstrap.ps1
 notepad bootstrap.ps1; .\bootstrap.ps1
 ```
 
