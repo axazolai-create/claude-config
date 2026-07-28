@@ -70,7 +70,7 @@ Consequence, accepted knowingly: `/gsd-ingest-docs` scans `docs/adr/`, `docs/prd
 and `docs/rfc/`, so neither specs nor ADRs migrate into a `.planning/` setup for free any more.
 The base-to-full bridge becomes explicit work rather than a property of where files sit.
 
-Planned in `docs/superpowers/plans/2026-07-28-ultrapowers-planning-tree.md` (delta `007`) and
+Planned in `.ultrapowers/archive/plans/2026-07-28-ultrapowers-planning-tree.md` (delta `007`) and
 `…-design-records-and-stack-rules.md` (delta `010`). The delta numbering in this document is
 superseded: the build applies deltas in filename order, and a delta must be authored against the
 tree its predecessors produce, so design records became `010`.

@@ -23,7 +23,7 @@ Moving a patch to Superpowers *universally* would strip GSD of the tool in full 
 per-profile, and profile membership is expressed the same way `pnpm-phantom-fix` /
 `turbopack-gvs-check` express it: a self-contained artifact gated by a cheap marker check and
 listed in `variants.json`, with **no** GSD dependency. See
-`docs/superpowers/specs/2026-07-21-pnpm-phantom-fix-design.md` for the template.
+`.ultrapowers/archive/specs/2026-07-21-pnpm-phantom-fix-design.md` for the template.
 
 ## The three capabilities
 

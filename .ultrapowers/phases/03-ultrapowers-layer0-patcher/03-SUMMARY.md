@@ -1,6 +1,6 @@
 # Phase 03 summary — ultrapowers layer0 patcher
 
-Plan: `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md`
+Plan: `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md`
 Branch: `feat/ultrapowers-rework` — Start HEAD `e9519bd`
 
 ## Tasks
@@ -30,7 +30,7 @@ This phase was abandoned mid-flight and superseded by the fork design (upstream 
 
 ### Task 2 — deferred minors
 
-- Task 2: minor (deferred): artifact rule lacks a trailing boundary - docs/superpowers/plansomething
+- Task 2: minor (deferred): artifact rule lacks a trailing boundary - .ultrapowers/archive/plansomething
   -> .ultrapowers/phasesomething. Add (?![\w-]).
 - Task 2: minor (deferred): flags.replace("g","") is a substring replace and the i flag survives
   into the replacement, so Docs/Superpowers/Plans case-flattens. Build the flag set explicitly.

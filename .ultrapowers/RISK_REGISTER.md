@@ -112,7 +112,7 @@
   future upstream `gsd-core` fix to `gsd-executor.md` (numbered fixes like #2924/#3097/#3542/
   #3678 already baked into the copy as of 2026-07-17) will NOT automatically reach the fork.
 - **Mitigation:** `gsd-executor-decomposing.md`'s frontmatter `description` points at
-  `docs/superpowers/specs/2026-07-17-executor-task-decomposition-design.md`'s sync procedure —
+  `.ultrapowers/archive/specs/2026-07-17-executor-task-decomposition-design.md`'s sync procedure —
   when `apply-gsd-agent-patches.mjs`/`gsd-agent-patches.mjs`'s `PATCHES` registry gains a new or
   upgraded entry for `gsd-executor.md`, the same patch must be manually re-applied (or the
   equivalent prose change hand-ported) to `gsd-executor-decomposing.md`, skipping only the two
@@ -271,7 +271,7 @@
 ## RISK-NEO4J-006 — Connection test at setup time depends on the neo4j driver being present
 
 - **Status:** Open (mitigated by design)
-- **Context:** the 2026-07-24 C4 rewrite (`docs/superpowers/specs/2026-07-24-graphify-neo4j-setup-test-before-save-plan.md`)
+- **Context:** the 2026-07-24 C4 rewrite (`.ultrapowers/archive/specs/2026-07-24-graphify-neo4j-setup-test-before-save-plan.md`)
   makes `setup.mjs` **test** the Neo4j connection before writing `~/.graphify/neo4j.env`. The
   authoritative test (`RETURN 1` via the python driver) needs `neo4j` installed in graphify's
   interpreter. On a fresh PC where graphify/driver is absent, the test cannot run.
@@ -478,7 +478,7 @@
 - **Context:** `payload/hooks/leanmode-subagent.mjs` (single-axis SubagentStart) becomes
   `inject-axes.mjs`, iterating an axis registry over both SessionStart and SubagentStart. Any
   drift in how leanmode's level is resolved or injected per agent_type would silently weaken a
-  working mechanic. See docs/superpowers/specs/2026-07-26-ai-development-mode-design.md § 2.
+  working mechanic. See .ultrapowers/archive/specs/2026-07-26-ai-development-mode-design.md § 2.
 - **Mitigation:** the leanmode axis re-exports `lib/leanmode-rules.mjs` unchanged, so its
   resolution logic is untouched; the full existing `leanmode-*` test suite is the gate; add an
   axis-independence test (leanmode=off still injects verbosity, and vice versa) and a
@@ -503,7 +503,7 @@
 ## RISK-DESIGNSTACK-001 — Impeccable installer footgun writes into all harnesses + settings.local.json
 
 - **Status:** Open (mitigated by design) — Phase 3, spec
-  `docs/superpowers/specs/2026-07-26-phase3-design-skills-integration-design.md`.
+  `.ultrapowers/archive/specs/2026-07-26-phase3-design-skills-integration-design.md`.
 - **Context:** `npx impeccable install` is interactive and its **default** answer installs the
   skill into every detected harness (`~/.claude`, `~/.agents`, `~/.gemini`) AND appends a
   PostToolUse/Stop hook block to `settings.local.json`. `install --help` does not print flags — it
@@ -761,7 +761,7 @@
 
 - **Status:** Open (mitigated by design)
 - **Context:** migration into `.ultrapowers/phases/<NN>-<slug>/` must pair 21 specs with 13 plans
-  in `docs/superpowers/`. Pairing is guessed from date and slug, not derived; some files pair with
+  in `.ultrapowers/archive/`. Pairing is guessed from date and slug, not derived; some files pair with
   nothing (`2026-07-26-phase2-design-skills-HANDOFF.md`). A silent wrong pairing buries a design
   document under an unrelated phase.
 - **Mitigation:** migration proposes and does not act — it prints the full mapping plus the

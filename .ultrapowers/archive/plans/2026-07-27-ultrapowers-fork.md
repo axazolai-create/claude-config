@@ -2,8 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Design:** `docs/superpowers/specs/2026-07-27-ultrapowers-fork-design.md`
-**Supersedes:** `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md` in full.
+**Design:** `.ultrapowers/archive/specs/2026-07-27-ultrapowers-fork-design.md`
+**Supersedes:** `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md` in full.
 
 **Goal:** `ultrapowers` exists as an owned, fully rebranded fork of `superpowers@claude-plugins-official`, installed instead of upstream, and stays current via one command (`/up-update`) runnable from any project — which either completes the update or refuses and says what needs work.
 
@@ -85,14 +85,14 @@ This also removes a coupling the earlier draft had: refusal semantics no longer 
 - `payload/bin/lib/up-progress-lib.mjs` + `.test.mjs` — pure: probe reconciliation
 - `payload/bin/lib/up-progress-probes.json` — the plan→probe table (data, not code)
 - `payload/commands/up-resume.md`, `payload/commands/up-progress.md` — resume / report-only
-- `docs/superpowers/plans/2026-07-27-ultrapowers-fork.STATE.md` — the STATE file (generated)
+- `.ultrapowers/archive/plans/2026-07-27-ultrapowers-fork.STATE.md` — the STATE file (generated)
 
 **`claude-config` — modified**
 - `variants.json` — `managedPlugins` gains `ultrapowers`; new `keepInstalled`; profiles swap the name
 - `plugin-reconcile.mjs` + `.test.mjs` — disable-without-uninstall
 - `setup.mjs` — marketplace registration before install; pass `keepInstalled`
 - `RISK_REGISTER.md` — per the design's risk table
-- `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md` — superseded header
+- `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md` — superseded header
 - `README.md` / `README.en.md` — the fork replaces upstream in the plugin list
 
 ---
@@ -588,13 +588,13 @@ Both: scratch fork refs byte-identical before and after; `claude-config` working
 
 **Scope, re-measured 2026-07-28 (the plan's 25 predated Tasks 8–9):** 59 in `payload/`, 2 in `payload-lite/`, 0 in `gsd-core-patches/`. Of the 59, **9 were added by `/up-update` itself** and name upstream on purpose, and **20 belonged to the fallow graft** now retired. Ending state: **22 total, 0 unclassified** — 13 repo doc paths, 9 deliberate upstream references.
 
-**Files:** `payload/**`, `payload-lite/**`, `variants.test.mjs`, `RISK_REGISTER.md`, `README.md`, `README.en.md`, `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md`
+**Files:** `payload/**`, `payload-lite/**`, `variants.test.mjs`, `RISK_REGISTER.md`, `README.md`, `README.en.md`, `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md`
 
 **Already covered by Tasks 6–7:** `variants.json`, `plugin-reconcile.mjs`, `setup.mjs`. Task 10 must not touch them again.
 
 - [x] **Step 1: Classify every occurrence before changing any.** Three buckets, as planned — but the first one needed widening. There are **no `superpowers:` skill invocations anywhere in the payload** (measured: zero). What actually needed rewriting was prose that *names the plugin as a thing the rules route around*: `rules-src/gsd.md`'s six "do not let Superpowers skills fire alongside GSD" rules, the `GSD / SUPERPOWERS METHODOLOGY` CLAUDE.md section (and its three test assertions), the base-plugin list in `claude-md/09-plugins.md`, and three graphify-sync comments. A rule that names a plugin nobody has installed routes nothing.
   - *the plugin id* (`superpowers@claude-plugins-official`) → **kept**, it is the upstream plugin we disable and must stay nameable.
-  - *repo doc paths* (`docs/superpowers/**`) → **kept**. These are real files in this repository; renaming them would break the references and falsify the record.
+  - *repo doc paths* (`.ultrapowers/archive/**`) → **kept**. These are real files in this repository; renaming them would break the references and falsify the record.
 - [x] **Step 2: `hooks/lib/superpowers-fallow-graft.mjs` — retired, not renamed.** The question the plan posed (rename or not) was overtaken: the graft's job is now `transform/deltas/001-fallow-graft.patch` inside the fork, so the runtime version was code that re-patched a plugin no profile enables. Deleted along with its test and its `session-init.mjs` call site; `variants.test.mjs`'s Category-II expectation updated in the same change. The capability and its `.planning/` guard are unchanged — what improved is that the fork's rebuild now **fails loudly** if upstream rewrites the anchor, where the runtime graft would simply have stopped finding it.
 - [x] **Step 3: `RISK_REGISTER.md`.** `-001` (merge burden), `-002` and `-003` (both Resolved), `-005`/`-006`, and the two new ones — `-007` fork divergence, `-008` upstream licence/direction — were already aligned by `c45bcc1`. This task's work was `-004`, which changed *kind*: the keep-list mechanism was itself the defect for `README.md`, so the entry now records the assertion-based replacement. Also updated the two references to the now-deleted graft file so they say where the mechanism went.
 - [x] **Step 4: Mark the layer-0 patcher plan superseded** — header added, file kept. It records why two classification designs failed, and two premises that turned out false (a machine-wide cache cannot be gated per project; a patcher must re-apply after every `/plugin update`).

@@ -825,7 +825,7 @@ git commit -m "feat(graphify): advisory grep nudge toward graph queries (G stage
 
 ### Task 8: G Stage 2 — freshness (guarded, splittable)
 
-Lands only after Task 7 is merged and green. If risk grows during implementation, STOP and move this task to a follow-up spec (`docs/superpowers/specs/`), leaving Tasks 1–7 as the shipped increment.
+Lands only after Task 7 is merged and green. If risk grows during implementation, STOP and move this task to a follow-up spec (`.ultrapowers/archive/specs/`), leaving Tasks 1–7 as the shipped increment.
 
 **Files:**
 - Test: `payload/hooks/graphify-freshness.characterization.test.mjs` (new — pin current autosync behavior FIRST)

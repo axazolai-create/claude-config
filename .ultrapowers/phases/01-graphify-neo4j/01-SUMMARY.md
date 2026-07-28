@@ -1,6 +1,6 @@
 # Phase Summary: graphify ↔ Neo4j Integration
 
-Plan: `docs/superpowers/plans/2026-07-21-graphify-neo4j-integration.md`
+Plan: `.ultrapowers/archive/plans/2026-07-21-graphify-neo4j-integration.md`
 Branch: `feat/graphify-neo4j`, base (master): `f467811`
 
 ## Tasks

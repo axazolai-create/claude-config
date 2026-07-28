@@ -6,7 +6,7 @@
 // the values to stamp into the snapshot's frontmatter:
 //   node ~/.claude/hooks/lib/stack-rules-check.mjs [projectRoot]
 // prints JSON: { status, sourceHash, stackFingerprint, markers, snapshotPath }.
-// Design: docs/superpowers/specs/2026-07-12-stack-rules-design.md.
+// Design: .ultrapowers/archive/specs/2026-07-12-stack-rules-design.md.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

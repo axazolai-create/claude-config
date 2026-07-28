@@ -47,7 +47,7 @@ import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 import { formatUpdateNotes } from "./lib/component-registry.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
-// Bundle variant (spec: docs/superpowers/specs/2026-07-22-lite-variant-design.md § 5).
+// Bundle variant (spec: .ultrapowers/archive/specs/2026-07-22-lite-variant-design.md § 5).
 // Manifest without the field = pre-variant bundle = full. Lite skips every GSD step below.
 const VARIANT = (() => {
   try {

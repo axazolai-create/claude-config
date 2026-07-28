@@ -1,7 +1,7 @@
 # Phase 02 — AI Development Mode: Summary
 
-Plan: `docs/superpowers/plans/2026-07-26-ai-development-mode.md`
-Spec: `docs/superpowers/specs/2026-07-26-ai-development-mode-design.md`
+Plan: `.ultrapowers/archive/plans/2026-07-26-ai-development-mode.md`
+Spec: `.ultrapowers/archive/specs/2026-07-26-ai-development-mode-design.md`
 Branch: `feat/ai-dev-mode-spec`. Branch base (implementation start): `bbc94ed`.
 Final state per ledger: `1712113..c9d4475` (12 commits), full suite 119/119 green.
 

@@ -3,7 +3,7 @@
 // (PRUNE_THROTTLE_MS below; disable with CLAUDE_TOKEN_USAGE_PRUNE=0). A record is KEPT if it
 // matches ANY of: (1) within 3 calendar months of the log's own newest entry, (2) on the
 // penultimate distinct UTC activity day, or (3) among the 10 most recent records. Full
-// rationale + worked examples: docs/superpowers/specs/2026-07-08-token-usage-log-design.md §H.
+// rationale + worked examples: .ultrapowers/archive/specs/2026-07-08-token-usage-log-design.md §H.
 import { existsSync } from "node:fs";
 import { safe, writeFile, readJSON, readJSONLRecords } from "./token-usage-shared.mjs";
 

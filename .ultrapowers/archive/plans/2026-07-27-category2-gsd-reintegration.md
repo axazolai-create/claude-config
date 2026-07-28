@@ -580,7 +580,7 @@ git commit -m "test(variants): assert Category-II files are all-profiles; resolv
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-07-27-category2-gsd-reintegration.md`. Two execution options:
+Plan complete and saved to `.ultrapowers/archive/plans/2026-07-27-category2-gsd-reintegration.md`. Two execution options:
 
 1. **Subagent-Driven (recommended)** — fresh subagent per task, task review between tasks, broad final review.
 2. **Inline Execution** — execute in this session with checkpoints.

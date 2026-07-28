@@ -7,7 +7,7 @@ and what may not, and why.
 never open the same file can run in parallel; two plans that sound unrelated but both rewrite
 `RISK_REGISTER.md` cannot.
 
-> **This file relocates itself.** Plan 1 Task 11 moves `docs/superpowers/` to
+> **This file relocates itself.** Plan 1 Task 11 moves `.ultrapowers/archive/` to
 > `.ultrapowers/archive/`. After that this document lives at
 > `.ultrapowers/archive/plans/2026-07-28-EXECUTION-ORDER.md`, together with every plan it names.
 
@@ -59,7 +59,7 @@ Plan 2 Tasks 1–4 do **not** depend on plan 1. Only Tasks 5–6 do.
 the glossary through that resolver.
 
 Run plan 3 first and those files land at the repository root — and nothing in plan 1 ever moves
-them, because plan 1 Task 11 moves only `docs/superpowers/` and `RISK_REGISTER.md`. The result
+them, because plan 1 Task 11 moves only `.ultrapowers/archive/` and `RISK_REGISTER.md`. The result
 contradicts the 2026-07-28 ruling that ADRs live at `.ultrapowers/adr/`, and it fails silently:
 every lint passes, the paths are just wrong.
 
@@ -97,7 +97,7 @@ Everything not listed is disjoint. In particular `payload/bin/lib/` gains files 
 and 5 — different files each time, no contention.
 
 The `stack-rules-check.mjs` row is the subtle one: plan 1 Task 11 Step 2 runs a blanket
-substitution of `docs/superpowers/` → `.ultrapowers/archive/` across every tracked file, and that
+substitution of `.ultrapowers/archive/` → `.ultrapowers/archive/` across every tracked file, and that
 file carries the string in a comment on line 9. If plan 2 has rewritten the file on a branch, that
 one line conflicts. It is a comment, so the resolution is trivial — but it will appear.
 
@@ -109,7 +109,7 @@ Nothing else runs. Two reasons, and the second is the one that bites:
 
 1. Three of the four other plans depend on it.
 2. **Task 11 moves the plan files themselves.** `scripts/task-brief PLAN_FILE N` resolves a path;
-   relocating `docs/superpowers/plans/` while another plan is mid-execution breaks brief
+   relocating `.ultrapowers/archive/plans/` while another plan is mid-execution breaks brief
    extraction for that plan's remaining tasks. Extract Task 12's brief before running Task 11 —
    plan 1 says so — and do not have any other plan in flight.
 

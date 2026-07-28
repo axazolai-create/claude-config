@@ -6,7 +6,7 @@
 
 **Architecture:** Single `payload/` stays the full bundle. `variants.json` (repo root) declares lite via include/exclude globs + per-variant plugin sets; `payload-lite/` overlays files that differ. A pure resolver (`variants.mjs`) computes the variant file set and is shared by `setup.mjs` and the test suite. `session-init.mjs` becomes variant-aware via the `variant` field persisted in `bundle-manifest.json`.
 
-**Tech Stack:** Node ≥18, zero npm dependencies, ESM `.mjs`, `node --test`. Spec: `docs/superpowers/specs/2026-07-22-lite-variant-design.md` (APPROVED — authoritative for all content below).
+**Tech Stack:** Node ≥18, zero npm dependencies, ESM `.mjs`, `node --test`. Spec: `.ultrapowers/archive/specs/2026-07-22-lite-variant-design.md` (APPROVED — authoritative for all content below).
 
 ## Global Constraints
 
@@ -356,7 +356,7 @@ import { checkGsdWorkflowPatches } from "./lib/gsd-workflow-patches.mjs";
 (b) After the existing const/setup block near the top (right after the imports and the `safe`-style helpers are available), add variant detection. Reuse the file's own config-dir resolution (it already computes the claude dir; anchor on however `claudeDir`/`CDIR` is named there):
 
 ```js
-// Bundle variant (spec: docs/superpowers/specs/2026-07-22-lite-variant-design.md § 5).
+// Bundle variant (spec: .ultrapowers/archive/specs/2026-07-22-lite-variant-design.md § 5).
 // Manifest without the field = pre-variant bundle = full. Lite skips every GSD step below.
 const VARIANT = (() => {
   try { return JSON.parse(readFileSync(join(claudeDir, "state", "bundle-manifest.json"), "utf8")).variant || "full"; }

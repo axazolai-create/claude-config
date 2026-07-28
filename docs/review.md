@@ -32,7 +32,7 @@
 
 **GSD-Core** (`@opengsd/gsd-core`, «Git. Ship. Done.») — крупный сторонний SDD-фреймворк: v1.7.0-rc.6, ~1500 файлов, `CONTEXT.md` на 240 КБ с сотней доменных модулей (dispatch pipeline, capability registry, gate predicates, worktree lifecycle и т.д.). Гонит агента через жёсткий цикл фаз **Discuss → Plan → Execute → Verify → Ship**, вынося тяжёлую работу в суб-агенты со свежим контекстом. Своя ценность — борьба с «context rot» и верификация того, что код реально работает.
 
-**Superpowers** — вторая оркестрационная надстройка (SDD-процесс: spec → plan → волны исполнения → review + fix-wave). В вашем репозитории именно Superpowers управляет разработкой *самого стека* (`.superpowers/sdd/`, `docs/superpowers/`). Функционально её конвейер **дублирует** конвейер GSD — два независимых spec→plan→execute→review контура над одним кодом.
+**Superpowers** — вторая оркестрационная надстройка (SDD-процесс: spec → plan → волны исполнения → review + fix-wave). В вашем репозитории именно Superpowers управляет разработкой *самого стека* (`.superpowers/sdd/`, `.ultrapowers/archive/`). Функционально её конвейер **дублирует** конвейер GSD — два независимых spec→plan→execute→review контура над одним кодом.
 
 **Ваш слой `claude-config`** — надстройка поверх обоих: инсталлятор `setup.mjs` (962 строки), ~13 hooks, ~38 `.mjs`-скриптов, 16 env-переключателей, три механизма патчинга чужого кода GSD, форк-агент `gsd-executor-decomposing.md` (56 КБ), leanmode, stack-rules, graphify/Neo4j, token-usage, model-selection. Значительная часть — «клей» и компенсация чужих ограничений, а не бизнес-логика.
 
@@ -250,8 +250,8 @@ GSD и связка теряют баллы на процессном овери
 - Реестр скиллов: full=69 скиллов ~1500 ток; план сокращения на ~1265–1400 ток — `.claude/_analize/optimizations.md`.
 - Глубина агентов надёжна только до 2; parallel-wave (21 агент) не достигнута — `.test/CONCLUSION-rlm-architecture.md`.
 - Форк-агент дублирует всю механику экзекьютора (нет наследования) — `payload/rules-src/gsd.md`, `RISK-GSDEXEC-001`.
-- Два конфликтующих механизма дефолтов `.planning/config.json` — `docs/gsd-config-defaults.md`, `docs/superpowers/specs/2026-07-13-gsd-defaults-and-statusline-design.md`.
-- 19 рисков, 18 открытых/accepted — `RISK_REGISTER.md`.
+- Два конфликтующих механизма дефолтов `.planning/config.json` — `docs/gsd-config-defaults.md`, `.ultrapowers/archive/specs/2026-07-13-gsd-defaults-and-statusline-design.md`.
+- 19 рисков, 18 открытых/accepted — `.ultrapowers/RISK_REGISTER.md`.
 - GSD-Core: v1.7.0-rc.6, ~1500 файлов, CONTEXT.md 240 КБ — кэш `.test/gsd-marketplace-probe/.../gsd-core/1.7.0-rc.6/`.
 
 *Баллы — обоснованные экспертные оценки на основе архитектуры, частичной эмпирики и вашего собственного разбора; они отражают накладные расходы (стоимость), а не полную ценность фреймворков на больших проектах. Единственный измеренный факт — провал GSD по времени на малой задаче.*

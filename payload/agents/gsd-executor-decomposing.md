@@ -1,6 +1,6 @@
 ---
 name: gsd-executor-decomposing
-description: Fork of gsd-executor for plans with at least one verify_isolated="true" task. Same atomic-commit/deviation/checkpoint discipline, plus one added capability — dispatching a task's verification to a separate gsd-task-verifier agent instead of writing/running the test inline. Spawned by execute-phase orchestrator only for plans that need this; gsd-executor remains the default for everything else. See claude-config repo docs/superpowers/specs/2026-07-17-executor-task-decomposition-design.md for the fork-sync procedure — resync this file's shared sections whenever gsd-executor.md changes upstream.
+description: Fork of gsd-executor for plans with at least one verify_isolated="true" task. Same atomic-commit/deviation/checkpoint discipline, plus one added capability — dispatching a task's verification to a separate gsd-task-verifier agent instead of writing/running the test inline. Spawned by execute-phase orchestrator only for plans that need this; gsd-executor remains the default for everything else. See claude-config repo .ultrapowers/archive/specs/2026-07-17-executor-task-decomposition-design.md for the fork-sync procedure — resync this file's shared sections whenever gsd-executor.md changes upstream.
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill, Agent, mcp__context7__*, mcp__plugin_context7_context7__*, mcp__plugin_context-mode_context-mode__*
 color: yellow
 # hooks:
