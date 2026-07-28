@@ -1,5 +1,31 @@
 # Risk Register
 
+## RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
+
+- **Status:** Open (accepted; not fixable from this repository)
+- **Context:** Claude Code 2.1.220 intermittently ends a turn with `API Error: Connection closed
+  mid-response`. The streamed response terminates before the assistant message completes, so the
+  turn is lost mid-work. Observed repeatedly on 2026-07-27 in one long session. Ruled out on this
+  machine: no `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, no `ANTHROPIC_BASE_URL`, no
+  `NODE_EXTRA_CA_CERTS` — so not a proxy or TLS-interception artefact.
+- **Why the bundle cannot handle it:** the failure is in the CLI's API transport, below the hook
+  boundary. Claude Code's hook events are lifecycle events (`PreToolUse`, `PostToolUse`,
+  `UserPromptSubmit`, `Notification`, `Stop`, `SubagentStop`, `PreCompact`, `SessionStart`,
+  `SessionEnd`); none fires on a transport error, so nothing here can even observe it. A hook is
+  also an external process and could not resume a half-streamed message, which is CLI-owned state.
+  `claude --help` documents no `--retry`, `--timeout`, or reconnect flag, and the CLI now ships as
+  a native binary, so there is no bundle to inspect for an undocumented knob. Any "retry handling"
+  added to this repository would be theatre.
+- **Mitigation:** recovery is `claude --continue` / `claude --resume <session-id>`, which is why
+  session transcripts are worth keeping intact (see the 2026-07-27 relocation work). Exposure is
+  reduced by shrinking the silent gap before a tool call — emit the question or tool call early in
+  a turn rather than after a long preamble — and by `/compact` on very long sessions.
+- **Residual:** turns still get lost. A real fix lives upstream; report via `/bug` when it
+  reproduces. **Unverified hypothesis, recorded as such:** every observed occurrence cut the turn
+  at the same structural point — an `AskUserQuestion` call issued after a long reasoning block,
+  late in a very large context — while an identical call early in the same session succeeded. That
+  is a correlation over a handful of events, not a demonstrated cause; do not treat it as diagnosed.
+
 ## RISK-BOOTSTRAP-001 — Remote code execution via `curl|bash` / `irm|iex` bootstrap
 
 - **Status:** Open (accepted)
@@ -92,6 +118,12 @@
   **Re-resolved (2026-07-27):** base/lite now receive fallow via the guarded Superpowers-review
   graft (`hooks/lib/superpowers-fallow-graft.mjs`, ships to all profiles) — see
   RISK-INITSTACK-001's resolution note for the full mechanism.
+  **Mechanism moved (2026-07-28):** the graft is now `transform/deltas/001-fallow-graft.patch` in
+  the ultrapowers fork, baked into the plugin at build time. The runtime graft and its hook were
+  deleted: they patched the *upstream* plugin cache, and every profile now enables the fork
+  instead, so it had become code that repaired a plugin nobody loads. The capability is unchanged
+  and its `.planning/` guard is intact — what changed is that it is now part of the artifact and
+  therefore watched by the rebuild, instead of being re-applied over someone else's files.
 - **Context:** `gsd-config-patch.mjs`'s tier2 default sets `code_quality.fallow.enabled` to
   `true` whenever the project root has a `package.json` — deliberately without checking
   whether the `fallow` binary is actually installed (see the comment above
@@ -533,11 +565,15 @@
 - **Category-II reinstatement (done, 2026-07-27):** three capabilities were tracked; two were
   genuinely reinstated, one deliberately retired.
   1. **Fallow** (`fallow`'s install-proposal never reaching base/lite, and RISK-FALLOW-001) —
-     reinstated via a `.planning/`-guarded graft into Superpowers' own code-review flow
-     (`hooks/lib/superpowers-fallow-graft.mjs`): it grafts the fallow devDependency proposal
-     into the Superpowers reviewer path, ships in **all profiles**, and is inert (no-op) inside
-     GSD projects (detected via the `.planning/` marker) so GSD's own gate stays the sole
+     reinstated via a `.planning/`-guarded graft into the code-review flow: it grafts the fallow
+     devDependency proposal into the reviewer path, reaches **all profiles**, and is inert (no-op)
+     inside GSD projects (detected via the `.planning/` marker) so GSD's own gate stays the sole
      enforcer there — no duplicate prompt, no cross-methodology stomp.
+     **(2026-07-28)** delivery changed: it is now `transform/deltas/001-fallow-graft.patch` inside
+     the ultrapowers fork rather than `hooks/lib/superpowers-fallow-graft.mjs` re-patching the
+     installed cache at every SessionStart. Both files were deleted. Same behaviour, but the fork's
+     rebuild now fails loudly if upstream rewrites the file underneath it, where the runtime graft
+     would simply have stopped finding its anchor.
   2. **Stack-aware test/build-command proposal** — reinstated as `bin/detect-stack-commands.mjs`
      + `bin/lib/stack-commands.mjs`, wired into the rules compiler, which now emits a
      `## Detected commands` section into `stack-rules.md` (rebuild-safe: re-derived from the
@@ -600,3 +636,134 @@
   `--keep-under`, and `--older-than` CLI flags were REMOVED — YAGNI, they were parsed but
   never wired into `buildPlan`; the running session stays protected by
   `--exclude-session <uuid>` plus the age-based KEEP window.)
+
+## RISK-ULTRAPOWERS-001 — Owning a fork carries merge burden on every upstream release
+
+- **Status:** Open (accepted, 2026-07-27; rewritten the same day, when the fork replaced the patcher)
+- **Context:** Ultrapowers is an owned fork of `superpowers@claude-plugins-official`, not a patch
+  over its plugin cache. The debt changed shape rather than disappearing: no longer reapplying
+  rules after `/plugin update` replaces the cache directory, but merging each upstream release
+  into a tree we maintain. The source analysis' objection — a fork fights merges every release —
+  still holds and is accepted knowingly. What changed is the measured cost of the alternative:
+  1504 occurrences across 111 files in 382 distinct spellings, and two classifier designs that
+  failed review.
+- **Mitigation:** the update is one command runnable from any project (`/up-update`), which either
+  completes or refuses. The refusal thresholds are the actual bound — a delta from `patch` that
+  fails to apply, an inventory scan still finding the upstream name outside the keep-list, an
+  upstream diff over the size threshold, or a `main` carrying changes not derivable from
+  `original` + `patch`. Deltas stay discrete rather than smeared into the rename, so one that
+  upstream has since implemented is reported as obsolete instead of carried forever.
+- **Residual:** a release that restructures the tree wholesale still needs a human read. That is
+  what the size threshold exists to surface rather than hide.
+
+## RISK-ULTRAPOWERS-002 — Rebrand is machine-wide and cannot be gated per project
+
+- **Status:** Resolved (2026-07-27) — the fork removed the premise, not just the symptom.
+- **Context:** the patch landed in `~/.claude/plugins/cache/.../superpowers/`, which has no
+  project root. The `.planning`-based predicate that disables Ultrapowers inside GSD projects
+  under the `full` profile therefore could not reach it: in a GSD project, Superpowers skills
+  still presented themselves as Ultrapowers. Recorded as an accepted limitation because no
+  mitigation existed — patching only skills GSD never calls was a half-measure, and suppressing
+  the patch when any GSD project exists is unimplementable with no machine-wide project list.
+- **Resolution:** a fork is a plugin, enabled and disabled per project like any other, so the
+  existing gate reaches it. Nothing needed to be built for this; the limitation was an artefact
+  of patching a machine-wide cache.
+
+## RISK-ULTRAPOWERS-003 — Blind replacement would break `superpowers:` skill resolution
+
+- **Status:** Resolved (2026-07-27) — no classification survives, so there is nothing left to
+  misclassify.
+- **Context:** the skill namespace derived from the plugin directory name, which the rebrand
+  deliberately did not touch, so a naive `\bSuperpowers\b` -> `Ultrapowers` pass would rewrite the
+  prefix in `superpowers:writing-plans` too. The failure was delayed — the file still read
+  correctly and only the invocation broke, at use time. The mitigation was a classification table
+  whose protective buckets ran first and consumed their matches.
+- **Resolution:** inside our own fork the rename is wholesale — directory name, plugin identity
+  and namespace all become ours, and `ultrapowers:brainstorming` is the real invocation name
+  rather than a label rewritten over a foreign one. There is no foreign identity to protect.
+  The table was reverted in `47db796`; its review had already proven by execution that the
+  enumeration could not be completed — four path shapes fell through to `brand` and were
+  rewritten into paths that never resolve.
+
+## RISK-ULTRAPOWERS-004 — Keep-list rot devalues the completeness check
+
+- **Status:** Open (mitigated by design; narrowed 2026-07-27 when the ignore list became a
+  keep-list, and **narrowed again 2026-07-28 when the keep-list became an assertion**)
+- **Context:** the transform carries a small set of things it must not rewrite. The 2026-07-28
+  implementation found the keep-list mechanism itself to be the defect for `README.md`: all nine
+  `obra/superpowers` occurrences upstream are **install instructions for upstream's own
+  distribution channels**, so freezing them in place ships a README that installs the wrong
+  plugin. Protecting a string and meaning an obligation are not the same thing.
+- **Mitigation (as built):** the obligation is now discharged three ways, none of which is a
+  freeze that can rot:
+  1. `LICENSE` is `mode: "verbatim"` in the map — never passed through the rename, and the build
+     asserts it is byte-identical to upstream's.
+  2. `README.md` and the manifest `description` are **fork-owned or delta-authored**, and
+     `config.attribution.require` asserts the credit is *present in the built tree*. The build
+     refuses without it. An assertion cannot silently protect a string nobody needs any more.
+  3. Exactly one global protected string remains — `obra/superpowers`, upstream's identity — with
+     its reasoning recorded in `config.$protect-why`.
+  Every rule and requirement carries a reason, asserted by the fork's own suite, and `/up-update
+  check` prints all of them with their reasons.
+- **Residual:** an entry kept for a reason that has quietly stopped being true. Reviewed on each
+  upstream version bump, when the list is printed anyway. Materially smaller than before: the
+  reviewable surface is one protected string plus three assertions, not a list of frozen files.
+
+## RISK-ULTRAPOWERS-005 — Migration can mis-pair spec and plan documents
+
+- **Status:** Open (mitigated by design)
+- **Context:** migration into `.ultrapowers/phases/<NN>-<slug>/` must pair 21 specs with 13 plans
+  in `docs/superpowers/`. Pairing is guessed from date and slug, not derived; some files pair with
+  nothing (`2026-07-26-phase2-design-skills-HANDOFF.md`). A silent wrong pairing buries a design
+  document under an unrelated phase.
+- **Mitigation:** migration proposes and does not act — it prints the full mapping plus the
+  unpaired list and waits for confirmation, the same rule Т.4 sets for the resume hook. `git mv`
+  preserves history. Unpaired files go to `.ultrapowers/archive/` intact rather than being guessed
+  at. Acceptance counts files in and out.
+- **Residual:** a confirmed-but-wrong pairing. Recoverable — `git mv` keeps history, so the move
+  is reversible.
+
+## RISK-ULTRAPOWERS-006 — Agent registry adds resident context cost every session
+
+- **Status:** Open (accepted with a budget)
+- **Context:** agent names and descriptions are injected into the system prompt every session.
+  Measured on this machine: 37 installed agents = 8 381 chars = **~2 330 tokens resident**,
+  average description 206 chars, spread 72-599. The Ultrapowers registry adds 39 more. For
+  comparison, the resident weight this project criticized in Buildomator (приложение Б) was
+  5 290 tokens — so an unbudgeted registry reaches ~40 % of the thing we called unacceptable.
+- **Mitigation:** the registry does not ship to the `full` profile at all, where GSD's ~33 agents
+  already occupy that slot (both together would be ~4 530 tokens); a description-length budget
+  with a failing test guards `base`/`lite`; a lazy-description mode for rare heavy agents is an
+  open question for layer 3 (the platform does this for tools via `ToolSearch`; no documented
+  agent equivalent).
+- **Residual:** ~1 300-2 200 tokens resident in `base`/`lite`, deliberately spent to buy per-agent
+  tier selection. Accepted.
+
+## RISK-ULTRAPOWERS-007 — A fork left un-updated drifts until merging stops being mechanical
+
+- **Status:** Open (mitigated by design, 2026-07-27)
+- **Context:** the merge burden in `RISK-ULTRAPOWERS-001` is per release and small only while the
+  fork stays close to upstream. Skip several releases and the accumulated diff crosses the point
+  where the transform replays cleanly, at which case each delta has to be re-derived by hand. This
+  is the failure mode that makes people abandon forks, and it arrives through inaction rather than
+  through any decision.
+- **Mitigation:** `/up-update` runs from any project, so checking never requires switching
+  repositories — the cost of staying current is one command rather than a context switch. Release
+  detection queries GitHub directly (no Claude Code command reports available plugin updates in
+  machine-readable form; this was checked), so drift is surfaced rather than waiting to be asked
+  about.
+- **Residual:** the command still has to be run. Whether a periodic nudge is warranted should be
+  decided after the first few real updates, not guessed now.
+
+## RISK-ULTRAPOWERS-008 — Upstream may change its licence or its direction
+
+- **Status:** Open (accepted, 2026-07-27)
+- **Context:** the fork rests on upstream being MIT (© Jesse Vincent, `obra/superpowers`). A
+  licence change, a move to a closed model, or a direction we do not want to follow would all
+  affect what we can take from future releases.
+- **Mitigation:** none needed for what we already hold — MIT is irrevocable for the versions
+  already published, so the exposure is strictly forward-looking. `LICENSE` is carried verbatim
+  into the fork and never touched by the transform, and upstream authorship stays attributed in
+  the fork's README and `plugin.json` description, stated as a fork rather than implied.
+- **Residual:** future releases could become unusable to us. The fork keeps working at whatever
+  version we last merged, which is the whole point of holding the objects ourselves.

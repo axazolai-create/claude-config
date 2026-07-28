@@ -2,16 +2,25 @@
   "$comment": "Profile definitions for setup.mjs. Globs relative to payload/. exclude wins over include; extends unions the parent chain's exclude first. optional groups are promoted over exclude when active.",
   "alwaysExclude": ["hooks/task-lifecycle-probe*", "claude-md/**", "**.test.mjs"],
   "managedPlugins": {
+    "ultrapowers":  "ultrapowers@ultrapowers",
     "superpowers":  "superpowers@claude-plugins-official",
     "gsd":          "gsd@claude-plugins-official",
     "context-mode": "context-mode@context-mode",
     "context7":     "context7@claude-plugins-official"
   },
+  "$marketplaces": "Where each managed plugin's marketplace comes from, so setup.mjs can register it before installing - `claude plugin install` fails outright against an unknown marketplace. Sources are transcribed from a real ~/.claude/plugins/known_marketplaces.json, not guessed; a marketplace with no entry here produces a note telling the human to add one, never an invented repo. This gap predates the fork: the four pre-fork plugins live in marketplaces that any machine which ran the bootstrap already has, so nothing ever tripped it.",
+  "marketplaces": {
+    "ultrapowers":             "axazolai/ultrapowers",
+    "claude-plugins-official": "anthropics/claude-plugins-official",
+    "context-mode":            "mksglu/context-mode"
+  },
+  "$keepInstalled": "Managed plugins that are disabled when not required, but never uninstalled. superpowers is here because ultrapowers is our fork of it: keeping upstream on disk makes rollback one command (re-enable it, disable the fork) instead of a reinstall from the marketplace. It must stay in managedPlugins to be disabled at all - a plugin we stop managing is a plugin we stop turning off. Both enabled at once is NOT the fallback: they share 14 skill names and that is undocumented behaviour we do not run in production.",
+  "keepInstalled": ["superpowers"],
   "profiles": {
-    "full": { "plugins": ["superpowers", "gsd", "context-mode", "context7"] },
+    "full": { "plugins": ["ultrapowers", "gsd", "context-mode", "context7"] },
 
     "base": {
-      "plugins": ["superpowers", "context-mode", "context7"],
+      "plugins": ["ultrapowers", "context-mode", "context7"],
       "exclude": [
         "agents/gsd-*.md", "apply-gsd-agent-patches.mjs", "gsd-defaults-sync.mjs",
         "sync-gsd-context-mode-tool.mjs", "commands/init-session.md",
@@ -30,7 +39,7 @@
 
     "lite": {
       "extends": "base",
-      "plugins": ["superpowers", "context-mode", "context7"],
+      "plugins": ["ultrapowers", "context-mode", "context7"],
       "overlay": "payload-lite",
       "maxPluginTier": "core",
       "exclude": [

@@ -2,7 +2,7 @@
 profiles: [base, lite]
 ---
 ## PLUGINS & SKILLS (loading policy)
-- Base plugins (superpowers, context-mode, context7) are enabled at USER scope and load every
+- Base plugins (ultrapowers, context-mode, context7) are enabled at USER scope and load every
   session. Do not duplicate them in project settings.
 - Stack-specific plugins are enabled PER PROJECT via `.claude/settings.json` -> enabledPlugins.
 - Project plugin sets live under `~/.claude/setting-templates/`, nested by direction (e.g.

@@ -3,7 +3,7 @@
 // Fires after Claude runs `git commit`/`push`/`tag` through the Bash tool. Thin wrapper
 // around lib/graphify-global-sync-run.mjs, the shared worker that refreshes this project's
 // entry in the graphify global graph - see that file's header for the full rationale (why
-// this coexists with the native post-commit hook, trigger surface, no Superpowers trigger).
+// this coexists with the native post-commit hook, trigger surface, no Ultrapowers trigger).
 // No-op (exit 0, never blocks) if disabled or the command isn't a matching git operation.
 // Toggle: CLAUDE_GRAPHIFY_AUTOSYNC=0.
 import { readFileSync } from "node:fs";

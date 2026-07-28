@@ -22,9 +22,9 @@
 // "graphify is two tools"), which is heavier and synchronous-ish, so narrowing to
 // review/verify gates would matter there. There's no such cost here, so commit stays as a
 // trigger too rather than being replaced by a narrower set.
-// No Superpowers-close-specific trigger: Superpowers' review skills leave no git-visible
+// No Ultrapowers-close-specific trigger: Ultrapowers' review skills leave no git-visible
 // signal of their own (no tag, no distinct command) - that case is covered incidentally by
-// the commit/push triggers, since finishing a Superpowers branch always ends in one of those.
+// the commit/push triggers, since finishing an Ultrapowers branch always ends in one of those.
 // Usage: node graphify-global-sync-run.mjs [repoPath]  (defaults to cwd)
 // Never throws, never blocks: no-ops (exit 0) if this isn't a git repo, HEAD has no
 // commits yet, or `graphify` isn't installed - this must never surface as an error

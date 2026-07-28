@@ -44,6 +44,7 @@ import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
 import { migrateSettingsModel } from "./payload/bin/lib/model-migration.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
+import { knownMarketplaces } from "./payload/bin/init-stack.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
@@ -939,7 +940,9 @@ async function main() {
 
   /* ---------- plugin reconciliation (spec § 4): only managedPlugins are ever touched ---------- */
   {
-    const managed = loadVariants(REPO_ROOT).managedPlugins;
+    const variantsFile = loadVariants(REPO_ROOT);
+    const managed = variantsFile.managedPlugins;
+    const keepInstalled = variantsFile.keepInstalled || [];
     const cliProbe = process.env.CLAUDE_SETUP_SKIP_PLUGINS === "1"
       ? undefined   // hermetic mode (tests): no shell-out; falls to the notes path below
       : safe(() => spawnSync("claude", ["plugin", "list", "--json"], { encoding: "utf8" }));
@@ -949,7 +952,9 @@ async function main() {
       : null;   // CLI unavailable, errored, or emitted non-array/invalid JSON -> fallback notes
     const curSettings = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
     const { actions, notes } = buildPluginPlan({
-      required: V.plugins, managed, enabledPlugins: curSettings.enabledPlugins, installedIds });
+      required: V.plugins, managed, enabledPlugins: curSettings.enabledPlugins, installedIds, keepInstalled,
+      marketplaces: variantsFile.marketplaces,
+      knownMarketplaces: safe(() => [...knownMarketplaces(CDIR)]) });
     if (actions.length || notes.length) {
       log("\n--- plugin reconciliation ---");
       log(formatPlan(actions, notes));
@@ -969,6 +974,18 @@ async function main() {
         const s = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
         s.enabledPlugins = s.enabledPlugins || {};
         for (const a of actions) {
+          // Registering a marketplace fetches and trusts remote code, so it gets the SAME gate as
+          // install - never a weaker one just because it is a prerequisite.
+          if (a.type === "marketplace_add") {
+            if (execInstall) {
+              const r = spawnSync("claude", ["plugin", "marketplace", "add", a.source], { encoding: "utf8", stdio: "inherit" });
+              summary.push(`${r.status === 0 ? "marketplace-add" : "marketplace-add-FAILED"} ${a.source}`);
+            } else {
+              log(`  run manually: claude plugin marketplace add ${a.source}`);
+              summary.push(`marketplace-add-manual ${a.source}`);
+            }
+            continue;
+          }
           if (a.type === "install" || a.type === "uninstall") {
             if (execInstall) {
               const r = spawnSync("claude", ["plugin", a.type, a.id], { encoding: "utf8", stdio: "inherit" });

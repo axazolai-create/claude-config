@@ -3,7 +3,7 @@ paths:
   - "**/.planning/**"
 ---
 
-# GSD / Superpowers routing
+# GSD / Ultrapowers routing
 
 Loads only in repos that have a `.planning/` directory (GSD project). Irrelevant elsewhere —
 do not duplicate this in the global `CLAUDE.md`.
@@ -13,7 +13,7 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 
 ## Precedence: GSD owns the pipeline when `.planning/` exists
 
-- Drive ALL phase work through explicit `/gsd-*` commands. Do NOT invoke Superpowers skills
+- Drive ALL phase work through explicit `/gsd-*` commands. Do NOT invoke Ultrapowers skills
   for discovery, planning, execution, TDD, debugging, or code review here — they orphan
   output from GSD's artifact chain, and their interactive prompts stall GSD's execute stream.
 - Map: discovery -> `/gsd-discuss-phase` (or `/gsd-explore`); plan -> `/gsd-plan-phase`;
@@ -40,15 +40,15 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
   subagents never read the project's compiled `stack-rules.md`, so a prose rule living only
   here would be dead weight for them.
 
-## Superpowers is retained only for gaps GSD does not fill
+## Ultrapowers is retained only for gaps GSD does not fill
 
 - Skill authoring (no GSD equivalent).
 - Greenfield Socratic brainstorm BEFORE a GSD project exists (no `.planning/` yet). Once
-  scope is clear, hand off to `/gsd-new-project` and stop using Superpowers for that work.
+  scope is clear, hand off to `/gsd-new-project` and stop using Ultrapowers for that work.
 
 ## Worktrees: single owner
 
-- GSD owns worktrees (`/gsd-workspace`, execute waves). Superpowers' aggressive auto-worktree
+- GSD owns worktrees (`/gsd-workspace`, execute waves). Ultrapowers' aggressive auto-worktree
   skill is shadowed by a no-op `using-git-worktrees/SKILL.md` in `~/.claude/skills/` (user
   scope wins over plugin cache).
 - Two worktree creators collide and fail silently outside a git repo. `git init` before any
@@ -224,7 +224,7 @@ now actively harmful — the correction runs the opposite direction.
 ## TDD / debug / code-review: never double-gate
 
 - One enforcer per repo. GSD owns these via `.planning/config.json` (`tdd_mode`, code-review
-  toggles) — set them deliberately; do not let Superpowers TDD/debug skills fire alongside.
+  toggles) — set them deliberately; do not let Ultrapowers TDD/debug skills fire alongside.
 - Before looking for the root of a problem/error in dependencies, check if there's an
   alternative solution. If there is, suggest it. If not, search for the root.
 

@@ -64,9 +64,8 @@ test("profile chain is a strict subset: lite ⊂ base ⊂ full", () => {
   assert.ok(base.size < full.size && lite.size < base.size, "each step must be a proper subset");
 });
 
-test("Category-II files ship to all profiles (fallow graft + stack-commands)", () => {
+test("Category-II files ship to all profiles (stack-commands)", () => {
   const expected = [
-    "hooks/lib/superpowers-fallow-graft.mjs",
     "bin/detect-stack-commands.mjs",
     "bin/lib/stack-commands.mjs",
   ];
@@ -318,4 +317,20 @@ test("full identity honors alwaysExclude (task-lifecycle-probe not shipped in an
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   assert.ok(!v.rels.some((r) => /task-lifecycle-probe/.test(r)),
     "task-lifecycle-probe must be excluded even from full");
+});
+
+// Task 7: an install against an unknown marketplace fails outright, and setup.mjs will not guess a
+// repo. So every marketplace a managed plugin lives in must have its source recorded here.
+test("every managed plugin's marketplace has a recorded source", () => {
+  const v = JSON.parse(readFileSync(join(ROOT, "variants.json"), "utf8"));
+  const needed = [...new Set(Object.values(v.managedPlugins).map((id) => id.split("@")[1]))];
+  const missing = needed.filter((mp) => !(v.marketplaces || {})[mp]);
+  assert.deepEqual(missing, [], `marketplaces without a source in variants.json: ${missing.join(", ")}`);
+});
+
+test("keepInstalled only names plugins that are still managed", () => {
+  const v = JSON.parse(readFileSync(join(ROOT, "variants.json"), "utf8"));
+  for (const name of v.keepInstalled || []) {
+    assert.ok(v.managedPlugins[name], `${name} is kept installed but no longer managed - it could never be disabled`);
+  }
 });
