@@ -118,13 +118,13 @@ Add to `~/.claude/settings.json` under `hooks`. Note the trap from У.3 of the s
 
 ```json
 "ConfigChange": [
-  { "hooks": [{ "type": "command", "command": "node \"D:/6__Work/claude-config/.ultrapowers/archive/rework/probe-d-event-log.mjs\" ConfigChange" }] }
+  { "hooks": [{ "type": "command", "command": "node \"D:/6__Work/claude-config/docs/superpowers/rework/probe-d-event-log.mjs\" ConfigChange" }] }
 ],
 "UserPromptSubmit": [
-  { "hooks": [{ "type": "command", "command": "node \"D:/6__Work/claude-config/.ultrapowers/archive/rework/probe-d-event-log.mjs\" UserPromptSubmit" }] }
+  { "hooks": [{ "type": "command", "command": "node \"D:/6__Work/claude-config/docs/superpowers/rework/probe-d-event-log.mjs\" UserPromptSubmit" }] }
 ],
 "FileChanged": [
-  { "hooks": [{ "type": "command", "command": "node \"D:/6__Work/claude-config/.ultrapowers/archive/rework/probe-d-event-log.mjs\" FileChanged" }] }
+  { "hooks": [{ "type": "command", "command": "node \"D:/6__Work/claude-config/docs/superpowers/rework/probe-d-event-log.mjs\" FileChanged" }] }
 ]
 ```
 
@@ -177,7 +177,7 @@ Create `.ultrapowers/archive/rework/probe-d-results.md` with one row per event: 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add .ultrapowers/archive/rework/probe-d-event-log.mjs .ultrapowers/archive/rework/probe-d-results.md
+git add docs/superpowers/rework/probe-d-event-log.mjs docs/superpowers/rework/probe-d-results.md
 git commit -F <message-file>
 ```
 
@@ -231,7 +231,7 @@ test("an invocation on the same line as brand prose survives the brand rule", ()
 
 test("artifact paths are repointed at .ultrapowers", () => {
   assert.equal(
-    rewrite("saved to .ultrapowers/archive/plans/x.md").text,
+    rewrite("saved to docs/superpowers/plans/x.md").text,
     "saved to .ultrapowers/phases/x.md",
   );
   assert.equal(rewrite("ledger in .superpowers/sdd/").text, "ledger in .ultrapowers/sdd/");
@@ -249,7 +249,7 @@ test("an occurrence no rule covers is reported as unclassified", () => {
 });
 
 test("the histogram counts every occurrence exactly once", () => {
-  const src = "Superpowers uses superpowers:writing-plans and .ultrapowers/archive/plans/a.md";
+  const src = "Superpowers uses superpowers:writing-plans and docs/superpowers/plans/a.md";
   const { histogram, unclassified } = rewrite(src);
   const total = Object.values(histogram).reduce((a, b) => a + b, 0) + unclassified.length;
   assert.equal(total, (src.match(/superpowers/gi) || []).length);

@@ -30,7 +30,7 @@ This phase was abandoned mid-flight and superseded by the fork design (upstream 
 
 ### Task 2 — deferred minors
 
-- Task 2: minor (deferred): artifact rule lacks a trailing boundary - .ultrapowers/archive/plansomething
+- Task 2: minor (deferred): artifact rule lacks a trailing boundary - docs/superpowers/plansomething
   -> .ultrapowers/phasesomething. Add (?![\w-]).
 - Task 2: minor (deferred): flags.replace("g","") is a substring replace and the i flag survives
   into the replacement, so Docs/Superpowers/Plans case-flattens. Build the flag set explicitly.

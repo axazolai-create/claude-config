@@ -4,7 +4,7 @@
 
 **Goal:** Give ultrapowers one versioned planning tree (`.ultrapowers/`) whose only git-ignored path is `sdd/`, make agent delegation the execution default, and replace "delete the workspace" with "write `NN-SUMMARY.md`".
 
-**Architecture:** Three numbered deltas against the ultrapowers fork repoint every document path, invert the execution default, and rewrite the SDD `## Finish` section; two new fork-owned prompt files let subagents write the SUMMARY and VERIFICATION documents; one new fork-owned script allocates phase directories. In claude-config, the existing `.superpowers/sdd/` scratch is folded into SUMMARYs and the historic `.ultrapowers/archive/{plans,specs}` trees move under `.ultrapowers/archive/`.
+**Architecture:** Three numbered deltas against the ultrapowers fork repoint every document path, invert the execution default, and rewrite the SDD `## Finish` section; two new fork-owned prompt files let subagents write the SUMMARY and VERIFICATION documents; one new fork-owned script allocates phase directories. In claude-config, the existing `.superpowers/sdd/` scratch is folded into SUMMARYs and the historic `docs/superpowers/{plans,specs}` trees move under `.ultrapowers/archive/`.
 
 **Tech Stack:** Node 20+ ESM (`node --test`), bash scripts, the fork's own `transform/` build engine (`parsePatch`/`applyPatch`), git.
 
@@ -34,7 +34,7 @@
 These close gaps the specs left open. They are decisions, not guesses — change them here if wrong, before Task 1.
 
 1. **`.ultrapowers/docs/` is for artefacts and external sources only.** Process history never goes there (user ruling, 2026-07-28).
-2. **Historic `.ultrapowers/archive/{plans,specs}` (15 plans + 31 specs) move verbatim to `.ultrapowers/archive/{plans,specs}/`.** No retrofit into phase directories — retrofitting is out of scope in both source specs, and folding 46 documents into invented phase numbers would fabricate a history that never happened.
+2. **Historic `docs/superpowers/{plans,specs}` (15 plans + 31 specs) move verbatim to `.ultrapowers/archive/{plans,specs}/`.** No retrofit into phase directories — retrofitting is out of scope in both source specs, and folding 46 documents into invented phase numbers would fabricate a history that never happened.
 3. **`GLOSSARY.md` and `RISK_REGISTER.md` live inside `.ultrapowers/`**, per the layout spec. This contradicts the user-scope `~/.claude/CLAUDE.md`, which says the register goes to `.planning/` or the project root. That file is `CURATED:NOEDIT` and hook-blocked, so Task 12 asks the user to make the one-line edit; no task attempts it.
 4. **ADRs live at `.ultrapowers/adr/NNNN-slug.md`** (user ruling, 2026-07-28), not the root `docs/adr/` the decision-records spec assumed. Consequence, accepted knowingly: `/gsd-ingest-docs` scans `docs/adr/`, so ADRs no longer migrate into a `.planning/` setup for free. Plan #3 owns whatever bridge that needs.
 5. **`phases/` vs `tasks/` vs `adhoc/`**: `phases/` for work that gets a plan and more than one commit; `tasks/` for quick work with the same file set and shorter documents; `adhoc/` for unplanned, out-of-phase work. The allocator script takes the kind as its first argument, so the choice is explicit at the moment of creation.
@@ -972,12 +972,12 @@ Expected: `git status --short` shows nothing — `.superpowers/` was never track
 
 ### Task 11: Move the historic documents and the risk register into the tree
 
-`.ultrapowers/archive/` holds 15 plans, 31 specs and a `rework/` folder — process records, which by the layout's own rule do not belong in `.ultrapowers/docs/` (artefacts and external sources only). They move to `.ultrapowers/archive/` verbatim. No retrofit into phase directories: retrofitting is out of scope in both source specs, and inventing phase numbers for 46 documents would fabricate a history that never happened.
+`docs/superpowers/` holds 15 plans, 31 specs and a `rework/` folder — process records, which by the layout's own rule do not belong in `.ultrapowers/docs/` (artefacts and external sources only). They move to `.ultrapowers/archive/` verbatim. No retrofit into phase directories: retrofitting is out of scope in both source specs, and inventing phase numbers for 46 documents would fabricate a history that never happened.
 
 **This task moves the file it is being executed from.** After the move this plan lives at `.ultrapowers/archive/plans/2026-07-28-ultrapowers-planning-tree.md`. The SDD workspace is keyed on the plan's basename, so it is unaffected; but extract Task 12's brief **before** running Step 1, or `scripts/task-brief` will be pointed at a path that no longer exists.
 
 **Files:**
-- Move: `.ultrapowers/archive/` → `.ultrapowers/archive/`
+- Move: `docs/superpowers/` → `.ultrapowers/archive/`
 - Move: `RISK_REGISTER.md` → `.ultrapowers/RISK_REGISTER.md`
 - Modify: every file referencing the old paths (30 references outside `docs/`, more inside it)
 
@@ -1001,18 +1001,18 @@ Expected: renames only, no additions or deletions. `docs/` keeps its reference m
 - [ ] **Step 2: Repoint every reference**
 
 ```bash
-git grep -l ".ultrapowers/archive/" | while read -r f; do
+git grep -l "docs/superpowers/" | while read -r f; do
   node -e "
     const fs = require('fs'); const p = process.argv[1];
     const before = fs.readFileSync(p, 'utf8');
-    const after = before.split('.ultrapowers/archive/').join('.ultrapowers/archive/');
+    const after = before.split('docs/superpowers/').join('.ultrapowers/archive/');
     if (after !== before) fs.writeFileSync(p, after);
   " "$f"
 done
-git grep -n ".ultrapowers/archive/" || echo "no stale references remain"
+git grep -n "docs/superpowers/" || echo "no stale references remain"
 ```
 
-Expected: `no stale references remain`. The substitution is safe because `.ultrapowers/archive/` is a full path prefix that appears nowhere as a substring of something else.
+Expected: `no stale references remain`. The substitution is safe because `docs/superpowers/` is a full path prefix that appears nowhere as a substring of something else.
 
 Then repoint the register's own references:
 

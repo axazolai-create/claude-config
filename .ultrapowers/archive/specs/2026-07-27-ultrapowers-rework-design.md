@@ -197,14 +197,14 @@ Every mention falls in exactly one bucket:
 | `brand` | `You have superpowers`, `Superpowers' most common process skills` | replace |
 | `invocation` | `superpowers:brainstorming` | **never** — namespace comes from the plugin directory name |
 | `plugin-path` | `skills/using-superpowers/references/...`, `${CLAUDE_PLUGIN_ROOT}` | **never** |
-| `artifact-path` | `.ultrapowers/archive/plans/`, `.superpowers/sdd/` | rewrite to `.ultrapowers/...` |
+| `artifact-path` | `docs/superpowers/plans/`, `.superpowers/sdd/` | rewrite to `.ultrapowers/...` |
 | `ignored` | `scripts/*codex*`, `references/{gemini,pi}-tools.md`, `.opencode/`, `.pi/` | skip, with a recorded reason |
 
 ```json
 { "bucket": "invocation", "match": "superpowers:[a-z-]+", "replace": null,
   "why": "namespace derives from the plugin directory name; renaming breaks skill resolution" },
 { "bucket": "brand",      "match": "\\bSuperpowers\\b",   "replace": "Ultrapowers" },
-{ "bucket": "artifact",   "match": ".ultrapowers/archive/(plans|specs)/", "replace": ".ultrapowers/phases/" }
+{ "bucket": "artifact",   "match": "docs/superpowers/(plans|specs)/", "replace": ".ultrapowers/phases/" }
 ```
 
 **Application order is load-bearing.** Protective buckets (`invocation`, `plugin-path`) run first
@@ -345,7 +345,7 @@ writer resolves the destination in that order — `.ultrapowers/RISK-REGISTER.md
 
 ### Migration
 
-Sources: `.ultrapowers/archive/{specs,plans}/` (21 + 13 files) and `.superpowers/sdd/`. This repository
+Sources: `docs/superpowers/{specs,plans}/` (21 + 13 files) and `.superpowers/sdd/`. This repository
 is the first subject; both directories are non-empty.
 
 Spec-to-plan pairs are **guessed** from date and slug, not derived — and some files pair with
@@ -370,7 +370,7 @@ Two entry points, with different roles:
 
 - `/init-stack` **performs** the migration.
 - A `SessionStart` hook only **detects and offers** it: `.ultrapowers/` absent while
-  `.ultrapowers/archive/` or `.superpowers/` is present. Under `full` the `.planning` gate applies on
+  `docs/superpowers/` or `.superpowers/` is present. Under `full` the `.planning` gate applies on
   top. It never migrates by itself — the action is hard to reverse.
 
 ### Clean-guard (improvement 20)
