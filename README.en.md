@@ -166,7 +166,7 @@ switch at any time by re-running `setup.mjs`.
 - **full** (default) — everything this README describes: every hook, every command, every
   skill, plus the `gsd` plugin on top of the rest.
 - **lite** — a slimmed-down set with no GSD machinery:
-  - plugins — only `superpowers`, `context-mode`, `context7` (no `gsd`);
+  - plugins — only `ultrapowers`, `context-mode`, `context7` (no `gsd`);
   - exactly 6 hooks: `secrets-gate`, `deny-curated-claude-md`, `graphify-global-sync`,
     `leanmode-subagent`, `token-usage-log`, `session-init` (the last one still runs, but skips
     every GSD-specific step — see the callout in "Project auto-init" below);
@@ -180,6 +180,30 @@ switch at any time by re-running `setup.mjs`.
   - **NOT included**: `gsd` agents and hooks, `db-live-access-gate`, `ci-watch-nudge`, the
     `schedulewakeup` nudge, the pnpm-phantom guard, bg-supervision (`supervise-bg.mjs`),
     `task-lifecycle-probe`, the `/init-mcp` command, the `using-git-worktrees` shadow skill.
+
+### `ultrapowers` replaces `superpowers`
+
+All three profiles use **`ultrapowers@ultrapowers`** as the base skills plugin — our fork of
+[`obra/superpowers`](https://github.com/obra/superpowers) (Jesse Vincent, MIT), narrowed to Claude
+Code. It lives in [`axazolai/ultrapowers`](https://github.com/axazolai/ultrapowers): branch
+`original` holds pristine upstream snapshots, `patch` holds the plugin map, the rename transform
+and our deltas, and `main` is the generated result. `main` is never hand-edited — a rebuild that
+does not reproduce it byte-for-byte is a defect the build reports.
+
+Only what is actually the plugin is carried across (51 of upstream's 180 files: the manifest, the
+`SessionStart` hook, the skills, `LICENSE`). Everything else — the six other harnesses, upstream's
+own test suite, their docs and release tooling — is recorded as **deliberately ignored**, with a
+reason on every rule. A file that appears upstream and lands in neither list blocks the build until
+a human classifies it.
+
+**Upstream is disabled, not uninstalled** (`variants.json → keepInstalled`): rollback is one
+command — re-enable `superpowers`, disable the fork — rather than a reinstall from the marketplace.
+Running both enabled is not the fallback: they share 14 skill names.
+
+Updating is `/up-update`: `check` is read-only and runs from any project; `update` rebuilds in a
+throwaway clone and either refuses with the condition that fired, or prepares the release and
+stops. Publishing needs an explicit `--publish`, and getting the new version onto a machine is a
+separate `/plugin update`.
 
 ### Selecting a variant
 

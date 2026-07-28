@@ -92,6 +92,12 @@
   **Re-resolved (2026-07-27):** base/lite now receive fallow via the guarded Superpowers-review
   graft (`hooks/lib/superpowers-fallow-graft.mjs`, ships to all profiles) — see
   RISK-INITSTACK-001's resolution note for the full mechanism.
+  **Mechanism moved (2026-07-28):** the graft is now `transform/deltas/001-fallow-graft.patch` in
+  the ultrapowers fork, baked into the plugin at build time. The runtime graft and its hook were
+  deleted: they patched the *upstream* plugin cache, and every profile now enables the fork
+  instead, so it had become code that repaired a plugin nobody loads. The capability is unchanged
+  and its `.planning/` guard is intact — what changed is that it is now part of the artifact and
+  therefore watched by the rebuild, instead of being re-applied over someone else's files.
 - **Context:** `gsd-config-patch.mjs`'s tier2 default sets `code_quality.fallow.enabled` to
   `true` whenever the project root has a `package.json` — deliberately without checking
   whether the `fallow` binary is actually installed (see the comment above
@@ -533,11 +539,15 @@
 - **Category-II reinstatement (done, 2026-07-27):** three capabilities were tracked; two were
   genuinely reinstated, one deliberately retired.
   1. **Fallow** (`fallow`'s install-proposal never reaching base/lite, and RISK-FALLOW-001) —
-     reinstated via a `.planning/`-guarded graft into Superpowers' own code-review flow
-     (`hooks/lib/superpowers-fallow-graft.mjs`): it grafts the fallow devDependency proposal
-     into the Superpowers reviewer path, ships in **all profiles**, and is inert (no-op) inside
-     GSD projects (detected via the `.planning/` marker) so GSD's own gate stays the sole
+     reinstated via a `.planning/`-guarded graft into the code-review flow: it grafts the fallow
+     devDependency proposal into the reviewer path, reaches **all profiles**, and is inert (no-op)
+     inside GSD projects (detected via the `.planning/` marker) so GSD's own gate stays the sole
      enforcer there — no duplicate prompt, no cross-methodology stomp.
+     **(2026-07-28)** delivery changed: it is now `transform/deltas/001-fallow-graft.patch` inside
+     the ultrapowers fork rather than `hooks/lib/superpowers-fallow-graft.mjs` re-patching the
+     installed cache at every SessionStart. Both files were deleted. Same behaviour, but the fork's
+     rebuild now fails loudly if upstream rewrites the file underneath it, where the runtime graft
+     would simply have stopped finding its anchor.
   2. **Stack-aware test/build-command proposal** — reinstated as `bin/detect-stack-commands.mjs`
      + `bin/lib/stack-commands.mjs`, wired into the rules compiler, which now emits a
      `## Detected commands` section into `stack-rules.md` (rebuild-safe: re-derived from the
@@ -651,17 +661,27 @@
 
 ## RISK-ULTRAPOWERS-004 — Keep-list rot devalues the completeness check
 
-- **Status:** Open (mitigated by design; narrowed 2026-07-27, when the ignore list became a keep-list)
-- **Context:** the transform carries a small keep-list of what it must not rewrite: `LICENSE`
-  verbatim, and upstream attribution plus the upstream repository URL in the README and the
-  `plugin.json` description. This replaces the abandoned ignore list — 29 of 119 mentions across
-  foreign-harness packaging — and differs from it in kind: the entries exist for legal reasons
-  rather than technical ones, and the list is short enough to read in full.
-- **Mitigation:** every entry carries a recorded reason and `/up-update` prints them, so a silent
-  skip is impossible. The inventory scan (`ultrapowers-patches/scan-inventory.mjs`) treats every
-  occurrence outside the keep-list as a defect, which is what makes a clean scan mean something.
+- **Status:** Open (mitigated by design; narrowed 2026-07-27 when the ignore list became a
+  keep-list, and **narrowed again 2026-07-28 when the keep-list became an assertion**)
+- **Context:** the transform carries a small set of things it must not rewrite. The 2026-07-28
+  implementation found the keep-list mechanism itself to be the defect for `README.md`: all nine
+  `obra/superpowers` occurrences upstream are **install instructions for upstream's own
+  distribution channels**, so freezing them in place ships a README that installs the wrong
+  plugin. Protecting a string and meaning an obligation are not the same thing.
+- **Mitigation (as built):** the obligation is now discharged three ways, none of which is a
+  freeze that can rot:
+  1. `LICENSE` is `mode: "verbatim"` in the map — never passed through the rename, and the build
+     asserts it is byte-identical to upstream's.
+  2. `README.md` and the manifest `description` are **fork-owned or delta-authored**, and
+     `config.attribution.require` asserts the credit is *present in the built tree*. The build
+     refuses without it. An assertion cannot silently protect a string nobody needs any more.
+  3. Exactly one global protected string remains — `obra/superpowers`, upstream's identity — with
+     its reasoning recorded in `config.$protect-why`.
+  Every rule and requirement carries a reason, asserted by the fork's own suite, and `/up-update
+  check` prints all of them with their reasons.
 - **Residual:** an entry kept for a reason that has quietly stopped being true. Reviewed on each
-  upstream version bump, when the list is printed anyway.
+  upstream version bump, when the list is printed anyway. Materially smaller than before: the
+  reviewable surface is one protected string plus three assertions, not a list of frozen files.
 
 ## RISK-ULTRAPOWERS-005 — Migration can mis-pair spec and plan documents
 

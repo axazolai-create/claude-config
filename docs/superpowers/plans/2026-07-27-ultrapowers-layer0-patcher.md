@@ -1,5 +1,24 @@
 # Ultrapowers Layer 0 — Rebrand Patcher Implementation Plan
 
+> ## SUPERSEDED — do not implement
+>
+> **Replaced in full (2026-07-27) by** [`2026-07-27-ultrapowers-fork.md`](2026-07-27-ultrapowers-fork.md),
+> designed in [`../specs/2026-07-27-ultrapowers-fork-design.md`](../specs/2026-07-27-ultrapowers-fork-design.md)
+> and delivered 2026-07-28. Ultrapowers is now an owned fork of upstream, installed instead of it,
+> rather than a patcher run over upstream's plugin cache.
+>
+> **Kept deliberately, not deleted.** This document records why *two* classification designs failed,
+> which is the most expensive knowledge produced by this effort. The second failure is the load-bearing
+> one: the rule table was reverted in `47db796` after its own review proved by execution that the
+> enumeration could not be completed — four path shapes fell through to the `brand` bucket and were
+> rewritten into paths that resolve to nothing. Inside an owned fork the problem dissolves rather than
+> being solved: there is no foreign identity left to protect, so the rename is wholesale and needs no
+> classifier at all.
+>
+> Two premises here also turned out to be false in ways worth recording: the machine-wide cache cannot
+> be gated per project (a plugin can), and a patcher must re-apply itself after every `/plugin update`
+> (a fork is simply the artifact). See `RISK-ULTRAPOWERS-002` and `-003`, both resolved.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rebrand the upstream `superpowers@claude-plugins-official` plugin to "Ultrapowers" in prose only, via a re-appliable classification-table patcher that detects both lost patches and new upstream mentions its table does not cover.

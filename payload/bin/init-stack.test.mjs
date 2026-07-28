@@ -585,3 +585,10 @@ test("migrateProjectModelConfigFile: malformed config is left untouched, never t
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Task 7: setup.mjs drives marketplace registration off these same helpers rather than a second,
+// parallel mechanism that could drift from this one.
+test("classify: the fork's managed id is marketplace_missing on a machine that never added it", () => {
+  assert.equal(classify("ultrapowers@ultrapowers", { installed: new Set(), known: new Set() }), "marketplace_missing");
+  assert.equal(classify("ultrapowers@ultrapowers", { installed: new Set(["ultrapowers@ultrapowers"]), known: new Set() }), "installed");
+});

@@ -68,7 +68,7 @@ default, stepped down where it fits) still governs cost for mechanical turns; th
 stronger reviewer inline on top, on every turn, for the whole session.
 
 **Worth enabling:** long, multi-step agent loops where the plan matters but most turns are
-mechanical (e.g. a superpowers subagent-driven-development implementer/reviewer dispatch loop,
+mechanical (e.g. an ultrapowers subagent-driven-development implementer/reviewer dispatch loop,
 or a systematic-debugging investigation) — prompt-caching for the advisor call pays off at
 roughly 3+ advisor invocations, which these long loops make.
 **Skip it:** short, one-shot agents (mappers, quick audits, single-file checks) — little to

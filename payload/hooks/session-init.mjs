@@ -45,7 +45,6 @@ import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
 import { formatUpdateNotes } from "./lib/component-registry.mjs";
-import { regraftFallow } from "./lib/superpowers-fallow-graft.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 // Bundle variant (spec: docs/superpowers/specs/2026-07-22-lite-variant-design.md § 5).
@@ -306,11 +305,6 @@ if (process.env.CLAUDE_COMPONENT_AUTOUPDATE !== "0") {
   if (existsSync(worker))
     safe(() => spawn(process.execPath, [worker, "--root", root], { detached: true, stdio: "ignore" }).unref());
 }
-
-// Re-apply the fallow structural pre-pass into Superpowers' review prompt (idempotent;
-// self-heals after a Superpowers plugin update lands a fresh code-reviewer.md). The graft
-// self-skips in GSD projects at review time via its `.planning/` guard. Never-throw.
-try { regraftFallow(); } catch { /* never break SessionStart */ }
 
 // ---- stack-rules snapshot check ----
 // Rules live in ~/.claude/rules-src/ (NOT auto-loaded) and reach the session as a compiled

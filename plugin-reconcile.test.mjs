@@ -55,3 +55,94 @@ test("required name absent from managed is skipped safely", () => {
   assert.ok(actions.every((a) => a.name !== "ghost"));
   assert.ok(notes.every((n) => !n.includes("ghost")));
 });
+
+// keepInstalled: the ultrapowers fork replaces upstream superpowers in every profile, but
+// upstream must stay INSTALLED so rollback is one command. Two enabled plugins sharing 14
+// skill names is undocumented behaviour we do not run in production, so it is still disabled.
+const FORKED = { ultrapowers: "ultrapowers@ultrapowers", superpowers: "superpowers@claude-plugins-official",
+                 gsd: "gsd@m", "context-mode": "cm@m", context7: "c7@m" };
+
+test("upstream superpowers is disabled but never uninstalled", () => {
+  const { actions } = buildPluginPlan({
+    required: ["ultrapowers", "context-mode", "context7"], managed: FORKED,
+    enabledPlugins: { "superpowers@claude-plugins-official": true },
+    installedIds: ["superpowers@claude-plugins-official"],
+    keepInstalled: ["superpowers"] });
+  assert.ok(actions.some((a) => a.type === "disable" && a.id === "superpowers@claude-plugins-official"));
+  assert.ok(!actions.some((a) => a.type === "uninstall"));
+});
+
+test("keepInstalled does not suppress uninstall for other managed plugins", () => {
+  const { actions } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED,
+    enabledPlugins: { "gsd@m": true }, installedIds: ["gsd@m"], keepInstalled: ["superpowers"] });
+  assert.ok(actions.some((a) => a.type === "uninstall" && a.id === "gsd@m"));
+});
+
+test("the fork is installed and enabled like any other managed plugin", () => {
+  const { actions } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED,
+    enabledPlugins: {}, installedIds: [], keepInstalled: ["superpowers"] });
+  assert.ok(actions.some((a) => a.type === "install" && a.id === "ultrapowers@ultrapowers"));
+  assert.ok(actions.some((a) => a.type === "enable" && a.id === "ultrapowers@ultrapowers"));
+});
+
+test("with the CLI unavailable, keepInstalled suppresses the manual-uninstall note too", () => {
+  const { notes } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED,
+    enabledPlugins: { "superpowers@claude-plugins-official": true, "gsd@m": true },
+    installedIds: null, keepInstalled: ["superpowers"] });
+  assert.ok(!notes.some((n) => n.includes("uninstall superpowers@claude-plugins-official")),
+    "telling the human to uninstall it by hand defeats the point of keeping it installed");
+  assert.ok(notes.some((n) => n.includes("uninstall gsd@m")));
+});
+
+// marketplace registration: `claude plugin install <id>` fails when the marketplace is unknown.
+// The four pre-fork managed plugins live in marketplaces any machine that ran the bootstrap
+// already has, so this gap never fired. ultrapowers@ultrapowers is the first managed plugin in a
+// marketplace of our own, and on a fresh machine it will be missing.
+const SOURCES = { ultrapowers: "axazolai/ultrapowers", "claude-plugins-official": "anthropics/claude-plugins-official" };
+
+test("a required plugin whose marketplace is unknown gets it registered first", () => {
+  const { actions } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED, marketplaces: SOURCES, knownMarketplaces: [],
+    enabledPlugins: {}, installedIds: [] });
+  const kinds = actions.map((a) => a.type);
+  assert.deepEqual(kinds, ["marketplace_add", "install", "enable"]);
+  assert.equal(actions[0].source, "axazolai/ultrapowers");
+});
+
+test("an already-known marketplace is not re-added", () => {
+  const { actions } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED, marketplaces: SOURCES, knownMarketplaces: ["ultrapowers"],
+    enabledPlugins: {}, installedIds: [] });
+  assert.ok(!actions.some((a) => a.type === "marketplace_add"));
+});
+
+test("a marketplace needed by two plugins is added once", () => {
+  const managed = { a: "a@shared", b: "b@shared" };
+  const { actions } = buildPluginPlan({
+    required: ["a", "b"], managed, marketplaces: { shared: "owner/shared" }, knownMarketplaces: [],
+    enabledPlugins: {}, installedIds: [] });
+  assert.equal(actions.filter((a) => a.type === "marketplace_add").length, 1);
+});
+
+test("an unknown marketplace with no recorded source is a loud note, never a guessed repo", () => {
+  const { actions, notes } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED, marketplaces: {}, knownMarketplaces: [],
+    enabledPlugins: {}, installedIds: [] });
+  assert.ok(!actions.some((a) => a.type === "marketplace_add"));
+  assert.ok(notes.some((n) => n.includes("ultrapowers") && /no recorded source/.test(n)));
+});
+
+test("callers that pass no marketplace state plan exactly as they did before", () => {
+  const { actions } = buildPluginPlan({
+    required: ["ultrapowers"], managed: FORKED, enabledPlugins: {}, installedIds: [] });
+  assert.deepEqual(actions.map((a) => a.type), ["install", "enable"]);
+});
+
+test("keepInstalled defaults to none, so callers that never heard of it are unchanged", () => {
+  const { actions } = buildPluginPlan({ required: LITE, managed: MANAGED,
+    enabledPlugins: { "gsd@m": true }, installedIds: ["gsd@m", "superpowers@m", "cm@m", "c7@m"] });
+  assert.ok(actions.some((a) => a.type === "uninstall" && a.id === "gsd@m"));
+});
