@@ -1,5 +1,31 @@
 # Risk Register
 
+## RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
+
+- **Status:** Open (accepted; not fixable from this repository)
+- **Context:** Claude Code 2.1.220 intermittently ends a turn with `API Error: Connection closed
+  mid-response`. The streamed response terminates before the assistant message completes, so the
+  turn is lost mid-work. Observed repeatedly on 2026-07-27 in one long session. Ruled out on this
+  machine: no `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, no `ANTHROPIC_BASE_URL`, no
+  `NODE_EXTRA_CA_CERTS` — so not a proxy or TLS-interception artefact.
+- **Why the bundle cannot handle it:** the failure is in the CLI's API transport, below the hook
+  boundary. Claude Code's hook events are lifecycle events (`PreToolUse`, `PostToolUse`,
+  `UserPromptSubmit`, `Notification`, `Stop`, `SubagentStop`, `PreCompact`, `SessionStart`,
+  `SessionEnd`); none fires on a transport error, so nothing here can even observe it. A hook is
+  also an external process and could not resume a half-streamed message, which is CLI-owned state.
+  `claude --help` documents no `--retry`, `--timeout`, or reconnect flag, and the CLI now ships as
+  a native binary, so there is no bundle to inspect for an undocumented knob. Any "retry handling"
+  added to this repository would be theatre.
+- **Mitigation:** recovery is `claude --continue` / `claude --resume <session-id>`, which is why
+  session transcripts are worth keeping intact (see the 2026-07-27 relocation work). Exposure is
+  reduced by shrinking the silent gap before a tool call — emit the question or tool call early in
+  a turn rather than after a long preamble — and by `/compact` on very long sessions.
+- **Residual:** turns still get lost. A real fix lives upstream; report via `/bug` when it
+  reproduces. **Unverified hypothesis, recorded as such:** every observed occurrence cut the turn
+  at the same structural point — an `AskUserQuestion` call issued after a long reasoning block,
+  late in a very large context — while an identical call early in the same session succeeded. That
+  is a correlation over a handful of events, not a demonstrated cause; do not treat it as diagnosed.
+
 ## RISK-BOOTSTRAP-001 — Remote code execution via `curl|bash` / `irm|iex` bootstrap
 
 - **Status:** Open (accepted)
