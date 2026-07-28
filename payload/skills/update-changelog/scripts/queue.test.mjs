@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readQueue, readEntries, appendHash, resolveDrain } from "./queue.mjs";
+
+const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "queue.mjs");
 
 function repo(queueText) {
   const root = mkdtempSync(join(tmpdir(), "queue-"));
@@ -70,4 +74,12 @@ test("a lookup that throws does not lose the rest of the queue", () => {
   const d = resolveDrain(entries, (h) => { if (h === "a") throw new Error("gone"); return { subject: "", body: "" }; });
   assert.equal(d.level, "patch");
   assert.equal(d.unrecognised, 1);
+});
+
+test("append --classify against an unresolvable hash still queues it, level-less, and exits zero", () => {
+  const root = mkdtempSync(join(tmpdir(), "queue-"));
+  execFileSync("git", ["init", root], { encoding: "utf8" });
+  const hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+  execFileSync(process.execPath, [SCRIPT, "append", hash, "--root", root, "--classify"], { encoding: "utf8" });
+  assert.equal(readFileSync(join(root, ".claude", "changelog-queue"), "utf8"), `${hash}\n`);
 });

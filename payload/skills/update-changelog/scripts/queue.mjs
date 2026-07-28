@@ -80,9 +80,11 @@ if (isMainModule()) {
     const hash = positionals[0];
     let level = flags.level ?? null;
     if (!level && 'classify' in flags) {
-      const subject = execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%s', hash], { encoding: 'utf8' }).trim();
-      const body = execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%b', hash], { encoding: 'utf8' });
-      level = levelForCommit({ subject, body }).level;
+      try {
+        const subject = execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%s', hash], { encoding: 'utf8' }).trim();
+        const body = execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%b', hash], { encoding: 'utf8' });
+        level = levelForCommit({ subject, body }).level;
+      } catch { process.stderr.write(`changelog: could not classify ${hash}, queued unclassified\n`); }
     }
     appendHash(root, hash, level);
   }
