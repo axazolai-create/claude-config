@@ -56,6 +56,17 @@ test("a path this bundle owns is never in the inventory", () => {
   assert.deepEqual(items.map((i) => i.absPath.slice(dir.length + 1).replace(/\\/g, "/")), ["gsd-core"]);
 });
 
+test("manifest subtraction matches directory-shaped categories by prefix, not just exact rel", () => {
+  const dir = claudeDir({
+    "gsd-core/VERSION": "1.8.0\n",
+    "skills/gsd-bundle-owned/SKILL.md": "x",
+    "skills/gsd-foreign/SKILL.md": "x",
+  });
+  const { items } = buildGsdInventory({ dir, manifestRels: ["skills/gsd-bundle-owned/SKILL.md"] });
+  const rels = items.map((i) => i.absPath.slice(dir.length + 1).replace(/\\/g, "/")).sort();
+  assert.deepEqual(rels, ["gsd-core", "skills/gsd-foreign"]);
+});
+
 test("every item carries what applyPlan needs", () => {
   const dir = claudeDir({ "gsd-core/VERSION": "1.8.0\n" });
   for (const it of buildGsdInventory({ dir, manifestRels: [] }).items)

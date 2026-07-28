@@ -16,7 +16,11 @@ const safeReaddir = (p) => { try { return readdirSync(p); } catch { return []; }
 const statOr = (p) => { try { return statSync(p); } catch { return null; } };
 
 export function buildGsdInventory({ dir, manifestRels = [] }) {
-  const owned = new Set(manifestRels.map((r) => r.replace(/\\/g, "/")));
+  const owned = [...new Set(manifestRels.map((r) => r.replace(/\\/g, "/")))];
+  // owned entries are always files (manifest ships one per shipped file); a directory-shaped
+  // category's rel (e.g. "skills/gsd-x") never appears verbatim, only nested under it — so
+  // subtraction must also match by prefix, not just exact equality.
+  const isOwned = (rel) => owned.some((o) => o === rel || o.startsWith(rel + "/"));
   const items = [];
   const categories = [];
   for (const cat of CATEGORIES) {
@@ -26,7 +30,7 @@ export function buildGsdInventory({ dir, manifestRels = [] }) {
     for (const name of safeReaddir(base)) {
       if (!cat.match(name)) continue;
       const rel = (cat.dir === "." ? name : `${cat.dir.replace(/\\/g, "/")}/${name}`);
-      if (owned.has(rel)) continue;
+      if (isOwned(rel)) continue;
       const absPath = join(base, name);
       const st = statOr(absPath);
       if (!st) continue;
