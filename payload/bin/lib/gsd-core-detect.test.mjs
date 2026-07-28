@@ -93,6 +93,25 @@ test("only gsd hook registrations are dropped, and they are reported", () => {
   assert.equal(settings.hooks.PreToolUse.length, 2, "input must not be mutated");
 });
 
+// Verbatim shapes from the live gsd-core install this feature targets: one quoted command line,
+// no args array at all. Matching only `args` left every real registration in place.
+test("a gsd-core command-string registration is dropped even with no args array", () => {
+  const settings = {
+    hooks: {
+      SessionStart: [
+        { hooks: [{ type: "command", command: '"C:/Program Files/nodejs/node.exe" "C:/Users/Axa/.claude/hooks/gsd-check-update.js"' }] },
+        { hooks: [{ type: "command", command: '"C:/Users/Axa/.claude/hooks/gsd-session-state.sh"' }] },
+        { hooks: [{ type: "command", command: '"C:/Program Files/nodejs/node.exe" "C:/Users/Axa/.claude/hooks/session-init.mjs"' }] },
+        { hooks: [{ type: "command", command: "node /h/.claude/hooks/lib/gsd-agent-patches.mjs" }] },
+        { hooks: [{ type: "command", command: "node C:\\Users\\Axa\\.claude\\hooks\\gsd-phase-boundary.sh --quiet" }] },
+      ],
+    },
+  };
+  const { settings: out, removed } = filterGsdHooks(settings);
+  assert.deepEqual(removed.map((r) => r.event), ["SessionStart", "SessionStart", "SessionStart"]);
+  assert.equal(out.hooks.SessionStart.length, 2, "a non-gsd hook or a hooks/lib entry was dropped");
+});
+
 test("a hooks-less settings object survives untouched", () => {
   const { settings, removed } = filterGsdHooks({ model: "opus" });
   assert.deepEqual(settings, { model: "opus" });

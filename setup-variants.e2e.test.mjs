@@ -1,10 +1,10 @@
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { resolveVariant } from "./variants.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -219,38 +219,80 @@ test("--dry-run writes nothing for both variants", () => {
 });
 
 /* ---------- foreign gsd-core detector (base/lite only) ----------
- * `run()` above is always non-TTY (spawnSync pipes stdin), so the interactive branch needs its own
- * launcher: a driver module that forces process.stdin.isTTY before importing setup.mjs. Paired with
- * --skip-all (BULK => INTERACTIVE=false) every OTHER prompt in setup.mjs is suppressed, so the one
- * question the child asks is the detector's own and the scripted answer cannot be mis-consumed. */
-const TTY_DRIVER = (() => {
-  const p = join(mkdtempSync(join(tmpdir(), "cc-tty-")), "force-tty.mjs");
-  writeFileSync(p, "process.stdin.isTTY = true;\nawait import(process.env.SETUP_URL);\n");
-  return p;
-})();
-const runTty = (dir, args, answer) => spawnSync(process.execPath, [TTY_DRIVER, ...args], {
-  encoding: "utf8", input: answer, timeout: 120000,
-  env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CLAUDE_SETUP_SKIP_PLUGINS: "1",
-    SETUP_URL: pathToFileURL(join(ROOT, "setup.mjs")).href },
-});
+ * `run()` above is always non-TTY (spawnSync pipes stdin) and so can never reach an interactive
+ * branch. runTty() launches setup.mjs through a driver that forces process.stdin.isTTY first, and
+ * answers arrive on stdin. GRAPHIFY_PYTHON points at a file that exists so findGraphifyPython()
+ * succeeds and its install prompt - the one prompt whose presence would otherwise depend on the
+ * machine - never fires.
+ * Answers are keyed by prompt text and written one at a time, only once the prompt has actually
+ * been printed. Preloading them all on stdin does not work: the first readline buffers whatever is
+ * available and discards the remainder on close(), so answer two would silently never arrive and
+ * every later question would read EOF. Keying also means a prompt added to setup.mjs later gets a
+ * bare Enter instead of eating the answer meant for the question under test. */
+const TTY_DIR = mkdtempSync(join(tmpdir(), "cc-tty-"));
+const TTY_DRIVER = join(TTY_DIR, "force-tty.mjs");
+writeFileSync(TTY_DRIVER, "process.stdin.isTTY = true;\nawait import(process.env.SETUP_URL);\n");
+after(() => rmSync(TTY_DIR, { recursive: true, force: true }));
+function runTty(dir, args, answers = []) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [TTY_DRIVER, ...args], {
+      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CLAUDE_SETUP_SKIP_PLUGINS: "1",
+        GRAPHIFY_PYTHON: process.execPath, SETUP_URL: pathToFileURL(join(ROOT, "setup.mjs")).href },
+    });
+    const pending = answers.map((a) => [...a]);
+    let stdout = "", stderr = "", lastAnswered = null;
+    const killer = setTimeout(() => child.kill(), 120000);
+    child.stdout.on("data", (d) => {
+      stdout += String(d);
+      if (!/> $/.test(stdout)) return;
+      const prompt = stdout.slice(stdout.lastIndexOf("\n") + 1);
+      if (prompt === lastAnswered) return;              // terminal-mode readline can re-render one prompt
+      lastAnswered = prompt;
+      const i = pending.findIndex(([m]) => prompt.includes(m));
+      child.stdin.write((i === -1 ? "" : pending.splice(i, 1)[0][1]) + "\n");
+      // readline in terminal mode leaves stdin resumed after close(), so the child outlives its own
+      // work unless the pipe is shut. Safe once the keyed answer is spent: it is the last question
+      // the run asks, and if that ever stops being true the run hangs and the test says so.
+      if (answers.length && !pending.length) child.stdin.end();
+    });
+    child.stderr.on("data", (d) => { stderr += String(d); });
+    child.on("close", (status) => { clearTimeout(killer); resolve({ status, stdout, stderr }); });
+  });
+}
 const GSD_FIXTURE = {
   "gsd-core/VERSION": "0.0.0-test\n",
   "gsd-core/lib/orchestrate.mjs": "x".repeat(3000),
   "skills/gsd-probe/SKILL.md": "x",
   "agents/gsd-planner.md": "x",
   "hooks/gsd-probe.mjs": "x",
+  "hooks/gsd-legacy.js": "x",
   "hooks/lib/gsd-probe-lib.mjs": "x",
 };
-const GSD_REMOVED = ["gsd-core", "skills/gsd-probe", "agents/gsd-planner.md", "hooks/gsd-probe.mjs", "hooks/lib/gsd-probe-lib.mjs"];
-function plantGsdCore(dir) {
+const GSD_REMOVED = ["gsd-core", "skills/gsd-probe", "agents/gsd-planner.md", "hooks/gsd-probe.mjs",
+  "hooks/gsd-legacy.js", "hooks/lib/gsd-probe-lib.mjs"];
+// Both registration shapes on purpose. The args form is this bundle's; the bare quoted command
+// line with no args at all is what every hook of a real gsd-core install actually looks like, and
+// a matcher that only reads `args` leaves it registered after the file underneath it has moved.
+const cmdHook = (command) => ({ matcher: "", hooks: [{ type: "command", command }] });
+function plantGsdCore(dir, { settings = true } = {}) {
   for (const [rel, body] of Object.entries(GSD_FIXTURE)) {
     mkdirSync(join(dir, dirname(rel)), { recursive: true });
     writeFileSync(join(dir, rel), body);
   }
-  // Registered under an event settings.partial.json never declares, so the assertion below sees the
+  if (!settings) return;
+  const fwd = (rel) => join(dir, rel).replace(/\\/g, "/");
+  // Registered under an event settings.partial.json never declares, so the assertions below see the
   // detector's own filter and not the settings merge's claim-our-slots pass.
   writeFileSync(join(dir, "settings.json"), JSON.stringify({
-    hooks: { Notification: [{ matcher: "", hooks: [{ type: "command", command: "node", args: [join(dir, "hooks", "gsd-probe.mjs")] }] }] },
+    hooks: {
+      Notification: [
+        { matcher: "", hooks: [{ type: "command", command: "node", args: [join(dir, "hooks", "gsd-probe.mjs")] }] },
+        cmdHook(`"C:/Program Files/nodejs/node.exe" "${fwd("hooks/gsd-legacy.js")}"`),
+        cmdHook(`"${fwd("hooks/gsd-legacy.js")}" --quiet`),
+        cmdHook(`node "${fwd("hooks/lib/gsd-probe-lib.mjs")}"`),
+        cmdHook(`node "${fwd("hooks/session-init.mjs")}"`),
+      ],
+    },
   }, null, 2) + "\n");
 }
 const gsdPresent = (dir) => existsSync(join(dir, "gsd-core/VERSION"));
@@ -276,34 +318,69 @@ test("--uninstall-gsd moves gsd-core to a trash batch, backs settings up first, 
   assert.equal(ts.length, 1, `expected exactly one trash batch, got ${ts.join(", ")}`);
   const batch = join(dir, ".cleanup-trash", ts[0]);
   assert.ok(existsSync(join(batch, "manifest.json")), "batch manifest missing");
+  assert.ok(r.stdout.includes(`trash batch: ${batch.replace(/\\/g, "/")}`), "batch path not printed before the moves");
   const backup = join(batch, "settings.json.pre-gsd-uninstall");
   assert.ok(existsSync(backup), "pre-edit settings copy missing from the batch");
-  assert.equal(JSON.parse(readFileSync(backup, "utf8")).hooks.Notification.length, 1, "backup is not the PRE-edit copy");
+  assert.equal(JSON.parse(readFileSync(backup, "utf8")).hooks.Notification.length, 5, "backup is not the PRE-edit copy");
 
+  // Three gsd hook registrations go (args form, interpreter+quoted path, quoted path + trailing
+  // arg); the hooks/lib entry and the unrelated hook stay.
   const settings = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
-  assert.deepEqual(settings.hooks.Notification, [], "gsd hook entry not removed, or the key was deleted");
+  assert.equal(settings.hooks.Notification.length, 2, "wrong set of gsd hook registrations removed");
+  const left = JSON.stringify(settings.hooks.Notification);
+  assert.ok(!/hooks\/gsd-probe\.mjs|hooks\/gsd-legacy\.js/.test(left), "a gsd hook registration survived");
+  assert.ok(left.includes("gsd-probe-lib.mjs") && left.includes("session-init.mjs"), "a non-gsd-hook entry was dropped");
+  assert.match(r.stdout, /removed 3 gsd-\* hook registration\(s\)/);
 
-  // restoreBatch deletes the whole batch (backup included), so the cp must be printed FIRST.
+  // restoreBatch deletes the whole batch (backup included), so the cp must be printed FIRST; and
+  // claude-cleanup.mjs reads CLAUDE_CONFIG_DIR, not its own location, so a relocated dir must
+  // travel with the command or the restore silently targets ~/.claude.
   const cpAt = r.stdout.indexOf(`cp "`);
   const restoreAt = r.stdout.indexOf(`restore --ts ${ts[0]}`);
   assert.ok(cpAt !== -1, "rollback did not print a cp for settings.json");
   assert.ok(restoreAt !== -1, "rollback did not print the batch restore command with this run's ts");
   assert.ok(cpAt < restoreAt, "rollback prints restore before cp - restoring first destroys the backup");
+  assert.ok(r.stdout.includes(`CLAUDE_CONFIG_DIR="${dir.replace(/\\/g, "/")}" node "`),
+    "relocated config dir not carried into the printed restore command");
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("--replace-all is never consent to uninstall a foreign product", () => {
-  const dir = mkdtempSync(join(tmpdir(), "cc-gsd-bulk-"));
-  plantGsdCore(dir);
-  const r = run(dir, ["--variant=base", "--replace-all"]);
+test("a bulk flag is never consent, and never a prompt either", async () => {
+  for (const bulk of ["--replace-all", "--merge-all"]) {
+    const dir = mkdtempSync(join(tmpdir(), "cc-gsd-bulk-"));
+    plantGsdCore(dir);
+    // Non-TTY and forced-TTY both: a bulk flag means "never ask", so the PTY case must not block.
+    for (const launch of [async (d, a) => run(d, a), runTty]) {
+      const r = await launch(dir, ["--variant=base", bulk]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(r.stdout, NOT_REPORTED);
+      assert.match(r.stdout, /Reporting only \(non-interactive\)/);
+      assert.doesNotMatch(r.stdout, /Move all of it to the cleanup trash/, `${bulk} prompted instead of reporting`);
+      assert.ok(gsdPresent(dir), `${bulk} silently uninstalled a foreign product`);
+      for (const rel of GSD_REMOVED) assert.ok(existsSync(join(dir, rel)), `removed without consent: ${rel}`);
+      assert.deepEqual(batches(dir), []);
+      assert.equal(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).hooks.Notification.length, 5,
+        "report-only must not edit settings.json");
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a file this bundle owns is never claimed as foreign, even when the stale prune declined it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-gsd-downgrade-"));
+  assert.equal(run(dir, ["--variant=full", "--skip-all"]).status, 0);
+  const ours = ["hooks/gsd-context-meter.mjs", "hooks/gsd-config-patch.mjs",
+    "hooks/lib/gsd-agent-patches.mjs", "hooks/lib/gsd-skill-patches.mjs", "agents/gsd-task-verifier.md"];
+  for (const rel of ours) assert.ok(existsSync(join(dir, rel)), `full install is missing ${rel}`);
+  plantGsdCore(dir, { settings: false });
+
+  // Non-TTY without a bulk flag: pruneStale reports and removes nothing, so every one of `ours` is
+  // still on disk and absent from THIS run's manifest - the exact shape that used to be swept up.
+  const r = run(dir, ["--variant=base", "--uninstall-gsd"]);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, NOT_REPORTED);
-  assert.match(r.stdout, /Reporting only \(non-interactive\)/);
-  assert.ok(gsdPresent(dir), "--replace-all silently uninstalled a foreign product");
-  for (const rel of GSD_REMOVED) assert.ok(existsSync(join(dir, rel)), `removed without consent: ${rel}`);
-  assert.deepEqual(batches(dir), []);
-  assert.equal(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).hooks.Notification.length, 1,
-    "report-only must not edit settings.json");
+  assert.match(r.stdout, /non-interactive: not removed/, "pruneStale unexpectedly pruned - test no longer covers its case");
+  assert.ok(!gsdPresent(dir), "the foreign gsd-core was not removed");
+  for (const rel of ours) assert.ok(existsSync(join(dir, rel)), `bundle-owned file claimed as foreign: ${rel}`);
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -325,21 +402,28 @@ test("the detector never fires on full, nor when gsd-core is absent", () => {
   rmSync(none, { recursive: true, force: true });
 });
 
-test("the interactive prompt defaults to no; only an explicit yes removes anything", () => {
-  for (const answer of ["n\n", "\n"]) {
+test("the interactive prompt defaults to no; only an explicit yes removes anything", async () => {
+  const TTY_ARGS = ["--variant=base", "--configure-neo4j=off", "--enable-update-check"];
+  const PROMPT = "Move all of it to the cleanup trash?";
+  const asked = (r) => {
+    assert.match(r.stdout, /left unchanged \(CLAUDE_CONFIG_DIR not set\)/, "an earlier prompt was not answered");
+    assert.ok(r.stdout.includes(PROMPT), "the detector never asked");
+  };
+  for (const answer of ["n", ""]) {
     const dir = mkdtempSync(join(tmpdir(), "cc-gsd-no-"));
-    plantGsdCore(dir);
-    const r = runTty(dir, ["--variant=base", "--skip-all"], answer);
+    plantGsdCore(dir, { settings: false });
+    const r = await runTty(dir, TTY_ARGS, [[PROMPT, answer]]);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /Move all of it to the cleanup trash\? \(y\/N\)/);
+    asked(r);
     assert.ok(gsdPresent(dir), `answer ${JSON.stringify(answer)} removed gsd-core`);
     assert.deepEqual(batches(dir), []);
     rmSync(dir, { recursive: true, force: true });
   }
   const yes = mkdtempSync(join(tmpdir(), "cc-gsd-yes-"));
-  plantGsdCore(yes);
-  const r = runTty(yes, ["--variant=base", "--skip-all"], "y\n");
+  plantGsdCore(yes, { settings: false });
+  const r = await runTty(yes, TTY_ARGS, [[PROMPT, "y"]]);
   assert.equal(r.status, 0, r.stderr);
+  asked(r);
   assert.ok(!gsdPresent(yes), "an explicit yes did not remove gsd-core");
   assert.equal(batches(yes).length, 1);
   rmSync(yes, { recursive: true, force: true });

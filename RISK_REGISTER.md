@@ -825,19 +825,25 @@
   one. `filterGsdHooks` deliberately breaks that property: it matches `hooks/gsd-*` by pattern and
   removes registrations belonging to another product. It is the first code path in the installer
   that can delete a settings entry it did not author.
-- **Mitigation:** containment rather than a stronger match. The path only runs on the `base`/`lite`
-  profiles *and* only when `~/.claude/gsd-core/VERSION` exists; the bulk flags (`--replace-all`,
-  `--merge-all`) are explicitly not consent, so scripted use needs the dedicated `--uninstall-gsd`
-  and a non-TTY run without it reports and stops; the interactive default is no. A copy of
-  `settings.json` is written into the cleanup-trash batch *before* the edit, and the exact `cp` that
-  restores it is printed. The match itself stays as narrow as it can be — `hooks/gsd-*` only, never
-  `hooks/lib/gsd-*`, because nothing registers a lib file as a hook and a broader pattern would be a
-  second place this code can reach outside its own files.
-- **Residual:** a third-party hook that happens to live at `hooks/gsd-<something>.mjs` and is not
-  gsd-core's would be de-registered along with it, on a machine that has gsd-core installed and a
-  user who consented to removing it. Reversible from the printed `cp`, and the file itself is only
-  moved, never deleted. Accepted: the alternative is reading gsd-core's own manifest, which would
-  couple this bundle to a foreign product's internal layout.
+- **Mitigation:** containment around the match, not a narrower match — the match had to get *wider*,
+  not tighter, to work at all. Every hook of a real gsd-core install is registered as one quoted
+  command line with no `args` array (`"…/node.exe" "…/hooks/gsd-check-update.js"`), so a matcher
+  reading only `args` — the shape this bundle uses — de-registered nothing while the inventory moved
+  the files anyway, leaving 15 registrations pointing at paths that no longer exist. `filterGsdHooks`
+  therefore tests `h.command` as well as `h.args`, unanchored and stopping at a quote or space.
+  What holds the risk is the gate around it: the path runs only on `base`/`lite`, only when
+  `~/.claude/gsd-core/VERSION` exists, and only with consent — the bulk flags (`--replace-all`,
+  `--merge-all`) are neither consent nor even a prompt, scripted use needs the dedicated
+  `--uninstall-gsd`, a bulk or non-TTY run reports and stops, and the interactive default is no.
+  A copy of `settings.json` goes into the cleanup-trash batch *before* the edit and the exact `cp`
+  that restores it is printed. `hooks/lib/gsd-*` stays deliberately unmatched: nothing registers a
+  lib file as a hook, so matching it would widen the reach for no behaviour.
+- **Residual:** any registration whose command line *mentions* a `hooks/gsd-*` path is dropped, so a
+  third-party hook living at that path, or an unrelated command that merely passes one as an
+  argument, goes with it — on a machine that has gsd-core installed and a user who consented.
+  Reversible from the printed `cp`, and the file itself is only moved, never deleted. Accepted: the
+  alternative is reading gsd-core's own manifest, which would couple this bundle to a foreign
+  product's internal layout.
 
 ## RISK-ULTRAPOWERS-010 — `/gsd-update` reinstalls gsd-core at any time
 

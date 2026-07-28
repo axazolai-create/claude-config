@@ -530,7 +530,7 @@ async function pruneStale() {
   for (const rel of oldByRel.keys()) if (!currentRels.has(rel)) candidates.add(rel);
   for (const rel of SEED_REMOVED) if (!currentRels.has(rel)) candidates.add(rel);
   if (VARIANT !== "full") candidates.add("gsd-defaults.partial.json"); // full-only mirror, never manifest-tracked
-  if (!candidates.size) return;
+  if (!candidates.size) return [];
 
   const allText = bundleAllText();
   const del = [], kept = [];
@@ -545,8 +545,12 @@ async function pruneStale() {
     if (oldHash && cur !== undefined && sha(cur) !== oldHash) { kept.push([rel, "modified since install"]); continue; }
     del.push({ rel, dst });
   }
+  // Every rel this function took responsibility for, removed or not. detectForeignGsdCore()
+  // subtracts it, so a file pruneStale() decided to KEEP (curated, still referenced, edited since
+  // install) or that the user declined to prune cannot then be swept up as someone else's.
+  const considered = [...del.map((d) => d.rel), ...kept.map(([rel]) => rel)];
   if (kept.length) { log("\n--- stale but KEPT (not safe to auto-remove) ---"); for (const [rel, why] of kept) log(`  ${rel} (${why})`); }
-  if (!del.length) return;
+  if (!del.length) return considered;
 
   log("\n--- stale files no longer in the bundle ---");
   for (const d of del) log("  " + d.dst);
@@ -560,20 +564,30 @@ async function pruneStale() {
     try { rmSync(d.dst, { recursive: true, force: true }); summary.push(`pruned   ${d.dst}`); }
     catch { summary.push(`prune-failed ${d.dst}`); }
   }
+  return considered;
 }
 
 /* ---------- foreign gsd-core: report it, and offer a reversible removal (base/lite only) ----------
  * gsd-core is a separate product installed by /gsd-update, not by this bundle. On base/lite it has
  * no place here, but nothing about that justifies deleting it: every removal is a MOVE into the
  * same .cleanup-trash batch /claude-cleanup already restores and expires after 7 days, and the
- * decision is always the user's (default no; a non-TTY run reports and stops). Reach is bounded by
- * buildGsdInventory, which only enumerates paths under CDIR and subtracts everything this run's
- * manifest claims - so ~/.gsd/ and every project's .planning/ are out of range by construction,
- * and no file this bundle owns can ever land in the batch. */
-async function detectForeignGsdCore() {
+ * decision is always the user's (default no; a bulk flag or a non-TTY run reports and stops).
+ * Reach is bounded by buildGsdInventory, which only enumerates paths under CDIR - so ~/.gsd/ and
+ * every project's .planning/ are out of range by construction. What it must never claim is a file
+ * THIS bundle owns, which is three sets, not one: what this run ships (manifestNow), what any
+ * profile can ship (a base install that was full yesterday still has full's gsd-* files on disk,
+ * and the manifest that named them is overwritten later in main()), and whatever pruneStale() just
+ * took responsibility for. Without the second and third, a full -> base downgrade whose stale
+ * prune was declined would move ~12 of this bundle's own paths under a banner reading "not part of
+ * this bundle" - consent obtained under a false description. */
+async function detectForeignGsdCore(prunedRels = []) {
   if (VARIANT === "full" || !gsdCorePresent(CDIR)) return;
-  const { items, categories, totalBytes } =
-    buildGsdInventory({ dir: CDIR, manifestRels: manifestNow.map((f) => f.rel) });
+  const everOurs = safe(() => Object.keys(profilesOf(loadVariants(REPO_ROOT)))
+    .flatMap((p) => resolveVariant({ repoRoot: REPO_ROOT, variant: p }).rels)) || [];
+  const { items, categories, totalBytes } = buildGsdInventory({
+    dir: CDIR,
+    manifestRels: [...manifestNow.map((f) => f.rel), ...everOurs, ...prunedRels],
+  });
   if (!items.length) return;
 
   const version = safe(() => readFileSync(join(CDIR, "gsd-core", "VERSION"), "utf8").trim()) || "unknown";
@@ -582,16 +596,24 @@ async function detectForeignGsdCore() {
   log(`  total ${Math.round(totalBytes / 1024)} KB`);
   log(`  ~/.gsd/ and every project's .planning/ are never touched.`);
 
-  if (!process.stdin.isTTY && !UNINSTALL_GSD) {
+  // BULK counts as non-interactive here exactly as it does everywhere else in this file
+  // (INTERACTIVE = !BULK && isTTY): a bulk flag must never ask, and must never consent either, so
+  // the two meet at report-only. Without the BULK arm, `--replace-all` in a terminal stops on a
+  // question and a CI runner that allocates a PTY hangs on it with no timeout.
+  if ((!process.stdin.isTTY || BULK) && !UNINSTALL_GSD) {
     log(`  Reporting only (non-interactive). Run with --uninstall-gsd to remove it.`);
     return;
   }
-  if (!UNINSTALL_GSD && (await ask("  Move all of it to the cleanup trash? (y/N) > "))[0] !== "y") return;
   if (DRY) { log(`  [dry-run] would move ${items.length} path(s)`); return; }
+  if (!UNINSTALL_GSD && (await ask("  Move all of it to the cleanup trash? (y/N) > "))[0] !== "y") return;
 
+  const fwd = (p) => p.replace(/\\/g, "/");
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const batchDir = join(trashRoot(CDIR), ts);
   mkdirSync(batchDir, { recursive: true });
+  // Printed before any move, so a crash further down still leaves the user the one string the
+  // rollback needs.
+  log(`  trash batch: ${fwd(batchDir)}`);
   // Written BEFORE anything is edited, and into the batch itself so it ages out with it. This is a
   // copy, not a moved file, which is why restoreBatch cannot put it back - see the rollback below.
   const backup = join(batchDir, "settings.json.pre-gsd-uninstall");
@@ -605,19 +627,26 @@ async function detectForeignGsdCore() {
     if (curSettings) {
       const { settings, removed } = filterGsdHooks(curSettings);
       if (removed.length) {
-        writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + "\n", "utf8");
-        log(`  removed ${removed.length} gsd-* hook registration(s) from settings.json`);
+        if (write(SETTINGS, JSON.stringify(settings, null, 2) + "\n")) {
+          summary.push(`updated  ${SETTINGS} (${removed.length} gsd-* hook registration(s) removed)`);
+          log(`  removed ${removed.length} gsd-* hook registration(s) from settings.json`);
+        } else {
+          log(`  COULD NOT rewrite settings.json - ${removed.length} gsd-* hook registration(s) still point at moved files; roll back below or edit by hand`);
+        }
       }
     }
   }
 
   // Order is load-bearing: a clean restoreBatch deletes the whole batch directory, backup included,
   // so the settings copy has to be taken back first. It is also deliberately manual - replaying it
-  // automatically would revert every unrelated settings edit made since.
-  const fwd = (p) => p.replace(/\\/g, "/");
+  // automatically would revert every unrelated settings edit made since. And claude-cleanup.mjs
+  // resolves its target from CLAUDE_CONFIG_DIR, never from its own location, so under a relocated
+  // config dir the variable has to travel with the command or it restores from ~/.claude and
+  // reports "Restored 0" as though there were nothing to restore.
+  const relocated = CDIR !== join(HOME, ".claude");
   log(`  Rollback within 7 days, in this order:`);
   log(`    cp "${fwd(backup)}" "${fwd(SETTINGS)}"`);
-  log(`    node "${fwd(join(CDIR, "bin", "claude-cleanup.mjs"))}" restore --ts ${ts}`);
+  log(`    ${relocated ? `CLAUDE_CONFIG_DIR="${fwd(CDIR)}" ` : ""}node "${fwd(join(CDIR, "bin", "claude-cleanup.mjs"))}" restore --ts ${ts}`);
   purgeRetention({ dir: CDIR, nowMs: Date.now() });
 }
 
@@ -1200,11 +1229,10 @@ async function main() {
     const oldByRelEarly = new Map(((oldManifestEarly && oldManifestEarly.files) || []).map((f) => [f.rel, f.hash]));
     pruneDroppedOptional(droppedOptional, profileDef, oldByRelEarly);
   }
-  await pruneStale();
-  // After pruneStale, never before it: a file this bundle installed under `full` and no longer
-  // ships under base/lite (hooks/gsd-context-meter.mjs and friends) is pruneStale's to remove,
-  // under pruneStale's own gates - the detector must not claim it as foreign first.
-  await detectForeignGsdCore();
+  // After pruneStale, never before it, and the data dependency now says so rather than a comment:
+  // a file this bundle installed under `full` and no longer ships under base/lite is pruneStale's
+  // to remove, under pruneStale's own gates, so the detector is handed what it already claimed.
+  await detectForeignGsdCore(await pruneStale());
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
     const maxPluginTier = profilesOf(loadVariants(REPO_ROOT))[VARIANT]?.maxPluginTier;

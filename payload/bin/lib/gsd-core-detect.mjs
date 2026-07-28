@@ -45,10 +45,18 @@ export function buildGsdInventory({ dir, manifestRels = [] }) {
   return { items, categories, totalBytes: items.reduce((n, i) => n + i.size, 0) };
 }
 
-// `hooks/lib/gsd-*` is deliberately NOT matched here: nothing registers a lib file as a hook,
-// and a broader match would be a second place this code can reach outside its own files.
+// Both registration shapes, because gsd-core uses the one this bundle does not: every real
+// gsd-core hook is a single quoted command line with no args array at all
+// (`"…/node.exe" "…/hooks/gsd-check-update.js"`), while this bundle registers command+args.
+// Matching args alone left every real registration behind after its file had been moved, so the
+// hook fired and failed at every session. Unanchored and stopping at a quote or space, so it holds
+// through quoting, either slash, and trailing arguments.
+// `hooks/lib/gsd-*` stays unmatched: nothing registers a lib file as a hook, and a broader pattern
+// would be a second place this code can reach outside its own files.
+const GSD_HOOK_REF = /(^|[\\/"'])hooks[\\/]gsd-[^\\/"'\s]+/;
 const REFERENCES_GSD_HOOK = (entry) =>
-  (entry.hooks || []).some((h) => (h.args || []).some((a) => /(^|[\\/])hooks[\\/]gsd-[^\\/]+$/.test(String(a))));
+  (entry.hooks || []).some((h) =>
+    GSD_HOOK_REF.test(String(h.command ?? "")) || (h.args || []).some((a) => GSD_HOOK_REF.test(String(a))));
 
 export function filterGsdHooks(settings) {
   if (!settings || !settings.hooks) return { settings: { ...settings }, removed: [] };
