@@ -157,3 +157,135 @@ test("a workspace-aware snapshot whose stack moved on is stale", () => {
   snapshot(root, `sourceHash: ${computeSourceHash(src)}\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node"]}`);
   assert.equal(checkStackRules(root, src).status, "stale");
 });
+
+test("a snapshot whose markers match reports ok", () => {
+  const root = repo({ "package.json": pkg });
+  const fp = computeStackFingerprint(root);
+  snapshot(root, `sourceHash: x\nstackFingerprint: ${fp}\nmarkers: {".": ["node"]}`);
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "ok");
+  assert.deepEqual([r.added, r.removed], [[], []]);
+});
+
+test("a marker that appeared is named, with its workspace", () => {
+  const root = repo({ "package.json": pkg, "next.config.ts": "" });
+  snapshot(root, `sourceHash: x\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node"]}`);
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "stale");
+  assert.deepEqual(r.added, [{ workspace: ".", marker: "next" }]);
+  assert.deepEqual(r.removed, []);
+});
+
+test("a marker that vanished is named too", () => {
+  const root = repo({ "package.json": pkg });
+  snapshot(root, `sourceHash: x\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node","vite"]}`);
+  const r = checkStackRules(root, root);
+  assert.deepEqual(r.removed, [{ workspace: ".", marker: "vite" }]);
+  assert.deepEqual(r.added, []);
+});
+
+test("a snapshot without a markers line is legacy, never stale", () => {
+  const root = repo({ "package.json": pkg, "next.config.ts": "" });
+  snapshot(root, "sourceHash: x\nstackFingerprint: deadbeefdeadbeef\nstacks: [next]");
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "legacy");
+  assert.deepEqual([r.added, r.removed], [[], []]);
+});
+
+test("a stale sourceHash and a stale stackFingerprint do not by themselves mean drift", () => {
+  const root = repo({ "package.json": pkg });
+  snapshot(root, `sourceHash: 0000000000000000\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node"]}`);
+  const r = checkStackRules(root, emptySrc());
+  assert.equal(r.status, "ok");
+  assert.notEqual(r.sourceHash, "0000000000000000");
+});
+
+test("a workspace that appeared is named by its own key", () => {
+  const root = repo({
+    "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+    "package.json": pkg,
+    "apps/web/package.json": pkg,
+    "apps/web/next.config.ts": "",
+  });
+  snapshot(root, `sourceHash: x\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node","pnpm-ws"]}`);
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "stale");
+  assert.deepEqual(r.added, [
+    { workspace: "apps/web", marker: "next" },
+    { workspace: "apps/web", marker: "node" },
+  ]);
+  assert.deepEqual(r.removed, []);
+});
+
+test("a workspace that vanished is named by its own key", () => {
+  const root = repo({ "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n", "package.json": pkg });
+  snapshot(
+    root,
+    `sourceHash: x\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node","pnpm-ws"], "apps/gone": ["node","vite"]}`,
+  );
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "stale");
+  assert.deepEqual(r.added, []);
+  assert.deepEqual(r.removed, [
+    { workspace: "apps/gone", marker: "node" },
+    { workspace: "apps/gone", marker: "vite" },
+  ]);
+});
+
+test("an appearance, a disappearance and a changed workspace are reported together", () => {
+  const root = repo({
+    "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+    "package.json": pkg,
+    "apps/api/package.json": pkg,
+    "apps/api/nest-cli.json": "{}",
+    "apps/web/package.json": pkg,
+    "apps/web/next.config.ts": "",
+  });
+  snapshot(
+    root,
+    `sourceHash: x\nstackFingerprint: deadbeefdeadbeef\nmarkers: {".": ["node","pnpm-ws"], "apps/api": ["node","vite"], "apps/old": ["python"]}`,
+  );
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "stale");
+  assert.deepEqual(r.added, [
+    { workspace: "apps/api", marker: "nest" },
+    { workspace: "apps/web", marker: "next" },
+    { workspace: "apps/web", marker: "node" },
+  ]);
+  assert.deepEqual(r.removed, [
+    { workspace: "apps/api", marker: "vite" },
+    { workspace: "apps/old", marker: "python" },
+  ]);
+});
+
+// Pins the exact bytes that get hashed. The stability tests above compare the function against
+// itself in one process, so they cannot see a comparator whose order depends on the machine's
+// collation: under da-DK "aardvark" sorts last, under et-EE "z-utils" sorts before "tools", and
+// under every locale a capitalised "Web" sorts after "tools" instead of before it.
+test("workspace keys serialize in byte order, not the machine's collation order", () => {
+  const root = repo({
+    "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n  - 'packages/*'\n",
+    "package.json": pkg,
+    "apps/zebra/package.json": pkg,
+    "apps/aardvark/package.json": pkg,
+    "packages/z-utils/package.json": pkg,
+    "packages/tools/package.json": pkg,
+    "packages/Web/package.json": pkg,
+  });
+  assert.equal(
+    JSON.stringify(detectMarkersByWorkspace(root)),
+    '{".":["node","pnpm-ws"],"apps/aardvark":["node"],"apps/zebra":["node"],"packages/Web":["node"],"packages/tools":["node"],"packages/z-utils":["node"]}',
+  );
+});
+
+test("a markers line that runs past two kilobytes is still compared", () => {
+  const files = { "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\n", "package.json": pkg };
+  for (let i = 0; i < 80; i++) files[`packages/module-${String(i).padStart(2, "0")}/package.json`] = pkg;
+  const root = repo(files);
+  const frontmatter = `sourceHash: x\nstackFingerprint: ${computeStackFingerprint(root)}\nmarkers: ${JSON.stringify(detectMarkersByWorkspace(root))}`;
+  assert.ok(frontmatter.length > 2000);
+  snapshot(root, frontmatter);
+  const r = checkStackRules(root, root);
+  assert.equal(r.status, "ok");
+  assert.deepEqual([r.added, r.removed], [[], []]);
+});

@@ -5,7 +5,10 @@
 // stays silent when in sync). Also runnable directly, for the compiler subagent to get
 // the values to stamp into the snapshot's frontmatter:
 //   node ~/.claude/hooks/lib/stack-rules-check.mjs [projectRoot]
-// prints JSON: { status, sourceHash, stackFingerprint, markers, snapshotPath }.
+// prints JSON: { status, sourceHash, stackFingerprint, markers, added, removed, snapshotPath }.
+// status is "ok", "stale", "missing" or "legacy"; added/removed name the { workspace, marker }
+// pairs that appeared and vanished. sourceHash is stamped but never decides status - it hashes
+// mtime, so every setup.mjs deploy moves it with no rule text changing.
 // Design: docs/superpowers/specs/2026-07-12-stack-rules-design.md.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { realpathSync } from "node:fs";
@@ -17,6 +20,12 @@ import { listWorkspaces } from "../../bin/lib/workspaces.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const sha16 = (s) => createHash("sha1").update(s).digest("hex").slice(0, 16);
+
+// Byte order, never localeCompare: the sorted keys are hashed, and ICU collation reorders plain
+// ASCII names per locale and per ICU build (da-DK folds "aa" to the last letter; any locale sorts
+// "Web" before "tools" case-insensitively). A fingerprint that moves with someone's LANG cries
+// drift on an identical tree - the exact false alarm this check exists to avoid.
+const byteOrder = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 // Hash of the source rules: relative path + size + mtime per .md file. Cheap (no content
 // read); any real edit deployed via setup.mjs or made by hand touches size/mtime.
@@ -89,30 +98,52 @@ export function detectMarkers(root) {
 export function detectMarkersByWorkspace(root) {
   const out = { ".": detectMarkers(root) };
   for (const w of listWorkspaces(root).workspaces) out[w.relDir] = detectMarkers(w.dir);
-  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b)));
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => byteOrder(a, b)));
 }
 
 export const computeStackFingerprint = (root) =>
   sha16(JSON.stringify(detectMarkersByWorkspace(root)));
 
+// markers: is written as a YAML flow mapping, which is also valid JSON. That keeps the
+// frontmatter a nested map without adding a YAML parser to a hook that must stay cheap.
+// The whole frontmatter is sliced at its closing --- rather than read as a fixed byte window:
+// the mapping is one line and `.` does not match a newline, so a window that cuts it short
+// parses as null and leaves a large monorepo permanently, silently uncomparable.
+function parseFlowMap(head, key) {
+  const line = head.match(new RegExp(`^${key}:\\s*(\\{.*\\})\\s*$`, "m"));
+  if (!line) return null;
+  try { return JSON.parse(line[1]); } catch { return null; }
+}
+
+function diffMarkers(before, after) {
+  const added = [];
+  const removed = [];
+  for (const ws of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const was = new Set(before[ws] ?? []);
+    const is = new Set(after[ws] ?? []);
+    for (const m of is) if (!was.has(m)) added.push({ workspace: ws, marker: m });
+    for (const m of was) if (!is.has(m)) removed.push({ workspace: ws, marker: m });
+  }
+  const order = (a, b) => byteOrder(a.workspace, b.workspace) || byteOrder(a.marker, b.marker);
+  return { added: added.sort(order), removed: removed.sort(order) };
+}
+
 export function checkStackRules(root, srcDir = join(CLAUDE_DIR, "rules-src")) {
   const sourceHash = computeSourceHash(srcDir);
-  const stackFingerprint = computeStackFingerprint(root);
+  const markers = detectMarkersByWorkspace(root);
+  const stackFingerprint = sha16(JSON.stringify(markers));
   const snapshotPath = join(root, ".claude", "stack-rules.md");
-  let status = "missing";
-  if (existsSync(snapshotPath)) {
-    let head = "";
-    try { head = readFileSync(snapshotPath, "utf8").slice(0, 2000); } catch { /* unreadable - not comparable */ }
-    const oldSrc = (head.match(/^sourceHash:\s*(\S+)/m) || [])[1];
-    const oldFp = (head.match(/^stackFingerprint:\s*(\S+)/m) || [])[1];
-    // A snapshot with a flat stacks: list predates workspace-aware fingerprints - its hash was
-    // computed over root markers only, so comparing it reports drift on every project at once
-    // and trains the user to ignore the check: the exact failure that disabled it on 2026-07-13.
-    // Reported, never flagged; upgraded on the next explicit rebuild.
-    if (!/^markers:\s*\{/m.test(head)) status = "legacy";
-    else status = oldSrc === sourceHash && oldFp === stackFingerprint ? "ok" : "stale";
-  }
-  return { status, sourceHash, stackFingerprint, snapshotPath };
+  const empty = { sourceHash, stackFingerprint, markers, added: [], removed: [], snapshotPath };
+  if (!existsSync(snapshotPath)) return { status: "missing", ...empty };
+  let text;
+  try { text = readFileSync(snapshotPath, "utf8"); } catch { return { status: "missing", ...empty }; }
+  const recorded = parseFlowMap((text.match(/^---\r?\n([\s\S]*?)\r?\n---/) || ["", ""])[1], "markers");
+  // A snapshot predating workspace-aware markers cannot be compared: its stacks: was a flat root-
+  // only list, so every project would report drift on first contact and the check would be
+  // switched off a second time. Reported, never flagged; upgraded on the next explicit rebuild.
+  if (!recorded) return { status: "legacy", ...empty };
+  const { added, removed } = diffMarkers(recorded, markers);
+  return { status: added.length || removed.length ? "stale" : "ok", ...empty, added, removed };
 }
 
 // CLI mode
@@ -128,6 +159,5 @@ function isMainModule() {
 
 if (isMainModule()) {
   const root = resolve(process.argv[2] || process.cwd());
-  const result = checkStackRules(root);
-  console.log(JSON.stringify({ ...result, markers: detectMarkers(root) }, null, 2));
+  console.log(JSON.stringify(checkStackRules(root), null, 2));
 }
