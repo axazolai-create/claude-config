@@ -25,8 +25,8 @@ non-clobber ethos as §6.1.
   version-bump, not a machine-wide sweep). The migration doc §7.2 already positions `/init-stack`
   as the per-project refresh command.
 - **Settings model migration:** `setup.mjs` **prompts** when it finds a known-superseded full id
-  (keep / migrate to `opus[1m]`); aliases and current ids are left alone; non-TTY / `--*-all`
-  runs are report-only (no write).
+  (keep / migrate to `claude-opus-5`); aliases and current ids are left alone, except `opus[1m]`,
+  which migrates too; non-TTY / `--*-all` runs are report-only (no write).
 - **Non-clobber everywhere:** a value is only changed when it currently holds a *known old*
   value. Anything the user set deliberately is reported and left as-is.
 
@@ -43,11 +43,13 @@ migrateProjectModelConfig(config) -> { config, changes }   // changes: [{ role, 
 
 - `migrateSettingsModel` — when `model` matches a SUPERSEDED family, returns
   `{ value: <tier-preserving current id>, changed: true, from: model }`; otherwise
-  `{ value: model, changed: false }`. **Tier-preserving:** an old opus id migrates to `opus[1m]`,
-  an old sonnet id to `claude-sonnet-5`, an old haiku id to `claude-haiku-4-5` — the migration
-  never crosses tiers (a deliberate sonnet user is not dragged onto opus + 1M billing). Never
-  matches an alias (`opus`/`sonnet`/`haiku`/`fable`, with or without `[1m]`) or a current id
-  (`claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5`, `claude-fable-5`).
+  `{ value: model, changed: false }`. **Tier-preserving:** an old opus id migrates to
+  `claude-opus-5`, an old sonnet id to `claude-sonnet-5`, an old haiku id to `claude-haiku-4-5` —
+  the migration never crosses tiers (a deliberate sonnet user is not dragged onto opus billing).
+  Never matches a current id (`claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5`,
+  `claude-fable-5`) or an alias — with one deliberate exception, `opus[1m]`, which migrates to
+  `claude-opus-5`: Opus 5 serves a 1M window by default, so the suffix buys nothing and makes the
+  string invalid under `CLAUDE_CODE_DISABLE_1M_CONTEXT`. Bare `opus` still passes through.
 - `migrateProjectModelConfig` — walks `config.model_overrides` and, per the §6.3 map, flips a
   role **only if it currently holds the known-old value**; records each change; leaves foreign
   and already-migrated values untouched. Returns a new config object (does not mutate input) and
@@ -90,7 +92,7 @@ explicit surgical migration regardless of that flag, and does not touch the flag
 ## 4. Data maps
 
 - **SUPERSEDED session-model families** (prefix match) → tier-preserving target:
-  - opus family → `opus[1m]`: `claude-opus-4`, `claude-3-opus`.
+  - opus family → `claude-opus-5`: `claude-opus-4`, `claude-3-opus`, `opus[1m]`.
   - sonnet family → `claude-sonnet-5`: `claude-sonnet-4`, `claude-3-5-sonnet`, `claude-3-7-sonnet`.
   - haiku family → `claude-haiku-4-5`: `claude-3-5-haiku`, `claude-3-haiku`.
 
@@ -104,9 +106,10 @@ explicit surgical migration regardless of that flag, and does not touch the flag
 ## 5. Testing (TDD)
 
 - **`model-migration.test.mjs`:**
-  - `migrateSettingsModel`: each superseded family → its tier-preserving target (opus→`opus[1m]`,
-    sonnet→`claude-sonnet-5`, haiku→`claude-haiku-4-5`), all `changed`; each alias and each
-    current id → unchanged; an unknown/future id (`claude-opus-6`) → unchanged.
+  - `migrateSettingsModel`: each superseded family → its tier-preserving target
+    (opus→`claude-opus-5`, sonnet→`claude-sonnet-5`, haiku→`claude-haiku-4-5`), all `changed`;
+    `opus[1m]`→`claude-opus-5`; every other alias and each current id → unchanged; an
+    unknown/future id (`claude-opus-6`) → unchanged.
   - `migrateProjectModelConfig`: each of the six roles old→new; already-migrated value → no
     change; a foreign value → left as-is, not in `changes`; a role absent from the config →
     skipped; input object not mutated.

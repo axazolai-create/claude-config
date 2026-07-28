@@ -5,13 +5,20 @@ import { migrateSettingsModel, migrateProjectModelConfig } from "./model-migrati
 
 // ---- migrateSettingsModel: tier-preserving, non-clobber ----
 
-test("superseded opus ids migrate to opus[1m]", () => {
+test("superseded opus ids migrate to claude-opus-5", () => {
   for (const id of ["claude-opus-4-8", "claude-opus-4-1", "claude-3-opus-20240229"]) {
     const r = migrateSettingsModel(id);
     assert.equal(r.changed, true, `${id} should be flagged`);
-    assert.equal(r.value, "opus[1m]");
+    assert.equal(r.value, "claude-opus-5");
     assert.equal(r.from, id);
   }
+});
+
+test("the opus[1m] alias migrates to claude-opus-5", () => {
+  const r = migrateSettingsModel("opus[1m]");
+  assert.equal(r.changed, true);
+  assert.equal(r.value, "claude-opus-5");
+  assert.equal(r.from, "opus[1m]");
 });
 
 test("superseded sonnet ids migrate to claude-sonnet-5 (no cross-tier jump)", () => {
@@ -30,8 +37,8 @@ test("superseded haiku ids migrate to claude-haiku-4-5", () => {
   }
 });
 
-test("aliases are left untouched", () => {
-  for (const id of ["opus", "sonnet", "haiku", "fable", "opus[1m]", "sonnet[1m]"]) {
+test("aliases are left untouched (opus[1m] is the deliberate exception)", () => {
+  for (const id of ["opus", "sonnet", "haiku", "fable", "sonnet[1m]"]) {
     const r = migrateSettingsModel(id);
     assert.equal(r.changed, false, `${id} must not change`);
     assert.equal(r.value, id);
