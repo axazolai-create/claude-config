@@ -815,3 +815,62 @@
   the fork's README and `plugin.json` description, stated as a fork rather than implied.
 - **Residual:** future releases could become unusable to us. The fork keeps working at whatever
   version we last merged, which is the whole point of holding the objects ourselves.
+
+## RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
+
+- **Status:** Open (partially mitigated 2026-07-29 — `lint` names the single-project shape; the
+  monorepo shape is still misreported, and the enqueue itself is unfixed)
+- **Context:** `install-trigger.mjs`'s `post-commit` block skips a commit whose subject matches
+  `релиз:*|патч:*` (line 39) — the two prefixes **automated** mode composes (SKILL.md drain step 5) —
+  so a drain can never re-enqueue its own bump. The **manual** flow composes different messages and
+  is not covered: single-project step 6 commits `v<finalVersion>` (SKILL.md:274, e.g. `v0.4.0`) and
+  monorepo M8 commits `web: v0.4.7, backend: v1.9.2, mobile: v2.3.1` (SKILL.md:425). Both are
+  enqueued on any repo with the trigger installed. The consequence is worse than noise, because
+  `classify-bump.mjs`'s `SUBJECT` regex is `^([a-z]+)(\([^)]*\))?(!)?:\s*(.+)$` — ASCII-only, so it
+  cannot match Cyrillic `патч:`/`релиз:` either, and `v0.4.0` carries no `type:` at all. Every one of
+  these shapes therefore classifies as `unrecognised`, so the drain's `unrecognised` counter reports
+  the skill's own version-bump commits under the heading "commits with no recognised Conventional
+  Commits type" — pointing the user at a commit that is not theirs to fix.
+- **Mitigation:** `lint-versions.mjs` (2026-07-29) tests a dedicated `BUMP` pattern
+  (`/^(релиз:|патч:|v\d+\.\d+\.\d+$)/`) **ahead of** the unrecognised check and reports those
+  entries separately as "a version moved outside a drain" — the accurate statement, and an
+  actionable one. Verified against all four shapes: `v0.4.0`, `патч: …` and `релиз: …` are named
+  correctly. Drain mode is unaffected either way — it has two independent guards (the subject skip
+  and the drain lock the hook also tests), so this only ever reaches manual runs.
+- **Residual:** two, neither a data-loss risk. (1) `BUMP` does **not** match the monorepo manual
+  shape — `^v\d+\.\d+\.\d+$` requires the whole subject to be exactly `vX.Y.Z`, and a per-part list
+  is not — so `web: v0.4.7, backend: v1.9.2` still surfaces as "no recognised type" (verified, not
+  assumed). Widening the pattern was declined: `<word>: vX.Y.Z, …` is close enough to a real
+  conventional-commit subject that a loose match would misfile genuine commits, which is the more
+  expensive error. (2) Nothing prevents the enqueue itself; bump commits still accumulate in the
+  queue, drain as `none`, and stay queued until a later drain moves a version (drain step 4). The
+  version arithmetic is unaffected throughout — `unrecognised` contributes `none`. Fixing the cause
+  means either widening the hook's skip pattern or making the manual flow's message match it; both
+  edit SKILL.md text reviewed on 2026-07-28 and belong in a deliberate follow-up, not a drive-by.
+
+## RISK-CHANGELOG-002 — `lint` costs two `git log` subprocesses per queued entry, on every commit once the nudge lands
+
+- **Status:** Open (accepted — the consumer that makes it matter is deferred, not built)
+- **Context:** `lint-versions.mjs` resolves each queued entry with two `execFileSync('git', ['log',
+  '-1', …])` calls, one for `%s` and one for `%b`, so a run costs `2N` process spawns for an
+  `N`-entry queue. As a hand-run CLI that is irrelevant. Step 4 of the versioning plan — a fourth
+  note in `payload/hooks/decision-records-nudge.mjs`, skipped 2026-07-29 because that hook belongs
+  to the decision-records plan and has not landed — would call `lintVersions` from a hook that fires
+  on **every** `git commit`. On a 40-entry queue that is 80 spawns per commit, on Windows, in the
+  interactive path.
+- **Not an oversight, and not cheaper than the plan's sketch:** the plan's own snippet short-circuits
+  on `!e.level`, so in the steady state after the classify-at-commit-time trigger (every entry
+  carries a level) it spends **nothing**, while spending up to four spawns on each level-less entry
+  in a legacy queue. The shipped version spends two on **every** entry, deliberately — a recorded
+  level is only what the trigger saw at commit time, and re-reading the commit is the only way to
+  notice it has drifted from history. So this is more expensive than the sketch in the common case
+  and cheaper in the legacy one; the extra cost buys the drift check that is `lint`'s reason to
+  exist. Correcting an earlier claim of ours that the single pass simply "halves" it.
+- **Mitigation:** none built, and none needed while the CLI is invoked by hand.
+- **Residual:** whoever ships the nudge integration meets this first. Three ways out, cheapest
+  first: one batched `git log --format=…` over all hashes instead of two calls per hash; a cap on
+  how many entries the nudge path lints; or having the nudge report queue length only and leave
+  problems to the CLI. Decide before the hook ships rather than after. Severity is latency on a
+  `git commit`, bounded by queue length — not correctness: the plan's snippet wraps the call in
+  `try/catch` plus a `main().catch`, so a *failing* lint stays fail-open and never blocks a commit.
+  A *slow* one still delays it, which try/catch cannot help with.
