@@ -9,17 +9,20 @@ never open the same file can run in parallel; two plans that sound unrelated but
 
 > **This file relocates itself.** Plan 1 Task 11 moves `docs/superpowers/` to
 > `.ultrapowers/archive/`. After that this document lives at
-> `.ultrapowers/archive/plans/2026-07-28-EXECUTION-ORDER.md`, together with every plan it names.
+> `.ultrapowers/archive/plans/2026-07-28-EXECUTION-ORDER.md`. It stays there — it is a cross-plan
+> document belonging to no single phase. The plans it names no longer sit beside it: plans 1, 2
+> and 4 have since moved into their own phase directories, and the table below carries each
+> plan's current path.
 
 ## The plans
 
 | # | File | Tasks | Repositories touched |
 |---|---|---|---|
-| 1 | `2026-07-28-ultrapowers-planning-tree.md` | 12 | fork + bundle |
-| 2 | `2026-07-28-design-records-and-stack-rules.md` | 6 | bundle + fork |
-| 3 | `2026-07-28-decision-records.md` | 9 | bundle |
-| 4 | `2026-07-28-versioning-and-changelog.md` | 7 | bundle |
-| 5 | `2026-07-28-gsd-core-detector-and-statusline.md` | 7 | bundle |
+| 1 | `.ultrapowers/phases/04-ultrapowers-planning-tree/04-PLAN.md` | 12 | fork + bundle |
+| 2 | `.ultrapowers/phases/06-design-records-and-stack-rules/06-PLAN.md` | 6 | bundle + fork |
+| 3 | `.ultrapowers/archive/plans/2026-07-28-decision-records.md` | 9 | bundle |
+| 4 | `.ultrapowers/phases/05-versioning-and-changelog/05-PLAN.md` | 7 | bundle |
+| 5 | `.ultrapowers/archive/plans/2026-07-28-gsd-core-detector-and-statusline.md` | 7 | bundle |
 
 "fork" is `D:\6__Work\AI_Projects\ultrapowers` (branch `patch`); "bundle" is
 `D:\6__Work\AI_Projects\claude-config` (branch `master`).

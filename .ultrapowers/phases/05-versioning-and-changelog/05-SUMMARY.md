@@ -1,6 +1,6 @@
 # Phase 05 — versioning-and-changelog — Summary
 
-Plan: `.ultrapowers/archive/plans/2026-07-28-versioning-and-changelog.md` (the controller's own
+Plan: `.ultrapowers/phases/05-versioning-and-changelog/05-PLAN.md` (the controller's own
 ledger calls this run "Plan 4"; worktree `D:\6__Work\AI_Projects\claude-config-wt-plan4`, branch
 `feat/versioning-changelog`, branched from `master`). 7 tasks, one whole-branch review, one fix
 wave and one fix re-review, all clean at completion. Task 7 did not run — see below.

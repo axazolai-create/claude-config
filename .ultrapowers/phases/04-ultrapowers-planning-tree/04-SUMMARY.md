@@ -1,6 +1,6 @@
 # Phase 04 — ultrapowers-planning-tree — Summary
 
-Plan: `.ultrapowers/archive/plans/2026-07-28-ultrapowers-planning-tree.md`. 12 tasks plus one
+Plan: `.ultrapowers/phases/04-ultrapowers-planning-tree/04-PLAN.md`. 12 tasks plus one
 inserted task (2b), a whole-branch review, and two fix rounds, all clean at completion.
 
 This plan spans **two repositories**. Tasks 1-8 (plus 2b) are in the `ultrapowers` fork
