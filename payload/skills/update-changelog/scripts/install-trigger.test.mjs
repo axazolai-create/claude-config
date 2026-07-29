@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ensurePostCommitHook } from "./install-trigger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TRIGGER = join(HERE, "install-trigger.mjs");
@@ -45,4 +46,13 @@ test("install-trigger finds its sibling scripts regardless of the repo it target
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("the installed post-commit hook classifies the commit it queues", () => {
+  const root = mkdtempSync(join(tmpdir(), "trigger-"));
+  mkdirSync(join(root, ".git", "hooks"), { recursive: true });
+  ensurePostCommitHook(root);
+  const body = readFileSync(join(root, ".git", "hooks", "post-commit"), "utf8");
+  assert.match(body, /queue\.mjs/);
+  assert.match(body, /--classify/);
 });

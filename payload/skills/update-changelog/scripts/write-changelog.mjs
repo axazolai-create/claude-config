@@ -14,17 +14,22 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
+const versionOnly = args.includes('--version-only')
 const entriesFileArg = args.indexOf('--entries-file')
-if (entriesFileArg === -1 || !args[entriesFileArg + 1]) {
+if (!versionOnly && (entriesFileArg === -1 || !args[entriesFileArg + 1])) {
    console.error('Usage: write-changelog.mjs --entries-file <path> [--root <path>]')
+   console.error('   or: write-changelog.mjs --version-only --final-version X.Y.Z [--root <path>]')
    process.exit(1)
 }
 
 const rootArgIdx = args.indexOf('--root')
 const cwd = resolve(rootArgIdx !== -1 && args[rootArgIdx + 1] ? args[rootArgIdx + 1] : process.cwd())
-const input = JSON.parse(readFileSync(args[entriesFileArg + 1], 'utf8'))
+const finalVersionArg = args.indexOf('--final-version')
+const input = versionOnly
+   ? { entries: [], finalVersion: finalVersionArg !== -1 ? args[finalVersionArg + 1] : undefined }
+   : JSON.parse(readFileSync(args[entriesFileArg + 1], 'utf8'))
 
-if (!Array.isArray(input.entries) || input.entries.length === 0) {
+if (!versionOnly && (!Array.isArray(input.entries) || input.entries.length === 0)) {
    console.log(JSON.stringify({ error: 'entries[] is empty — nothing to write' }))
    process.exit(1)
 }
@@ -39,21 +44,31 @@ for (const entry of input.entries) {
    }
 }
 
-// --- changelog.json ---
-const candidates = [join(cwd, 'changelog.json'), join(cwd, 'src', 'changelog.json')]
-const changelogPath = candidates.find(existsSync) ?? join(cwd, 'changelog.json')
-
-let existing = []
-if (existsSync(changelogPath)) {
-   const parsed = JSON.parse(readFileSync(changelogPath, 'utf8'))
-   existing = Array.isArray(parsed) ? parsed : []
+// Checked before anything is written: a root with no package.json cannot be versioned at all,
+// and half-writing changelog.json first would leave entries under a version that never moved.
+const packageJsonPath = join(cwd, 'package.json')
+if (!existsSync(packageJsonPath)) {
+   console.log(JSON.stringify({ error: `package.json not found at ${cwd}` }))
+   process.exit(1)
 }
 
-const merged = [...input.entries, ...existing]
-writeFileSync(changelogPath, `${JSON.stringify(merged, null, 2)}\n`, { encoding: 'utf8' })
+// --- changelog.json ---
+let changelogPath = null
+if (!versionOnly) {
+   const candidates = [join(cwd, 'changelog.json'), join(cwd, 'src', 'changelog.json')]
+   changelogPath = candidates.find(existsSync) ?? join(cwd, 'changelog.json')
+
+   let existing = []
+   if (existsSync(changelogPath)) {
+      const parsed = JSON.parse(readFileSync(changelogPath, 'utf8'))
+      existing = Array.isArray(parsed) ? parsed : []
+   }
+
+   const merged = [...input.entries, ...existing]
+   writeFileSync(changelogPath, `${JSON.stringify(merged, null, 2)}\n`, { encoding: 'utf8' })
+}
 
 // --- package.json (targeted top-level "version" replace — preserves everything else) ---
-const packageJsonPath = join(cwd, 'package.json')
 const packageJsonRaw = readFileSync(packageJsonPath, 'utf8')
 const versionFieldRe = /"version":\s*"[^"]*"/
 if (!versionFieldRe.test(packageJsonRaw)) {
@@ -75,8 +90,8 @@ if (versionJsonUpdated) {
 
 console.log(JSON.stringify({
    changelogPath,
-   entriesAdded: input.entries.length,
-   topVersion: input.entries[0].version,
+   entriesAdded: versionOnly ? 0 : input.entries.length,
+   topVersion: versionOnly ? null : input.entries[0].version,
    packageJsonPath,
    packageJsonUpdated: true,
    versionJsonPath: versionJsonUpdated ? versionJsonPath : null,
