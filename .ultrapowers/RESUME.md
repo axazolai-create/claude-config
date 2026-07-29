@@ -18,28 +18,28 @@ Nothing is running. `06-SUMMARY.md` and `07-SUMMARY.md` were written and
 verified before the clear: five sections each, no diff content, 20.8 KB and
 23.3 KB. Every phase directory now holds what it should.
 
-One thing is unfinished, and it lives only in a branch:
-
-- **The fork has EIGHT unpublished commits** on branch `feat/workspace-coherence`
-  in `D:\6__Work\AI_Projects\ultrapowers`. It currently publishes `6.2.0-up.3`;
-  `patch` and `main` are clean and pushed at that revision. The branch carries:
-  three coherence fixes (the workspace surviving `git worktree remove`, the
-  `NN-PLAN.md` slug collision, and a false `NN-REVIEW.md` claim), the `refs/` and
-  `.ultrapowers/docs/` layout convention, the `STATE.md` trigger, and the
-  two-file state model. Publishing means: fast-forward `patch`, bump
-  `transform/config.json` revision 3 → 4, `build-cli.mjs check`, commit,
-  `build-cli.mjs commit`, `drift`, then `git push origin patch main`.
+**The fork is published at `6.2.0-up.4`** (2026-07-29). `feat/workspace-coherence`
+fast-forwarded into `patch`, `transform/config.json` revision 3 → 4, 73/73 tests
+green, `build-cli.mjs check` clean (59 files, 10 deltas, 0 refusals), `main`
+rebuilt to tree `2feadcf`, `drift` confirms `main` is exactly what original +
+patch produce, and both branches are pushed — `patch` at `2e06627`, `main` at
+`0ce6bfa`. The revision carries three coherence fixes (the workspace surviving
+`git worktree remove`, the `NN-PLAN.md` slug collision, and a false
+`NN-REVIEW.md` claim), the `refs/` and `.ultrapowers/docs/` layout convention,
+the `STATE.md` trigger, and the two-file state model.
 
 ## Next, in order
 
-1. Publish the fork revision `6.2.0-up.4`.
-2. Audit the live config dir, write the impact assessment, deploy from `master`.
+1. Audit the live config dir, write the impact assessment, deploy from `master`.
    **Read the warning below first.**
-3. Run the new phase the user opened: enforced state, transparent statuses,
+2. Run the new phase the user opened: enforced state, transparent statuses,
    `/up-resume`. It must go brainstorming → spec → plan → execution, by their
    ruling. Details in `.ultrapowers/sdd/2026-07-28-ultrapowers-planning-tree/progress.md`,
-   near the end.
-4. Only then plan #3 — decision records CLI — so it runs under the corrected
+   near the end. A reference `.planning/` tree from a real GSD project was copied
+   to `.reference/` and assessed on 2026-07-29. That directory is gitignored and
+   local to this machine — a fresh clone will not have it, and the assessment is
+   input to the brainstorm rather than a decision already taken.
+3. Only then plan #3 — decision records CLI — so it runs under the corrected
    status vocabulary rather than needing a second migration. Its plan is at
    `.ultrapowers/archive/plans/2026-07-28-decision-records.md`.
 

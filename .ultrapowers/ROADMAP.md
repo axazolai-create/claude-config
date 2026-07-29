@@ -75,10 +75,11 @@ plans are historical — those plans now live in their phase directories as
 - **Deploy before the plugin moves.** The bundle must be deployed before the
   ultrapowers plugin is updated past the revision the deployed copy was built
   against, because the published fork tells design sessions to run a checker the
-  older deployed copy answers differently. The fork currently publishes
-  `6.2.0-up.3`; a further revision is staged and unpublished on
-  `feat/workspace-coherence`, carrying the coherence fixes and this tree's own
-  state-file convention.
+  older deployed copy answers differently. The fork publishes `6.2.0-up.4` as of
+  2026-07-29 — the coherence fixes and this tree's own state-file convention are
+  in it — while the installed plugin is still `up.1`. Nothing is staged
+  unpublished. The gap is now three revisions wide, so this ordering constraint
+  binds harder than when it was written.
 - **One edit still owed to the user.** `~/.claude/CLAUDE.md` is `CURATED:NOEDIT`
   and says the risk register lives in `.planning/` or the project root; this tree
   keeps it at `.ultrapowers/RISK_REGISTER.md`. Only the user can reconcile that.
