@@ -476,8 +476,9 @@ The repo is split into two zones:
   → `~/.claude/hooks/foo.mjs`).
 - **Repo root** — the installer's own meta, never copied: `setup.mjs`,
   `bootstrap.sh`/`bootstrap.ps1`, `README.md`, `settings.partial.json`,
-  `gsd-defaults.partial.json`, `RISK_REGISTER.snippet.md`, this repo's own `RISK_REGISTER.md`
-  (not to be confused with the installed `~/.claude/state/...`), `docs/` (design specs/plans,
+  `gsd-defaults.partial.json`, `RISK_REGISTER.snippet.md`, this repo's own register
+  `.ultrapowers/RISK_REGISTER.md` (not to be confused with the installed `~/.claude/state/...`),
+  `docs/` and `.ultrapowers/` (reference material, design specs/plans, planning history —
   outside distribution).
 
 You can just drop your own files/folders into `payload/` — they'll be copied with structure
@@ -668,8 +669,8 @@ the layers resolve are in `rules-src/README.md`):
 Each file is self-documenting; this is only a coverage map, so the 30+ files aren't duplicated in
 the README (source of truth: the `rules-src/*.md` themselves and their `README.md`).
 
-Design and rationale: `docs/superpowers/specs/2026-07-12-stack-rules-design.md` (outside the
-distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
+Design and rationale: `.ultrapowers/archive/specs/2026-07-12-stack-rules-design.md` (outside the
+distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTER.md`.
 
 ---
 
@@ -785,7 +786,7 @@ distribution); risks — `RISK-STACKRULES-001/002` in `RISK_REGISTER.md`.
   overrides (`.claude/leanmode.json`) and a project-wide dial (`off/lite/full/ultra`, set via the
   `/leanmode` command) that **shifts** the map rather than replacing it — `off` is pinned and
   never moves either direction under the shift (full design rationale and map:
-  `docs/superpowers/specs/2026-07-10-leanmode-design.md`, outside the distribution). The dial
+  `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`, outside the distribution). The dial
   defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
   flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
   called as `/init-stack`'s step 7 — not a registered hook on its own); otherwise `off`.
@@ -1164,8 +1165,8 @@ un-updated).
   - Python tools: the `PYTHONIOENCODING=utf-8` variable;
   - Node outputs UTF-8 on its own — ASCII output or a UTF-8 console is enough.
 
-**Where RISK_REGISTER.md is looked for:** at the project root, at the `.planning/` root, and in
-its subfolders (e.g. `.planning/codebase/`). Selection rules:
+**Where RISK_REGISTER.md is looked for:** at the project root, at `.ultrapowers/`, at the
+`.planning/` root, and in its subfolders (e.g. `.planning/codebase/`). Selection rules:
 - if several are found — the **shallowest** one (closest to the root) is used;
 - if there are several at that minimal depth — **each one** is updated, each with its own next
   ID.

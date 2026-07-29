@@ -1,6 +1,5 @@
 .claude/
 .vscode/
-.superpowers/
 graphify-out/
 node_modules/
 .env

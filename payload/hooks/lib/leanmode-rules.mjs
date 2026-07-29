@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// leanmode shared resolver - see docs/superpowers/specs/2026-07-10-leanmode-design.md for the
+// leanmode shared resolver - see .ultrapowers/archive/specs/2026-07-10-leanmode-design.md for the
 // full off/lite/full/ultra rationale. Two independent axes: BASE level (resolveBaseLevel, which
 // text tier this agent_type gets ignoring the project dial) and the project dial (resolveDial,
 // a uniform shift applied to BASE). shift() combines them; resolveEffectiveLevel() is the one
@@ -18,7 +18,7 @@ export const LEVEL_ORDER = ["off", "lite", "full", "ultra"];
 // Runtime map holds only the 11 non-"off" entries - "off" is already the global fallback, so a
 // key that would just say "off" adds nothing at lookup time. The other 29 known agent_type
 // values (GSD's remaining agents plus Explore/Plan/claude-code-guide) are deliberately NOT
-// entries here - see docs/superpowers/specs/2026-07-10-leanmode-design.md for the full,
+// entries here - see .ultrapowers/archive/specs/2026-07-10-leanmode-design.md for the full,
 // per-agent accounting of what was considered and why each landed on "off".
 export const DEFAULT_LEANMODE_MAP = {
   "general-purpose": "lite", // catch-all agent, code-writing is common but not certain - mild nudge only

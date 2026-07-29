@@ -27,7 +27,7 @@
 
 **Tech Stack:** Node 18+ ESM, zero external dependencies, `node:test` + `node:assert/strict`. No package.json exists in this repository — modules are imported by relative path and tests are run with `node --test`.
 
-**Spec:** `docs/superpowers/specs/2026-07-27-ultrapowers-rework-design.md`
+**Spec:** `.ultrapowers/archive/specs/2026-07-27-ultrapowers-rework-design.md`
 
 ## Global Constraints
 
@@ -74,13 +74,13 @@ Reconnaissance, not code. The spec records that **no plugin-lifecycle hook event
 Hook registration is read at session startup, so this task requires a restart and the user's hands. Do not attempt it inside a running session.
 
 **Files:**
-- Create: `docs/superpowers/rework/probe-d-event-log.mjs`
+- Create: `.ultrapowers/archive/rework/probe-d-event-log.mjs`
 - Modify: `~/.claude/settings.json` (temporary registration, removed in Step 8)
-- Create: `docs/superpowers/rework/probe-d-results.md`
+- Create: `.ultrapowers/archive/rework/probe-d-results.md`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `docs/superpowers/rework/probe-d-results.md` — a table of `event -> fired? -> payload fields`. Task 8 reads it to decide whether the drift check gets an instant trigger in addition to `SessionStart`.
+- Produces: `.ultrapowers/archive/rework/probe-d-results.md` — a table of `event -> fired? -> payload fields`. Task 8 reads it to decide whether the drift check gets an instant trigger in addition to `SessionStart`.
 
 - [ ] **Step 1: Write the logging hook**
 
@@ -172,7 +172,7 @@ Move-Item "$p.probe-backup" $p -Force
 
 - [ ] **Step 8: Write the result and unregister**
 
-Create `docs/superpowers/rework/probe-d-results.md` with one row per event: fired yes/no, payload keys observed, and whether it is usable as an instant drift trigger. Then remove the three registrations from `~/.claude/settings.json` and delete `~/.claude/probe-d.jsonl`.
+Create `.ultrapowers/archive/rework/probe-d-results.md` with one row per event: fired yes/no, payload keys observed, and whether it is usable as an instant drift trigger. Then remove the three registrations from `~/.claude/settings.json` and delete `~/.claude/probe-d.jsonl`.
 
 - [ ] **Step 9: Commit**
 
@@ -1003,7 +1003,7 @@ export function triggerMessage(why) {
   return [
     `Ultrapowers rebrand patcher: ${why}.`,
     "Reconsider the approach: prose-only rebrand (drop the upstream patch), or an honest fork.",
-    "Context: docs/superpowers/specs/2026-07-27-ultrapowers-rework-design.md, RISK-ULTRAPOWERS-001.",
+    "Context: .ultrapowers/archive/specs/2026-07-27-ultrapowers-rework-design.md, RISK-ULTRAPOWERS-001.",
   ].join(" ");
 }
 ```
@@ -1164,7 +1164,7 @@ Create `ultrapowers-patches/README.md`:
 
 Rebrand patches applied to the upstream `superpowers@claude-plugins-official` plugin. Prose only:
 the plugin's identity, directory names, and the `superpowers:` skill namespace are never touched.
-Design: `docs/superpowers/specs/2026-07-27-ultrapowers-rework-design.md`.
+Design: `.ultrapowers/archive/specs/2026-07-27-ultrapowers-rework-design.md`.
 
 ## Contents
 
@@ -1264,7 +1264,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Read probe D's result and decide on an instant trigger**
 
-Open `docs/superpowers/rework/probe-d-results.md` from Task 1.
+Open `.ultrapowers/archive/rework/probe-d-results.md` from Task 1.
 
 - If `ConfigChange` or `UserPromptSubmit` fired with a usable payload, add a note to
   `ultrapowers-patches/README.md` recording that an instant drift check is possible, and open a
@@ -1433,7 +1433,7 @@ Commit message subject: `feat(ultrapowers): apply the rebrand to 6.2.0 and recor
 
 ## Layer 0 Definition of Done
 
-- [ ] Probe D result recorded in `docs/superpowers/rework/probe-d-results.md`.
+- [ ] Probe D result recorded in `.ultrapowers/archive/rework/probe-d-results.md`.
 - [ ] `node --test payload/hooks/lib/ultrapowers-*.test.mjs variants.test.mjs` passes.
 - [ ] Bucket histogram plus ignored occurrences balances against the 119 measured in 6.2.0.
 - [ ] `grep -rn "ultrapowers:"` inside the plugin's `skills/` returns nothing.

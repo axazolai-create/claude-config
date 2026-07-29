@@ -3,7 +3,7 @@
 **Date:** 2026-07-26 · **Status:** DESIGN DRAFT (awaiting user review → writing-plans)
 
 **Supersedes** the `full`/`lite` two-variant model in
-`docs/superpowers/specs/2026-07-22-lite-variant-design.md` §2.1 and the lite-specific
+`.ultrapowers/archive/specs/2026-07-22-lite-variant-design.md` §2.1 and the lite-specific
 `/init-stack` overlay. That spec's component verdicts are reused as the starting inventory;
 this spec re-slots them across three profiles.
 

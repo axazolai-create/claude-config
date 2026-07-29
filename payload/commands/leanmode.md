@@ -13,7 +13,7 @@ Check `$ARGUMENTS` for `--off`, `--lite`, `--full`, or `--ultra`.
 
 ## 2. If no flag: interactive menu
 Use `AskUserQuestion` with exactly these four options (mirrors the shift table in
-`docs/superpowers/specs/2026-07-10-leanmode-design.md`):
+`.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`):
 
 ```text
 AskUserQuestion([{

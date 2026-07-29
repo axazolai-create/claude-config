@@ -122,7 +122,7 @@ test("full variant is identity over payload/ (minus alwaysExclude)", () => {
 // "setting-templates" was dropped from this list under three-profile unification (Task 6):
 // setting-templates/ now ships in EVERY profile (variant-agnostic stack templates; which
 // plugins a profile is willing to enable is the tier filter, not file exclusion - see
-// docs/superpowers/specs/2026-07-26-three-profile-unification-design.md §2.1/§4), and the now-
+// .ultrapowers/archive/specs/2026-07-26-three-profile-unification-design.md §2.1/§4), and the now-
 // unified payload/commands/init-stack.md legitimately references
 // `~/.claude/setting-templates/` for every profile, including lite. "init-stack.py" stays
 // forbidden: the Python implementation is deleted, so the unified doc invokes
@@ -285,7 +285,7 @@ test("base hook registrations resolve to base's file set", () => {
   for (const s of ["db-live-access-gate.mjs", "ci-watch-nudge.mjs", "gsd-context-meter.mjs", "task-lifecycle-probe.mjs"])
     assert.ok(!scripts.has(s), `base settings must NOT register ${s}`);
   // pnpm-phantom-fix-hook.mjs is deliberately NEVER globally registered in settings.partial.json
-  // (docs/superpowers/specs/2026-07-21-pnpm-phantom-fix-design.md, decision C2: "settings.partial.json
+  // (.ultrapowers/archive/specs/2026-07-21-pnpm-phantom-fix-design.md, decision C2: "settings.partial.json
   // is NOT changed — the hook is never globally registered"; it's wired per-project, pnpm-gated, by
   // pnpm-phantom-fix-install.mjs at /init-stack time). It ships in base's FILE SET — asserted
   // separately by "base drops all GSD, keeps neo4j opt-in and design/infra keep-set" — but this

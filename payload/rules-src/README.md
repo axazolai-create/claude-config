@@ -15,7 +15,7 @@ no off switch. Delivery works by compilation instead:
   that fired a rebuild instruction every session on any drift. Opt out: `CLAUDE_STACK_RULES=0`.
 - The snapshot enters context via an `@stack-rules.md` import line in the project's
   auto-loaded `.claude/CLAUDE.md`.
-- Design/rationale: `docs/superpowers/specs/2026-07-12-stack-rules-design.md`.
+- Design/rationale: `.ultrapowers/archive/specs/2026-07-12-stack-rules-design.md`.
 
 ## Rule layers (selection semantics)
 

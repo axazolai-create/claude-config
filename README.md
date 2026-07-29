@@ -470,8 +470,10 @@ updated, M unchanged`, `rules-src: ...` и т.д.) — чтобы не прих�
   относительно `payload/` (т.е. `payload/hooks/foo.mjs` → `~/.claude/hooks/foo.mjs`).
 - **Корень репозитория** — мета самого установщика, никогда не копируется: `setup.mjs`,
   `bootstrap.sh`/`bootstrap.ps1`, `README.md`, `settings.partial.json`, `gsd-defaults.partial.json`,
-  `RISK_REGISTER.snippet.md`, этот репозиторий собственный `RISK_REGISTER.md` (не путать с
-  установленным `~/.claude/state/...`), `docs/` (дизайн-спеки/планы, вне дистрибуции).
+  `RISK_REGISTER.snippet.md`, собственный реестр этого репозитория
+  `.ultrapowers/RISK_REGISTER.md` (не путать с установленным `~/.claude/state/...`),
+  `docs/` и `.ultrapowers/` (справочные материалы, дизайн-спеки/планы, история планирования —
+  вне дистрибуции).
 
 Можно просто положить свои файлы/папки в `payload/` — они скопируются с сохранением структуры
 (`payload/commands/`, `payload/agents/`, доп. `payload/skills/`, любые свои файлы). Правила те же:
@@ -660,8 +662,8 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
 Каждый файл самодокументирован; здесь — только карта охвата, чтобы не дублировать 30+ файлов в
 README (источник истины — сами `rules-src/*.md` и их `README.md`).
 
-Дизайн и обоснование: `docs/superpowers/specs/2026-07-12-stack-rules-design.md` (вне
-дистрибуции); риски — `RISK-STACKRULES-001/002` в `RISK_REGISTER.md`.
+Дизайн и обоснование: `.ultrapowers/archive/specs/2026-07-12-stack-rules-design.md` (вне
+дистрибуции); риски — `RISK-STACKRULES-001/002` в `.ultrapowers/RISK_REGISTER.md`.
 
 ---
 
@@ -781,7 +783,7 @@ README (источник истины — сами `rules-src/*.md` и их `REA
   оверрайды (`.claude/leanmode.json`) и общепроектный dial (`off/lite/full/ultra`,
   `/leanmode`-командой), который **сдвигает**, а не заменяет карту — `off` при сдвиге не
   трогается ни в одну сторону (design rationale и полная карта:
-  `docs/superpowers/specs/2026-07-10-leanmode-design.md`, вне дистрибуции). dial по умолчанию —
+  `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`, вне дистрибуции). dial по умолчанию —
   `full`, если для проекта хоть раз запускался `/init-stack` (флаг `initStackRun` в
   `~/.claude/state/project-init.json`, ставит **hooks/lib/mark-initstack-done.mjs**, вызывается
   шагом 9 `/init-stack`, не зарегистрированный хук сам по себе); иначе — `off`. Тумблер:
@@ -1146,8 +1148,8 @@ node setup.mjs
   - Python-инструменты: переменная `PYTHONIOENCODING=utf-8`;
   - Node выводит UTF-8 сам — достаточно ASCII-вывода или UTF-8-консоли.
 
-**Где ищется RISK_REGISTER.md:** в корне проекта, в корне `.planning/` и в его подпапках (например
-`.planning/codebase/`). Правила выбора:
+**Где ищется RISK_REGISTER.md:** в корне проекта, в `.ultrapowers/`, в корне `.planning/` и в его
+подпапках (например `.planning/codebase/`). Правила выбора:
 - если найдено несколько — берётся тот, что **выше по вложенности** (ближе к корню);
 - если на этом минимальном уровне их несколько — обновляется **каждый**, у каждого свой следующий ID.
 

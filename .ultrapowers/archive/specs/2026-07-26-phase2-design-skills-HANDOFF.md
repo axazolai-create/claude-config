@@ -2,7 +2,7 @@
 
 > **SUPERSEDED / RE-DECOMPOSED (2026-07-26).** This "design skills into the frontend template"
 > work is now **Phase 3**, not Phase 2. Brainstorming split it: the **new Phase 2** is a centralized
-> component-update checker (`docs/superpowers/specs/2026-07-26-component-update-checker-design.md`),
+> component-update checker (`.ultrapowers/archive/specs/2026-07-26-component-update-checker-design.md`),
 > which the design-skills install strategy depends on. Also changed since this doc was written:
 > **frontend-design is removed entirely and replaced by Impeccable** (not by Pro Max); **Pro Max is
 > installed only as an enhancement grafted into Impeccable**, never a standalone skill; install uses
@@ -67,6 +67,6 @@ to take effect. Not part of the repo.
 
 ## How to resume (fresh session after /clear)
 1. Read this file + the project memory (`three-profile-unification`) + spec §8
-   (`docs/superpowers/specs/2026-07-26-three-profile-unification-design.md`).
+   (`.ultrapowers/archive/specs/2026-07-26-three-profile-unification-design.md`).
 2. `superpowers:brainstorming` on the open questions above (vendoring mechanics is the main one).
 3. `superpowers:writing-plans` → `superpowers:subagent-driven-development`.

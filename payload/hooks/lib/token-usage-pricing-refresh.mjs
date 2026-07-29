@@ -7,7 +7,7 @@
 // existing file untouched (RISK-TOKENLOG-001). Model names are slugified to the same
 // "claude-<family>-<version>" prefix convention as real API model ids; token-usage-log.mjs
 // looks up cost by longest-prefix match, so dated id suffixes still match. Full design:
-// docs/superpowers/specs/2026-07-08-token-usage-log-design.md.
+// .ultrapowers/archive/specs/2026-07-08-token-usage-log-design.md.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";

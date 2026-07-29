@@ -1,7 +1,7 @@
 // payload/bin/install-design-stack.mjs
 // Idempotent, fail-soft, project-scope design-stack installer. Invoked by /init-stack on frontend
 // detect: node install-design-stack.mjs --root <path>. See
-// docs/superpowers/specs/2026-07-26-phase3-design-skills-integration-design.md.
+// .ultrapowers/archive/specs/2026-07-26-phase3-design-skills-integration-design.md.
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

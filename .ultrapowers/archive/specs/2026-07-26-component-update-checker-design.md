@@ -3,7 +3,7 @@
 **Date:** 2026-07-26 · **Status:** DESIGN DRAFT (awaiting user review → writing-plans)
 
 **Context / re-decomposition.** This is the **new Phase 2** of the design-skills work. The original
-`docs/superpowers/specs/2026-07-26-phase2-design-skills-HANDOFF.md` treated "Impeccable + UI-UX-Pro-Max
+`.ultrapowers/archive/specs/2026-07-26-phase2-design-skills-HANDOFF.md` treated "Impeccable + UI-UX-Pro-Max
 into the frontend template" as Phase 2. During brainstorming (2026-07-26) that split in two:
 
 - **Phase 2 (this spec)** — a centralized update checker for every installer-managed component, so

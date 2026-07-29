@@ -127,8 +127,8 @@ now actively harmful — the correction runs the opposite direction.
 - **Maintenance cost:** `gsd-executor-decomposing.md` duplicates the entirety of `gsd-executor.md`'s
   execution machinery (commit protocol, deviation rules, TDD flow, checkpoint handling) because
   Claude Code agent files have no inheritance mechanism — an upstream change to `gsd-executor.md`
-  does not reach this fork. See RISK-GSDEXEC-001 in `RISK_REGISTER.md` for the drift-detection
-  procedure.
+  does not reach this fork. See RISK-GSDEXEC-001 in the claude-config repo's
+  `.ultrapowers/RISK_REGISTER.md` for the drift-detection procedure.
 
 ### Parallel worktree waves (Windows): environment contention, not agent confusion
 

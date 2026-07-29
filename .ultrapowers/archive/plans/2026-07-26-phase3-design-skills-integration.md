@@ -17,7 +17,7 @@
 - Pro Max subset (keep, prune everything else): `["ui-ux-pro-max", "ui-styling", "design-system"]`.
 - Every orchestrator step and every worker probe is **fail-soft** (wrapped so one failure warns and continues) and **idempotent**.
 - All new files ship in **all three profiles** (full/base/lite) — they are `tier: core` equivalent; verify none is caught by a profile `exclude`.
-- Spec of record: `docs/superpowers/specs/2026-07-26-phase3-design-skills-integration-design.md`.
+- Spec of record: `.ultrapowers/archive/specs/2026-07-26-phase3-design-skills-integration-design.md`.
 
 ---
 
@@ -458,7 +458,7 @@ Expected: FAIL — `runDesignStack` not exported.
 // payload/bin/install-design-stack.mjs
 // Idempotent, fail-soft, project-scope design-stack installer. Invoked by /init-stack on frontend
 // detect: node install-design-stack.mjs --root <path>. See
-// docs/superpowers/specs/2026-07-26-phase3-design-skills-integration-design.md.
+// .ultrapowers/archive/specs/2026-07-26-phase3-design-skills-integration-design.md.
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

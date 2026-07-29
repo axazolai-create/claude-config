@@ -5,9 +5,12 @@
 // found, falls back to a "### <ID> -" section. Idempotent per file. ASCII-only output.
 //
 // Discovery (when NO file/dir argument is given): looks for RISK_REGISTER.md in the project root,
-// in .planning/, and in any .planning/ subfolder. If several are found, only the SHALLOWEST level
-// is used; if multiple sit at that same shallowest level, EACH is updated independently (its own
-// next free ID). Use --root <dir> to set the search base (default: cwd).
+// in .ultrapowers/, in .planning/, and in any .planning/ subfolder. If several are found, only the
+// SHALLOWEST level is used; if multiple sit at that same shallowest level, EACH is updated
+// independently (its own next free ID). Use --root <dir> to set the search base (default: cwd).
+// Kept in sync with hooks/session-init.mjs's own listRegisters() - session-init decides WHETHER
+// there is anything to do, this script does it, so a probe added on one side and not the other
+// makes the pair spawn a subprocess every session that then finds nothing.
 //
 // Usage:
 //   node add-risk.mjs                       # discover + update shallowest register(s)
@@ -30,8 +33,10 @@ const SIG = "deny-curated-claude-md.mjs";
 
 function listRegisters(root) {
   const found = [];
-  const rootFile = join(root, "RISK_REGISTER.md");
-  if (existsSync(rootFile)) found.push(rootFile);
+  for (const rel of ["RISK_REGISTER.md", join(".ultrapowers", "RISK_REGISTER.md")]) {
+    const f = join(root, rel);
+    if (existsSync(f)) found.push(f);
+  }
   const base = join(root, ".planning");
   if (existsSync(base)) {
     const stack = [base];

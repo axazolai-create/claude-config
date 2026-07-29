@@ -1,7 +1,7 @@
 // Pure registry + decision logic for the centralized component-update checker.
 // No I/O: the worker (component-update-check-run.mjs) and session-init.mjs supply state
 // and env; this module only classifies and formats. See
-// docs/superpowers/specs/2026-07-26-component-update-checker-design.md.
+// .ultrapowers/archive/specs/2026-07-26-component-update-checker-design.md.
 
 // kind: "version"     -> has a check() that yields installed/latest/updateAvailable
 //       "upgrade-only" -> no version signal; just runs its self-upgrade on the throttle

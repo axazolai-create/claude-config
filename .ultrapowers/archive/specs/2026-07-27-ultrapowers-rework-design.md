@@ -1,7 +1,7 @@
 # Ultrapowers — Superpowers rework, umbrella design
 
 **Date:** 2026-07-27
-**Source:** `docs/superpowers/rework/workflow-frameworks-analysis.md` (ред. 8 + приложения А-Ц, 2906 lines).
+**Source:** `.ultrapowers/archive/rework/workflow-frameworks-analysis.md` (ред. 8 + приложения А-Ц, 2906 lines).
 Appendix references below use the source's own Cyrillic labels.
 **Status:** design approved in conversation; layers 2-4 get their own specs before implementation.
 

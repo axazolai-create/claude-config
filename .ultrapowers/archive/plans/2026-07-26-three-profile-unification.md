@@ -6,7 +6,7 @@
 
 **Architecture:** `variants.json` becomes a `profiles` map with an `extends` chain (`lite ⊂ base ⊂ full`); `full` stays an identity fast-path, `base`/`lite` are exclude-only deltas whose parent excludes are unioned by the resolver. The single Node `bin/init-stack.mjs` (ported from the retired Python) filters stack plugins by a per-plugin `tier` against the active profile. Two monolithic `CLAUDE.md` files become numeric fragments under `payload/claude-md/`, assembled per profile at install time. `setup.mjs` gains a 3-way profile prompt, a manifest `profile` field (fallback-reads the old `variant`), and a single guided augment/trim flow.
 
-**Tech Stack:** Node ESM (`.mjs`), `node --test` + `node:assert/strict`, no `package.json`, no third-party deps. Windows-first (forward-slash paths, `spawnSync`). Spec: `docs/superpowers/specs/2026-07-26-three-profile-unification-design.md`.
+**Tech Stack:** Node ESM (`.mjs`), `node --test` + `node:assert/strict`, no `package.json`, no third-party deps. Windows-first (forward-slash paths, `spawnSync`). Spec: `.ultrapowers/archive/specs/2026-07-26-three-profile-unification-design.md`.
 
 ## Global Constraints
 

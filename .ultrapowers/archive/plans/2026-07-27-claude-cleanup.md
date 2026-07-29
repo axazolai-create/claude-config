@@ -641,7 +641,7 @@ Author `payload/commands/claude-cleanup.md` with `allowed-tools: Bash(node *), A
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-07-27-claude-cleanup.md`. Two execution options:
+Plan complete and saved to `.ultrapowers/archive/plans/2026-07-27-claude-cleanup.md`. Two execution options:
 
 1. **Subagent-Driven (recommended)** — fresh subagent per task, review between tasks, broad final review.
 2. **Inline Execution** — execute in this session with checkpoints.

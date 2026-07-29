@@ -2,8 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Design:** `docs/superpowers/specs/2026-07-27-ultrapowers-fork-design.md`
-**Supersedes:** `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md` in full.
+**Design:** `.ultrapowers/archive/specs/2026-07-27-ultrapowers-fork-design.md`
+**Supersedes:** `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md` in full.
 
 **Goal:** `ultrapowers` exists as an owned, fully rebranded fork of `superpowers@claude-plugins-official`, installed instead of upstream, and stays current via one command (`/up-update`) runnable from any project — which either completes the update or refuses and says what needs work.
 
@@ -85,14 +85,14 @@ This also removes a coupling the earlier draft had: refusal semantics no longer 
 - `payload/bin/lib/up-progress-lib.mjs` + `.test.mjs` — pure: probe reconciliation
 - `payload/bin/lib/up-progress-probes.json` — the plan→probe table (data, not code)
 - `payload/commands/up-resume.md`, `payload/commands/up-progress.md` — resume / report-only
-- `docs/superpowers/plans/2026-07-27-ultrapowers-fork.STATE.md` — the STATE file (generated)
+- `.ultrapowers/archive/plans/2026-07-27-ultrapowers-fork.STATE.md` — the STATE file (generated)
 
 **`claude-config` — modified**
 - `variants.json` — `managedPlugins` gains `ultrapowers`; new `keepInstalled`; profiles swap the name
 - `plugin-reconcile.mjs` + `.test.mjs` — disable-without-uninstall
 - `setup.mjs` — marketplace registration before install; pass `keepInstalled`
 - `RISK_REGISTER.md` — per the design's risk table
-- `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md` — superseded header
+- `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md` — superseded header
 - `README.md` / `README.en.md` — the fork replaces upstream in the plugin list
 
 ---
@@ -588,7 +588,7 @@ Both: scratch fork refs byte-identical before and after; `claude-config` working
 
 **Scope, re-measured 2026-07-28 (the plan's 25 predated Tasks 8–9):** 59 in `payload/`, 2 in `payload-lite/`, 0 in `gsd-core-patches/`. Of the 59, **9 were added by `/up-update` itself** and name upstream on purpose, and **20 belonged to the fallow graft** now retired. Ending state: **22 total, 0 unclassified** — 13 repo doc paths, 9 deliberate upstream references.
 
-**Files:** `payload/**`, `payload-lite/**`, `variants.test.mjs`, `RISK_REGISTER.md`, `README.md`, `README.en.md`, `docs/superpowers/plans/2026-07-27-ultrapowers-layer0-patcher.md`
+**Files:** `payload/**`, `payload-lite/**`, `variants.test.mjs`, `RISK_REGISTER.md`, `README.md`, `README.en.md`, `.ultrapowers/archive/plans/2026-07-27-ultrapowers-layer0-patcher.md`
 
 **Already covered by Tasks 6–7:** `variants.json`, `plugin-reconcile.mjs`, `setup.mjs`. Task 10 must not touch them again.
 

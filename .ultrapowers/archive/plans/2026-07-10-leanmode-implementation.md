@@ -12,9 +12,9 @@
 
 - No test framework exists in this repo (no `package.json`, no `tests/` dir) — every other hook (`session-init.mjs`, `gsd-config-patch.mjs`, etc.) is verified by direct `node script.mjs` invocation with crafted stdin/fixtures, not an automated suite. Follow that convention; do not introduce a test framework for this feature alone.
 - Every hook script uses the repo's established `safe()`/`writeFile()`/`readJSON()` (BOM-stripping) helper pattern and duplicates the `findRoot()` walk rather than importing across independent hook files — see `payload/hooks/session-init.mjs` and `payload/hooks/gsd-config-patch.mjs` for the exact shape.
-- `.claude/settings.json` is never a place for this feature's own config — project-level leanmode config lives in a dedicated `.claude/leanmode.json` this feature owns exclusively (spec: docs/superpowers/specs/2026-07-10-leanmode-design.md, "BASE level" section).
+- `.claude/settings.json` is never a place for this feature's own config — project-level leanmode config lives in a dedicated `.claude/leanmode.json` this feature owns exclusively (spec: .ultrapowers/archive/specs/2026-07-10-leanmode-design.md, "BASE level" section).
 - Deploy path: any file placed under `payload/` is picked up automatically by `node setup.mjs` (recursive `walkBundle(SRC)`) — no changes to `setup.mjs` itself are needed for new files.
-- Full algorithmic spec (BASE resolution, dial resolution, the shift table, the full `DEFAULT_LEANMODE_MAP` with rationale) is locked in `docs/superpowers/specs/2026-07-10-leanmode-design.md` — read it before Task 1, don't re-derive decisions already made there.
+- Full algorithmic spec (BASE resolution, dial resolution, the shift table, the full `DEFAULT_LEANMODE_MAP` with rationale) is locked in `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md` — read it before Task 1, don't re-derive decisions already made there.
 
 ---
 
@@ -78,7 +78,7 @@ real boundaries, or security practices — those stay exactly as required regard
 
 ```js
 #!/usr/bin/env node
-// leanmode shared resolver - see docs/superpowers/specs/2026-07-10-leanmode-design.md for the
+// leanmode shared resolver - see .ultrapowers/archive/specs/2026-07-10-leanmode-design.md for the
 // full off/lite/full/ultra rationale. Two independent axes: BASE level (resolveBaseLevel, which
 // text tier this agent_type gets ignoring the project dial) and the project dial (resolveDial,
 // a uniform shift applied to BASE). shift() combines them; resolveEffectiveLevel() is the one
@@ -96,7 +96,7 @@ export const LEVEL_ORDER = ["off", "lite", "full", "ultra"];
 // Runtime map holds only the 11 non-"off" entries - "off" is already the global fallback, so a
 // key that would just say "off" adds nothing at lookup time. The other 29 known agent_type
 // values (GSD's remaining agents plus Explore/Plan/claude-code-guide) are deliberately NOT
-// entries here - see docs/superpowers/specs/2026-07-10-leanmode-design.md for the full,
+// entries here - see .ultrapowers/archive/specs/2026-07-10-leanmode-design.md for the full,
 // per-agent accounting of what was considered and why each landed on "off".
 export const DEFAULT_LEANMODE_MAP = {
   "general-purpose": "lite", // catch-all agent, code-writing is common but not certain - mild nudge only
@@ -488,7 +488,7 @@ if (!state[root].initStackRun) {
 Run `node ~/.claude/hooks/lib/mark-initstack-done.mjs` (no output expected, always safe to
 re-run). This lets leanmode's project dial default to `full` for this project from now on,
 instead of staying `off` until someone explicitly runs `/leanmode` — see
-`docs/superpowers/specs/2026-07-10-leanmode-design.md` for why the dial is gated on
+`.ultrapowers/archive/specs/2026-07-10-leanmode-design.md` for why the dial is gated on
 `/init-stack` having run at all.
 ```
 
@@ -655,7 +655,7 @@ Check `$ARGUMENTS` for `--off`, `--lite`, `--full`, or `--ultra`.
 
 ## 2. If no flag: interactive menu
 Use `AskUserQuestion` with exactly these four options (mirrors the shift table in
-`docs/superpowers/specs/2026-07-10-leanmode-design.md`):
+`.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`):
 
 ```text
 AskUserQuestion([{

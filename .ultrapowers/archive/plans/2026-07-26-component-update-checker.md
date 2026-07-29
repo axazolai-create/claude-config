@@ -98,7 +98,7 @@ Expected: FAIL — `Cannot find module './component-registry.mjs'`.
 // Pure registry + decision logic for the centralized component-update checker.
 // No I/O: the worker (component-update-check-run.mjs) and session-init.mjs supply state
 // and env; this module only classifies and formats. See
-// docs/superpowers/specs/2026-07-26-component-update-checker-design.md.
+// .ultrapowers/archive/specs/2026-07-26-component-update-checker-design.md.
 
 // kind: "version"     -> has a check() that yields installed/latest/updateAvailable
 //       "upgrade-only" -> no version signal; just runs its self-upgrade on the throttle
@@ -617,4 +617,4 @@ git commit -m "feat(updater): spawn component worker + emit update notes from se
 
 ## Deferred to Phase 3 (not in this plan)
 
-- Project-scope probes for `impeccable` / `ui-ux-pro-max` (per-`root` `check`/`update`, keyed off `scope:"project"`), plus the `afterUpdate` hook that re-applies the Pro Max content-graft after an Impeccable update (the `gsd-agent-patches.mjs` pattern). See `docs/superpowers/specs/2026-07-26-component-update-checker-design.md` §10 and the memory `impeccable-promax-facts`.
+- Project-scope probes for `impeccable` / `ui-ux-pro-max` (per-`root` `check`/`update`, keyed off `scope:"project"`), plus the `afterUpdate` hook that re-applies the Pro Max content-graft after an Impeccable update (the `gsd-agent-patches.mjs` pattern). See `.ultrapowers/archive/specs/2026-07-26-component-update-checker-design.md` §10 and the memory `impeccable-promax-facts`.

@@ -1059,7 +1059,7 @@ Add this section at the end of `docs/gsd-config-defaults.md`:
 A second, independent delivery path now exists: `gsd-defaults.partial.json` (repo root),
 applied to gsd-core's own native `~/.gsd/defaults.json` and to the current project's
 `.planning/config.json` via `payload/hooks/lib/gsd-defaults-sync.mjs` (see
-`docs/superpowers/plans/2026-07-13-gsd-defaults-and-statusline.md`).
+`.ultrapowers/archive/plans/2026-07-13-gsd-defaults-and-statusline.md`).
 
 That file deliberately includes `tdd_mode`, `code_review`(+`_depth`), and
 `ui_phase`/`ui_review`/`ui_safety_gate` - a reversal of this document's Tier 2 "deliberately
