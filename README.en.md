@@ -357,7 +357,7 @@ So this package does three things:
     session-init.mjs                     # SessionStart: project bootstrap (+ registration in graphify,
                                           #   + installing the native post-commit hook in the project)
     lib/
-      stack-rules-check.mjs              # sourceHash/stackFingerprint of the stack-rules snapshot (+ CLI)
+      stack-rules-check.mjs              # compares the stack-rules snapshot's markers vs the tree (+ CLI)
     token-usage-log.mjs                  # SubagentStop + Stop — token/$ spend log in JSONL
     lib/
       token-usage-shared.mjs             # shared helpers (findRoot, JSONL read/append, cursor)
@@ -578,10 +578,11 @@ see "Bundle variants" above:
   one-time) and stops on its own once the matching MCP is wired. Web search isn't detected
   passively (on-demand) — mentioned as an option. Toggle: `CLAUDE_MCP_SUGGEST=0`.
 - **checks whether the stack-rules snapshot exists** (a hint only — touches no files): just
-  checks `.claude/stack-rules.md` for existence. No more staleness detection - simplified
-  2026-07-13; it used to compare the snapshot's frontmatter against the current state of
-  `~/.claude/rules-src/` and the project's stack (`hooks/lib/stack-rules-check.mjs`), removed
-  as too eager (fired on every session with any drift). When the file is missing, appends a
+  checks `.claude/stack-rules.md` for existence. No staleness detection at session start -
+  simplified 2026-07-13; it used to compare the snapshot's frontmatter against the current state
+  of `~/.claude/rules-src/` and the project's stack (`hooks/lib/stack-rules-check.mjs`), removed
+  as too eager (fired on every session with any drift). Drift itself is now caught in
+  `/init-stack`, off the `markers` map rather than the hashes. When the file is missing, appends a
   suggestion to run `/init-stack` to `additionalContext` — generating the snapshot is now one
   of that command's own steps. Mechanism details — the "Stack rules (stack-rules)" section
   below. Toggle: `CLAUDE_STACK_RULES=0`.
@@ -632,12 +633,22 @@ How rules reach a session now:
   `.claude/stack-rules.md` (`session-init.mjs`), no more hash comparison. File missing → a
   suggestion to run `/init-stack` is appended to `additionalContext` — generating the snapshot
   is now one of its own steps. File present → the hook stays silent and does NOT re-check
-  anything else: the snapshot is never auto-flagged as stale, even if `rules-src/` or the
-  project's stack changed — refresh it by re-running `/init-stack` or asking for a rebuild
-  explicitly. This used to be a `sourceHash`/`stackFingerprint` comparison
-  (`hooks/lib/stack-rules-check.mjs`) — the lib is still there (the compiler subagent still
-  uses it to stamp hashes into the frontmatter), but `session-init.mjs` no longer calls it:
-  comparing on every session turned out too eager. Toggle: `CLAUDE_STACK_RULES=0`.
+  anything else: at session start the snapshot is never auto-flagged as stale, even if
+  `rules-src/` or the project's stack changed. This used to be a `sourceHash`/`stackFingerprint`
+  comparison — it compared hashes, and `sourceHash` is computed from path/size/mtime, so every
+  `setup.mjs` deploy moved it without a single edit to any rule text: comparing on every session
+  turned out too eager. Toggle: `CLAUDE_STACK_RULES=0`.
+- **The drift check lives in `/init-stack`, and it names what changed.**
+  `hooks/lib/stack-rules-check.mjs` compares no hashes — it compares the `markers` map the
+  snapshot recorded in its frontmatter, for the root AND every workspace (in a pnpm monorepo
+  `next.config.ts` sits in `apps/web/`, so root markers alone never see the frontend at all).
+  It prints a `status` (`ok` / `stale` / `missing` / `legacy`) and the `{ workspace, marker }`
+  pairs that appeared and vanished, which is what makes the rebuild a targeted edit rather than
+  a regeneration. `sourceHash`/`stackFingerprint` are still stamped into the frontmatter but
+  decide nothing. Snapshots built before the `markers:` line read `legacy`: reported, never
+  counted as drift — flagging them would have every project on the machine report drift on first
+  contact, which is exactly how this check got switched off last time. One full rebuild makes
+  such a snapshot comparable from then on.
 - **Templates** (`rules-src/templates/`) are no longer auto-loaded — they're applied during
   the snapshot build: `next.AGENTS.md` → `AGENTS.md` at the project root when a Next stack is
   detected and the file doesn't exist yet; `graphify.PROJECT.md` → the root `CLAUDE.md` when
@@ -749,8 +760,9 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   is empirically confirmed to never render anywhere — prose is the only channel left to
   surface the level before the banner appears. Same toggle: `CLAUDE_LEANMODE=0`.
   One more `additionalContext` hint (also every session, not a mutation): the stack-rules
-  snapshot check via `hooks/lib/stack-rules-check.mjs` — see the "Stack rules (stack-rules)"
-  section above. Toggle: `CLAUDE_STACK_RULES=0`.
+  snapshot existence check — a plain `existsSync`; `hooks/lib/stack-rules-check.mjs` is not
+  called here (it runs inside `/init-stack`). See the "Stack rules (stack-rules)" section
+  above. Toggle: `CLAUDE_STACK_RULES=0`.
 - **token-usage-log.mjs** (`SubagentStop` + `Stop`) + **hooks/lib/token-usage-shared.mjs**,
   **hooks/lib/token-usage-pricing-refresh.mjs**. After every sub-agent completion and after
   every main-agent turn, appends a line (JSONL) with task/agent/model/tokens/date/cost estimate
