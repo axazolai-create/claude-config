@@ -36,16 +36,33 @@ Check:
 ```bash
 node ~/.claude/hooks/lib/stack-rules-check.mjs
 ```
-Prints `{ status, sourceHash, stackFingerprint, snapshotPath }`. `status` is `"ok"` (source
-rules and stack signature unchanged since the last build), `"stale"` (either drifted since -
-rebuild), or `"missing"` (never built - build).
+Prints `{ status, sourceHash, stackFingerprint, markers, added, removed, snapshotPath }`.
+`markers` is the detected stack per workspace, keyed by workspace-relative directory with `"."`
+for the root; `added`/`removed` name the `{ workspace, marker }` pairs that appeared and vanished
+since the snapshot was stamped. `status` is one of:
+- `"ok"` - the snapshot's recorded `markers` still match the tree. Skip the rest of this step.
+- `"stale"` - `added`/`removed` are non-empty. Update the snapshot.
+- `"missing"` - never built. Build it.
+- `"legacy"` - the snapshot predates the `markers:` line, so nothing can be compared. It is never
+  reported as drift, so it will not fix itself: rebuild once, fully, and it is comparable after.
 
-If `"ok"`: skip the rest of this step.
+`sourceHash` decides nothing - it hashes path/size/mtime, so every `setup.mjs` deploy moves it
+with no rule text changing. Stamp it, report it, never rebuild on it.
 
-If `"stale"` or `"missing"`: dispatch a subagent (general-purpose) to (re)build it, following
-`~/.claude/rules-src/README.md` § "Building stack-rules" exactly - reuse step 1's `stacks` list
-instead of re-detecting. Pass the `sourceHash`/`stackFingerprint` from the check above straight
-through for the subagent's frontmatter stamp - no need to re-run the check inside the subagent.
+If `"stale"`, `"missing"` or `"legacy"`: dispatch a subagent (general-purpose) to (re)build it,
+following `~/.claude/rules-src/README.md` § "Building stack-rules" exactly. Pass the check's
+**entire JSON object** through - `markers` as well as `sourceHash`/`stackFingerprint`, plus
+`added`/`removed` when `"stale"` - so the subagent can stamp the frontmatter without re-running
+the check. `markers` must be stamped verbatim, as the one-line flow mapping the check printed:
+a snapshot written without it reads back `"legacy"`, which at this call site is indistinguishable
+from never having built it at all. Step 1's `stacks` list can seed which rules to select, but it
+is flat and root-scoped - the per-workspace attribution the snapshot's `stacks:`/`markers:` maps
+need comes from `markers`, not from it. On `"stale"`, name the "Updating an existing snapshot
+after drift" step (its number differs per profile) and have the subagent update additively rather
+than regenerate.
+
+Then re-run the check. It must now print `"ok"`. Anything else means the snapshot was written but
+not stamped in a shape the check can read - report that, do not report success.
 
 ## 3. Interactive install + activate (I run this myself, in my terminal) - the main path
 This reads from stdin, so tell me to run it directly:

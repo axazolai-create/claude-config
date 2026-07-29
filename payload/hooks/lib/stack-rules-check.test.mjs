@@ -346,6 +346,32 @@ for (const doc of compilerDocs) {
   }
 }
 
+// /init-stack is the path a rebuild is actually driven down, and it tells the compiler subagent
+// which fields to stamp. A field the command forgets to hand over is a field the snapshot never
+// records - and a snapshot missing markers: reads back legacy, which at the call site is
+// indistinguishable from a successful rebuild.
+test("the /init-stack command documents the checker's real output shape and every status it reaches", () => {
+  const doc = readFileSync(join(repoRoot, "payload", "commands", "init-stack.md"), "utf8");
+  const src = emptySrc();
+  const okRoot = repo({ "package.json": pkg });
+  snapshot(okRoot, `markers: ${JSON.stringify(detectMarkersByWorkspace(okRoot))}`);
+  const roots = [
+    repo({ "package.json": pkg }),
+    snapshot(repo({ "package.json": pkg }), "stacks: [node]"),
+    snapshot(repo({ "package.json": pkg, "next.config.ts": "" }), 'markers: {".": ["node"]}'),
+    okRoot,
+  ];
+  const results = roots.map((r) => checkStackRules(r, src));
+  const documented = doc.match(/Prints `\{([^`]*)\}`/);
+  assert.ok(documented, "init-stack.md documents no output shape");
+  assert.deepEqual(
+    documented[1].split(",").map((s) => s.trim()).sort(),
+    Object.keys(results[0]).sort(),
+  );
+  for (const { status } of results)
+    assert.ok(doc.includes(`"${status}"`), `init-stack.md has no branch for status "${status}"`);
+});
+
 test("a markers line that runs past two kilobytes is still compared", () => {
   const files = { "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\n", "package.json": pkg };
   for (let i = 0; i < 80; i++) files[`packages/module-${String(i).padStart(2, "0")}/package.json`] = pkg;

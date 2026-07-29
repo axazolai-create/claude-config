@@ -11,7 +11,8 @@ no off switch. Delivery works by compilation instead:
   command now owns generation). No automatic staleness/drift detection once a snapshot
   exists - re-run `/init-stack` or ask for a rebuild explicitly to refresh it. Simplified
   2026-07-13 from a `sourceHash`/`stackFingerprint` comparison (`hooks/lib/stack-rules-check.mjs`,
-  still used by the compiler subagent to stamp the frontmatter, just no longer auto-compared)
+  which still runs - on an explicit `/init-stack`, and inside the compiler subagent to stamp the
+  frontmatter - but compares the snapshot's recorded `markers` now, never the hashes)
   that fired a rebuild instruction every session on any drift. Opt out: `CLAUDE_STACK_RULES=0`.
 - The snapshot enters context via an `@stack-rules.md` import line in the project's
   auto-loaded `.claude/CLAUDE.md`.
