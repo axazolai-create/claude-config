@@ -14,10 +14,12 @@ tests. Phases 04 and 05 are also **deployed**; 06 and 07 are merged but not.
 
 ## Mid-flight when this was written
 
-- **A background agent is writing `06-SUMMARY.md` and `07-SUMMARY.md`.** Check
-  whether both exist. If either is missing, that is the first thing to redo — the
-  inputs are the ledgers and reports under `.ultrapowers/sdd/`, and the rules are
-  in `subagent-driven-development`'s summary-writer prompt.
+Nothing is running. `06-SUMMARY.md` and `07-SUMMARY.md` were written and
+verified before the clear: five sections each, no diff content, 20.8 KB and
+23.3 KB. Every phase directory now holds what it should.
+
+One thing is unfinished, and it lives only in a branch:
+
 - **The fork has EIGHT unpublished commits** on branch `feat/workspace-coherence`
   in `D:\6__Work\AI_Projects\ultrapowers`. It currently publishes `6.2.0-up.3`;
   `patch` and `main` are clean and pushed at that revision. The branch carries:
@@ -30,16 +32,14 @@ tests. Phases 04 and 05 are also **deployed**; 06 and 07 are merged but not.
 
 ## Next, in order
 
-1. Finish the two summaries, then commit the state files (`06-STATE.md`,
-   `07-STATE.md`, `ROADMAP.md`) — they are updated but **uncommitted**.
-2. Publish the fork revision `6.2.0-up.4`.
-3. Audit the live config dir, write the impact assessment, deploy from `master`.
+1. Publish the fork revision `6.2.0-up.4`.
+2. Audit the live config dir, write the impact assessment, deploy from `master`.
    **Read the warning below first.**
-4. Run the new phase the user opened: enforced state, transparent statuses,
+3. Run the new phase the user opened: enforced state, transparent statuses,
    `/up-resume`. It must go brainstorming → spec → plan → execution, by their
    ruling. Details in `.ultrapowers/sdd/2026-07-28-ultrapowers-planning-tree/progress.md`,
    near the end.
-5. Only then plan #3 — decision records CLI — so it runs under the corrected
+4. Only then plan #3 — decision records CLI — so it runs under the corrected
    status vocabulary rather than needing a second migration. Its plan is at
    `.ultrapowers/archive/plans/2026-07-28-decision-records.md`.
 
