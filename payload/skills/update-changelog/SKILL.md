@@ -183,7 +183,7 @@ level accumulated across the whole range or drain — not once per entry.
 | `fix:`, `perf:`, `refactor:`, `build:` | patch |
 | `docs:`, `chore:`, `test:`, `style:`, `ci:` | no bump |
 | `feat!:`, any type with `!`, `BREAKING CHANGE:` in the body | proposes major — never applies it |
-| anything with no recognised type | no bump, counted as `unrecognised` |
+| anything with no recognised type | no bump, counted as `unrecognised` — surfaced by `lint-versions.mjs` |
 
 A range holding one `feat` and six `fix` yields a single minor. A range holding only `docs`
 and `chore` yields **no bump at all**: the version is not a commit counter.
@@ -202,7 +202,17 @@ single minor, with no question asked.
 same way rather than inventing a different rule.
 
 `unrecognised` is not noise. A commit with no Conventional-Commits type contributes nothing
-and would otherwise vanish silently; report the count and offer to look at those commits.
+and would otherwise vanish silently. `drain` counts them; this is what names them:
+
+```
+node ~/.claude/skills/update-changelog/scripts/lint-versions.mjs --root <root>
+```
+
+One line per problem on stderr — queued commits with no recognised type, queued hashes `git log`
+can no longer resolve, a version-bump commit that reached the queue (so a version moved outside
+a drain), and any major proposal still awaiting approval (§4). Exit 1 when it found something,
+0 and silent when it did not, so a script can branch on it. Run it when `unrecognised` is
+non-zero, and offer to look at the commits it names.
 
 **What is decided by code, and what is not.** Code decides: the level from the commit type,
 which workspaces a commit touched, the root version from parts plus root commits, whether a
