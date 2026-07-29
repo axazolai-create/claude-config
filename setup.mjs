@@ -583,7 +583,15 @@ async function pruneStale() {
 async function detectForeignGsdCore(prunedRels = []) {
   if (VARIANT === "full" || !gsdCorePresent(CDIR)) return;
   const everOurs = safe(() => Object.keys(profilesOf(loadVariants(REPO_ROOT)))
-    .flatMap((p) => resolveVariant({ repoRoot: REPO_ROOT, variant: p }).rels)) || [];
+    .flatMap((p) => resolveVariant({ repoRoot: REPO_ROOT, variant: p }).rels));
+  // Fail-safe, the same shape as pluginPruneCandidates' "never prune when we can't tell what's
+  // active": if the set of files this bundle can own is unknown, every gsd-* path on disk looks
+  // foreign. Say so and remove nothing, rather than lose the protection silently.
+  if (!everOurs) {
+    log(`\ngsd-core is installed here, but this bundle's own file list could not be resolved`);
+    log(`  - skipping the removal offer entirely rather than risk claiming our own files.`);
+    return;
+  }
   const { items, categories, totalBytes } = buildGsdInventory({
     dir: CDIR,
     manifestRels: [...manifestNow.map((f) => f.rel), ...everOurs, ...prunedRels],

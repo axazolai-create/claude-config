@@ -112,6 +112,30 @@ test("a gsd-core command-string registration is dropped even with no args array"
   assert.equal(out.hooks.SessionStart.length, 2, "a non-gsd hook or a hooks/lib entry was dropped");
 });
 
+// Boundary of the command-string match, including the one over-reach RISK-ULTRAPOWERS-009 documents:
+// a gsd path passed as an ARGUMENT to some other script is dropped too. Pinned rather than fixed -
+// the alternative is parsing command lines - so a future narrowing has to face it deliberately.
+test("the command-string match holds its boundary in both directions", () => {
+  const cases = [
+    ['"C:/nodejs/node.exe" "C:/Users/a/.claude/hooks/gsd-x.js"', true, "quoted absolute path"],
+    ["node C:\\Users\\a\\.claude\\hooks\\gsd-x.js --flag", true, "backslashes, unquoted, trailing arg"],
+    ["node hooks/gsd-x.js", true, "space-preceded relative path"],
+    ["hooks/gsd-x.js", true, "relative path at the start of the string"],
+    ["node 'hooks/gsd-x.js'", true, "single-quoted"],
+    ['node "/h/.claude/hooks/lib/other.mjs" --patch "/h/.claude/hooks/gsd-x.js"', true, "gsd path as an argument (documented over-reach)"],
+    ['node "/h/.claude/hooks/lib/gsd-agent-patches.mjs"', false, "hooks/lib is never a registered hook"],
+    ['node "/h/.claude/my-hooks/gsd-x.js"', false, "a different directory ending in hooks"],
+    ['node "/h/.claude/xhooks/gsd-x.js"', false, "no separator before hooks"],
+    ['node "/h/.hooks/gsd-x.js"', false, "dot-prefixed directory"],
+    ['node "/h/.claude/hooks/gsd/x.js"', false, "gsd is a directory, not a gsd- prefix"],
+    ['node "/h/.claude/hooks/session-init.mjs"', false, "an unrelated hook"],
+  ];
+  for (const [command, shouldDrop, why] of cases) {
+    const { removed } = filterGsdHooks({ hooks: { X: [{ hooks: [{ type: "command", command }] }] } });
+    assert.equal(removed.length, shouldDrop ? 1 : 0, `${why}: ${command}`);
+  }
+});
+
 test("a hooks-less settings object survives untouched", () => {
   const { settings, removed } = filterGsdHooks({ model: "opus" });
   assert.deepEqual(settings, { model: "opus" });

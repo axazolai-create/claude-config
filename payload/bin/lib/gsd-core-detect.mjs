@@ -53,7 +53,11 @@ export function buildGsdInventory({ dir, manifestRels = [] }) {
 // through quoting, either slash, and trailing arguments.
 // `hooks/lib/gsd-*` stays unmatched: nothing registers a lib file as a hook, and a broader pattern
 // would be a second place this code can reach outside its own files.
-const GSD_HOOK_REF = /(^|[\\/"'])hooks[\\/]gsd-[^\\/"'\s]+/;
+// A leading space counts as a boundary for the same reason `^` does: `node hooks/gsd-x.js` and a
+// bare `hooks/gsd-x.js` are the same reference, and treating only one of them as one was an
+// inconsistency, not a policy. `my-hooks/`, `xhooks/` and `.hooks/` still miss - `-`, `x` and `.`
+// are not boundaries.
+const GSD_HOOK_REF = /(^|[\s\\/"'])hooks[\\/]gsd-[^\\/"'\s]+/;
 const REFERENCES_GSD_HOOK = (entry) =>
   (entry.hooks || []).some((h) =>
     GSD_HOOK_REF.test(String(h.command ?? "")) || (h.args || []).some((a) => GSD_HOOK_REF.test(String(a))));

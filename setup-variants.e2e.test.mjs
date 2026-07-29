@@ -374,13 +374,29 @@ test("a file this bundle owns is never claimed as foreign, even when the stale p
   for (const rel of ours) assert.ok(existsSync(join(dir, rel)), `full install is missing ${rel}`);
   plantGsdCore(dir, { settings: false });
 
-  // Non-TTY without a bulk flag: pruneStale reports and removes nothing, so every one of `ours` is
-  // still on disk and absent from THIS run's manifest - the exact shape that used to be swept up.
+  // Run 1. Non-TTY without a bulk flag: pruneStale reports and removes nothing, so every one of
+  // `ours` is still on disk and absent from THIS run's manifest - the shape that used to be swept
+  // up. Here pruneStale still has them as candidates, so its returned set alone would cover this.
   const r = run(dir, ["--variant=base", "--uninstall-gsd"]);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /non-interactive: not removed/, "pruneStale unexpectedly pruned - test no longer covers its case");
+  assert.match(r.stdout, /non-interactive: not removed/, "pruneStale unexpectedly pruned - run 1 no longer covers its case");
   assert.ok(!gsdPresent(dir), "the foreign gsd-core was not removed");
   for (const rel of ours) assert.ok(existsSync(join(dir, rel)), `bundle-owned file claimed as foreign: ${rel}`);
+
+  // Run 2, which is what pins the all-profiles set specifically. Run 1 rewrote the manifest as
+  // base's, so these rels are no longer candidates: pruneStale has nothing to report and hands back
+  // an empty set, and they are absent from this run's manifest too. Only a shield that depends on
+  // no manifest at all still knows they are ours.
+  plantGsdCore(dir, { settings: false });
+  // The one full-install leftover pruneStale would still list on run 2, removed by hand so its
+  // report is empty and `prunedRels` is provably contributing nothing to the assertions below.
+  rmSync(join(dir, "gsd-defaults.partial.json"), { force: true });
+  const r2 = run(dir, ["--variant=base", "--uninstall-gsd"]);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.doesNotMatch(r2.stdout, /stale files no longer in the bundle/,
+    "pruneStale still had candidates - run 2 is not the post-manifest-rewrite shape it exists to cover");
+  assert.ok(!gsdPresent(dir), "the foreign gsd-core was not removed on the second run");
+  for (const rel of ours) assert.ok(existsSync(join(dir, rel)), `bundle-owned file claimed as foreign on run 2: ${rel}`);
   rmSync(dir, { recursive: true, force: true });
 });
 
