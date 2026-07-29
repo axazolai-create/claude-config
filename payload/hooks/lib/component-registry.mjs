@@ -34,10 +34,15 @@ export function decide({ updateClass, updateAvailable, autoUpdateEnabled }) {
   return "notify";
 }
 
-export function pendingCount(state) {
-  if (!state || typeof state !== "object") return 0;
-  return Object.values(state).filter((e) => e && e.updateAvailable === true).length;
+export function pendingNames(state) {
+  if (!state || typeof state !== "object") return [];
+  return Object.entries(state)
+    .filter(([, e]) => e && e.updateAvailable === true)
+    .map(([name]) => name)
+    .sort();
 }
+
+export const pendingCount = (state) => pendingNames(state).length;
 
 // claude-config is the only reinit entry that is re-applied by the installer, not /init-stack.
 function reinitCommand(name) {
