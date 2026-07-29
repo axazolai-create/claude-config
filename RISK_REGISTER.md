@@ -69,25 +69,33 @@
 ## RISK-STACKRULES-002 — Snapshot desync / stale auto-loading copies
 
 - **Status:** Open (accepted)
-- **Context:** two desync paths. (1) Simplified 2026-07-13: `session-init.mjs` now only checks
-  whether `.claude/stack-rules.md` exists, not whether it's stale (the prior sourceHash/
-  stackFingerprint comparison via `stack-rules-check.mjs` was removed as too eager — it fired a
-  rebuild instruction every session on any drift). So once a project has a snapshot, it is
-  never auto-flagged again, even if `~/.claude/rules-src/` changes or the project's stack
-  changes (new framework added, etc.) — drift is silent until someone re-runs `/init-stack` or
-  asks for a rebuild. (2) A machine that updates the bundle but never re-runs `setup.mjs` keeps
+- **Context:** two desync paths. (1) `session-init.mjs` only checks whether
+  `.claude/stack-rules.md` exists, never whether it is current, so nothing flags drift at session
+  start. The 2026-07-13 simplification removed a sourceHash/stackFingerprint comparison that fired
+  a rebuild instruction every session: `sourceHash` hashes path/size/mtime, so every `setup.mjs`
+  deploy moved it with no rule text changing. Once a project has a snapshot it is never
+  auto-flagged again, even if `~/.claude/rules-src/` changes or the project's stack changes (new
+  framework added, etc.). (2) A machine that updates the bundle but never re-runs `setup.mjs` keeps
   the old auto-loaded `~/.claude/rules/` copies alongside the snapshot — every rule then loads
   twice.
-- **Mitigation:** (1) `/init-stack` now owns building the snapshot (rules-src/README.md §
-  "Building stack-rules") and can be re-run any time to refresh it; `stack-rules-check.mjs` is
-  kept as a CLI utility so the compiler subagent can still stamp sourceHash/stackFingerprint
-  into the frontmatter, it's just no longer auto-compared. (2) `setup.mjs` `migrateRulesDir()`
-  deletes bundle-owned files from `~/.claude/rules/` and removes the directory when empty;
-  user-authored files are kept and reported with a move-by-hand note.
-- **Residual:** (1) trades auto-freshness for less session-start noise — a project's rules can
-  silently drift from `rules-src/` indefinitely if nobody re-runs `/init-stack`. (2) machines
-  that skip `setup.mjs` after upgrading stay on the old (working) mechanism until they run it.
-  Both accepted.
+- **Mitigation:** (1) `/init-stack` owns building the snapshot (rules-src/README.md § "Building
+  stack-rules") and, since 2026-07-28, detects real drift when it runs: `stack-rules-check.mjs`
+  compares the `markers` map the snapshot recorded — the root and every workspace — against the
+  tree, and names the `{ workspace, marker }` pairs that appeared and vanished, so the rebuild is
+  an additive edit rather than a regeneration. sourceHash/stackFingerprint are still stamped but
+  decide nothing, which is what keeps the comparison from crying wolf the way the removed one did.
+  (2) `setup.mjs` `migrateRulesDir()` deletes bundle-owned files from `~/.claude/rules/` and
+  removes the directory when empty; user-authored files are kept and reported with a move-by-hand
+  note.
+- **Residual:** (1) drift is found only when `/init-stack` runs, never at session start — a
+  project's rules can still sit stale indefinitely if nobody runs it. (2) Every snapshot stamped
+  before the `markers:` line reads `legacy`: reported, never flagged as drift, and nothing prompts
+  the one rebuild that makes it comparable — so every project that exists today stays silent until
+  someone rebuilds it. Deliberate: flagging them would make every project on the machine report
+  drift on first contact, which is how the check got switched off the first time. (3) The
+  `/init-stack` re-check confirms the frontmatter parses, not that the body survived — it compares
+  `markers` and never reads the rule sections. (4) Machines that skip `setup.mjs` after upgrading
+  stay on the old (working) mechanism until they run it. All accepted.
 
 ## RISK-CLAUDEMD-001 — Legacy `@.claude/CLAUDE.md` imports double-load project context
 

@@ -116,9 +116,11 @@ generatedAt: <ISO timestamp>
 ---
 ```
 
-`stacks:` and `markers:` are written as YAML flow mappings, which are also valid JSON. The
-desync check parses them with `JSON.parse` on one line, so the frontmatter can be a nested map
-without a YAML parser in a hook that must stay cheap.
+`stacks:` and `markers:` are written as YAML flow mappings, which are also valid JSON — each
+one entirely on a SINGLE line. The desync check finds `markers:` with a line-anchored regex and
+then `JSON.parse`s it, so the frontmatter can be a nested map without a YAML parser in a hook
+that must stay cheap. The price of that cheapness: a `markers:` broken across several lines
+matches nothing, and the snapshot reads back `legacy` forever — complete-looking, uncomparable.
 
 `markers:` is not a duplicate of `stackFingerprint`. The hash says *that* the stack changed;
 the map is what lets the next design session say *what* changed — `next appeared in apps/web`,
@@ -126,7 +128,11 @@ the map is what lets the next design session say *what* changed — `next appear
 value of the check.
 
 Take both values from `node ~/.claude/hooks/lib/stack-rules-check.mjs <root>`, which now
-reports `markers` per workspace. Never hand-write them.
+reports `markers` per workspace. Never hand-write them — and do not stamp the indented
+`"markers": {` block out of its JSON report either; that report is formatted for reading. The
+check prints the stampable form last, on its own line, under `# stamp this line verbatim` — copy
+those bytes. `stacks:` has no printed form (it is this compiler's rule selection, not detection
+output), so re-serialise it to a single line yourself.
 
 6. **Detected commands (rebuild-safe):** run `node ~/.claude/bin/detect-stack-commands.mjs --root <projectRoot>`
    and include its `## Detected commands` block verbatim as a section of the snapshot. It derives
@@ -147,6 +153,9 @@ reports `markers` per workspace. Never hand-write them.
     restamp `stackFingerprint` and `markers`. A full rebuild discards any hand-tuning in the
     snapshot and produces a diff nobody can review. A `legacy` status means the snapshot
     predates the `markers:` line: rebuild it once, fully, and it becomes comparable from then on.
+    Re-running the check afterwards proves only that the frontmatter parses: it compares `markers`
+    and never reads the body, so a rule section dropped by accident still reports `ok`. Check the
+    surviving `## ` sections yourself.
 
 ## Adding a rule
 

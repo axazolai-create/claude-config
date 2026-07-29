@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -370,6 +371,43 @@ test("the /init-stack command documents the checker's real output shape and ever
   );
   for (const { status } of results)
     assert.ok(doc.includes(`"${status}"`), `init-stack.md has no branch for status "${status}"`);
+});
+
+// The compiler subagent stamps what the CLI printed. Pretty-printed JSON is not stampable: its
+// `  "markers": {` sits on its own line behind two spaces and a quote, which parseFlowMap's
+// `^markers:\s*(\{.*\})$` cannot match - so a snapshot built by pasting it reads back "legacy"
+// forever, complete-looking and permanently uncomparable. The key-name assertion above cannot
+// see this; only running the CLI and stamping its bytes can.
+test("the CLI prints a markers: line that stamps straight into a snapshot", () => {
+  const root = repo({
+    "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+    "package.json": pkg,
+    "apps/web/package.json": pkg,
+    "apps/web/next.config.ts": "",
+  });
+  const out = execFileSync(process.execPath, [join(import.meta.dirname, "stack-rules-check.mjs"), root], {
+    encoding: "utf8",
+  });
+  const line = out.match(/^markers:\s*\{.*\}\s*$/m);
+  assert.ok(line, "the CLI prints no paste-ready one-line markers:");
+  snapshot(root, `sourceHash: x\nstackFingerprint: deadbeefdeadbeef\n${line[0].trim()}`);
+  const r = checkStackRules(root, emptySrc());
+  assert.equal(r.status, "ok");
+  assert.deepEqual([r.added, r.removed], [[], []]);
+});
+
+// /init-stack points at the drift step by NAME because its number differs per profile (11 in the
+// full compiler doc, 10 in lite). Nothing else pins the two ends together, so a reworded heading
+// would silently leave the command pointing at a step that no longer exists.
+test("the /init-stack pointer to the drift step matches the heading in both compiler docs", () => {
+  const step = "Updating an existing snapshot after drift";
+  // Both ends are hard-wrapped prose, so the pointer and the heading can each straddle a newline.
+  const flat = (rel) => readFileSync(join(repoRoot, rel), "utf8").replace(/\s+/g, " ");
+  assert.ok(
+    flat(join("payload", "commands", "init-stack.md")).includes(`"${step}"`),
+    `init-stack.md no longer names the "${step}" step`,
+  );
+  for (const d of compilerDocs) assert.ok(flat(d).includes(step), `${d} has no "${step}" step`);
 });
 
 test("a markers line that runs past two kilobytes is still compared", () => {

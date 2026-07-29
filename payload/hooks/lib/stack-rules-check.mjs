@@ -5,7 +5,9 @@
 // stays silent when in sync). Also runnable directly, for the compiler subagent to get
 // the values to stamp into the snapshot's frontmatter:
 //   node ~/.claude/hooks/lib/stack-rules-check.mjs [projectRoot]
-// prints JSON: { status, sourceHash, stackFingerprint, markers, added, removed, snapshotPath }.
+// prints JSON: { status, sourceHash, stackFingerprint, markers, added, removed, snapshotPath },
+// then a paste-ready one-line `markers: {...}` for the frontmatter (the JSON above is indented
+// for reading, and an indented markers: block stamps a snapshot that reads back "legacy").
 // status is "ok", "stale", "missing" or "legacy"; added/removed name the { workspace, marker }
 // pairs that appeared and vanished. sourceHash is stamped but never decides status - it hashes
 // mtime, so every setup.mjs deploy moves it with no rule text changing.
@@ -159,5 +161,11 @@ function isMainModule() {
 
 if (isMainModule()) {
   const root = resolve(process.argv[2] || process.cwd());
-  console.log(JSON.stringify(checkStackRules(root), null, 2));
+  const result = checkStackRules(root);
+  console.log(JSON.stringify(result, null, 2));
+  // The report above is indented for reading; its `"markers": {` sits on its own line and would
+  // stamp a snapshot that reads back "legacy" forever. Print the frontmatter line itself so the
+  // compiler subagent copies bytes instead of re-serialising a nested map by hand.
+  console.log(`\n# stamp this line verbatim into .claude/stack-rules.md frontmatter:`);
+  console.log(`markers: ${JSON.stringify(result.markers)}`);
 }
