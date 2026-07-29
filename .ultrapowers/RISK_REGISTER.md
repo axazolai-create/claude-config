@@ -861,13 +861,21 @@
   anything is pending and `add-risk.mjs` does the writing, so patching one alone leaves the hook
   spawning a subprocess every session that then finds nothing. Depth ordering is untouched: a root
   register still outranks `.ultrapowers/`, and a `.planning/` register ties with it, so both are
-  maintained. Both READMEs' statement of the search locations was corrected with the code.
-- **Residual:** the prose half is not fixed. The user-scope `~/.claude/CLAUDE.md` still instructs
-  that the register goes in `.planning/` if a GSD project exists and the project root otherwise;
-  that file is hook-protected and the user's to edit, and its source in this bundle
-  (`payload/claude-md/06-collaboration.md`, `06-collaboration.lite.md`) is deliberately left alone,
-  so a fresh install still teaches the old locations. Anything else that hardcodes the root or
-  `.planning/` will miss the register the same way — the `risks.mjs` path resolver specified in the
-  decision-records plan already probes both, but that plan has not been executed. No data-loss
-  exposure: the register is tracked in git and maintained by hand; what was lost was one automatic
-  append.
+  maintained. Both READMEs' statement of the search locations was corrected with the code. Standing
+  decision on the duplication: the two `listRegisters()` copies stay separate — six lines each, one
+  a standalone CLI and one a hook entrypoint, with cross-referencing keep-in-sync comments — and are
+  worth extracting into a shared module only when a third consumer appears.
+- **Residual:** the prose half is not fixed, and what exists now disagrees about the answer in both
+  directions. The user-scope `~/.claude/CLAUDE.md` still instructs that the register goes in
+  `.planning/` if a GSD project exists and the project root otherwise; that file is hook-protected
+  and the user's to edit, and its source in this bundle (`payload/claude-md/06-collaboration.md`,
+  `06-collaboration.lite.md`) is deliberately left alone, so a fresh install still teaches the old
+  locations. Any other consumer that hardcodes the root or `.planning/` misses `.ultrapowers/`
+  exactly the way these two probes did. The planned replacement misses the opposite way:
+  `resolveRecordPaths` in the decision-records plan (`records-paths.mjs`, consumed by `risks.mjs`)
+  chooses a single base — `<root>/.ultrapowers` when that directory exists, otherwise `<root>` —
+  and never probes `.planning/` under any condition, so a project keeping its register only in
+  `.planning/` would be invisible to it. That plan has not been executed, so nothing is broken by it
+  yet; what is missing is one agreed rule that the hook pair, the shipped prose and that resolver
+  all implement. No data-loss exposure in any of these: the register is tracked in git and
+  maintained by hand; what was lost was one automatic append.
