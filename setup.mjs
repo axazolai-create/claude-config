@@ -632,15 +632,17 @@ async function detectForeignGsdCore(prunedRels = []) {
 
   if (existsSync(SETTINGS)) {
     const curSettings = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8")));
-    if (curSettings) {
-      const { settings, removed } = filterGsdHooks(curSettings);
-      if (removed.length) {
-        if (write(SETTINGS, JSON.stringify(settings, null, 2) + "\n")) {
-          summary.push(`updated  ${SETTINGS} (${removed.length} gsd-* hook registration(s) removed)`);
-          log(`  removed ${removed.length} gsd-* hook registration(s) from settings.json`);
-        } else {
-          log(`  COULD NOT rewrite settings.json - ${removed.length} gsd-* hook registration(s) still point at moved files; roll back below or edit by hand`);
-        }
+    // safe() twice, because this runs AFTER applyPlan: filterGsdHooks throws on a malformed hooks
+    // shape (a null entry, a non-array event value, a non-object `hooks`), and a throw here would
+    // leave the files in the trash batch with the rollback below never printed.
+    const filtered = curSettings && safe(() => filterGsdHooks(curSettings));
+    if (filtered && filtered.removed.length) {
+      const { settings, removed } = filtered;
+      if (write(SETTINGS, JSON.stringify(settings, null, 2) + "\n")) {
+        summary.push(`updated  ${SETTINGS} (${removed.length} gsd-* hook registration(s) removed)`);
+        log(`  removed ${removed.length} gsd-* hook registration(s) from settings.json`);
+      } else {
+        log(`  COULD NOT rewrite settings.json - ${removed.length} gsd-* hook registration(s) still point at moved files; roll back below or edit by hand`);
       }
     }
   }
@@ -651,10 +653,20 @@ async function detectForeignGsdCore(prunedRels = []) {
   // resolves its target from CLAUDE_CONFIG_DIR, never from its own location, so under a relocated
   // config dir the variable has to travel with the command or it restores from ~/.claude and
   // reports "Restored 0" as though there were nothing to restore.
+  // Carrying it takes two labelled lines, not one: `VAR="x" cmd` is a POSIX env prefix, and
+  // PowerShell reads it as a command NAMED `VAR=x` and dies with "is not recognized" - on the one
+  // platform where most users will paste this. The `cp` above needs no such split (PowerShell
+  // aliases it to Copy-Item) and neither does the default config dir, whose command carries no
+  // environment at all.
   const relocated = CDIR !== join(HOME, ".claude");
+  const restore = `node "${fwd(join(CDIR, "bin", "claude-cleanup.mjs"))}" restore --ts ${ts}`;
   log(`  Rollback within 7 days, in this order:`);
   log(`    cp "${fwd(backup)}" "${fwd(SETTINGS)}"`);
-  log(`    ${relocated ? `CLAUDE_CONFIG_DIR="${fwd(CDIR)}" ` : ""}node "${fwd(join(CDIR, "bin", "claude-cleanup.mjs"))}" restore --ts ${ts}`);
+  if (!relocated) log(`    ${restore}`);
+  else {
+    log(`    bash:       CLAUDE_CONFIG_DIR="${fwd(CDIR)}" ${restore}`);
+    log(`    PowerShell: $env:CLAUDE_CONFIG_DIR="${fwd(CDIR)}"; ${restore}`);
+  }
   purgeRetention({ dir: CDIR, nowMs: Date.now() });
 }
 

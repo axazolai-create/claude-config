@@ -1,8 +1,8 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync, cpSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveVariant } from "./variants.mjs";
@@ -339,6 +339,33 @@ function plantGsdCore(dir, { settings = true } = {}) {
 const gsdPresent = (dir) => existsSync(join(dir, "gsd-core/VERSION"));
 const batches = (dir) => (existsSync(join(dir, ".cleanup-trash")) ? readdirSync(join(dir, ".cleanup-trash")) : []);
 const NOT_REPORTED = /is installed here and is not part of this bundle/;
+// The one way to exercise the NON-relocated branch (CDIR === <home>/.claude) without deploying into
+// the real ~/.claude: `homedir()` reads USERPROFILE on Windows and HOME elsewhere, so redirecting
+// both moves the whole default. CLAUDE_CONFIG_DIR must be deleted, not just omitted - `run()`'s
+// env spread would otherwise inherit an ambient one and silently put the run back on the relocated
+// branch this exists to be the opposite of.
+function runAtHome(home, args) {
+  const env = { ...process.env, USERPROFILE: home, HOME: home, CLAUDE_SETUP_SKIP_PLUGINS: "1" };
+  delete env.CLAUDE_CONFIG_DIR;
+  return spawnSync(process.execPath, [join(ROOT, "setup.mjs"), ...args], { encoding: "utf8", env, timeout: 120000 });
+}
+// A second REPO_ROOT, so a test can break an installer input (settings.partial.json) that lives in
+// the repository itself. docs/ is 1.8 MB of files setup.mjs never reads; `.git` is carried when it
+// is a worktree pointer file so resolveInstalledSha() answers from git instead of falling through
+// to its GitHub fetch.
+function copyRepoRoot() {
+  const repo = mkdtempSync(join(tmpdir(), "cc-repo-"));
+  const gitIsDir = existsSync(join(ROOT, ".git")) && statSync(join(ROOT, ".git")).isDirectory();
+  const skip = new Set(["docs", "graphify-out", "node_modules", ".ultrapowers", ".planning"]);
+  cpSync(ROOT, repo, {
+    recursive: true,
+    filter: (src) => {
+      const top = relative(ROOT, src).split(/[\\/]/)[0];
+      return !(skip.has(top) || (top === ".git" && gitIsDir));
+    },
+  });
+  return repo;
+}
 
 test("--uninstall-gsd moves gsd-core to a trash batch, backs settings up first, drops only gsd hooks", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-gsd-"));
@@ -384,6 +411,63 @@ test("--uninstall-gsd moves gsd-core to a trash batch, backs settings up first, 
   assert.ok(r.stdout.includes(`CLAUDE_CONFIG_DIR="${dir.replace(/\\/g, "/")}" node "`),
     "relocated config dir not carried into the printed restore command");
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("the rollback prints a runnable restore for both shells when relocated, and one plain line when not", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-gsd-shell-"));
+  plantGsdCore(dir, { settings: false });
+  const r = run(dir, ["--variant=base", "--uninstall-gsd", "--skip-all"]);
+  assert.equal(r.status, 0, r.stderr);
+  const cd = dir.replace(/\\/g, "/");
+  const restore = `node "${join(dir, "bin", "claude-cleanup.mjs").replace(/\\/g, "/")}" restore --ts ${batches(dir)[0]}`;
+  assert.ok(r.stdout.includes(`\n    bash:       CLAUDE_CONFIG_DIR="${cd}" ${restore}\n`),
+    "no labelled POSIX form of the restore command");
+  assert.ok(r.stdout.includes(`\n    PowerShell: $env:CLAUDE_CONFIG_DIR="${cd}"; ${restore}\n`),
+    "no labelled PowerShell form of the restore command");
+  // `VAR="x" cmd` parses in PowerShell as a command NAMED `VAR=x` and dies at run time with "is not
+  // recognized", so the PowerShell line must be an assignment plus a statement separator - never
+  // the POSIX prefix with a label glued on.
+  const ps = r.stdout.split("\n").find((l) => l.includes("PowerShell:"));
+  assert.match(ps, /^ +PowerShell: \$env:CLAUDE_CONFIG_DIR="[^"]+"; node "[^"]+" restore --ts [\w.-]+$/);
+  rmSync(dir, { recursive: true, force: true });
+
+  const home = mkdtempSync(join(tmpdir(), "cc-gsd-home-"));
+  const cdir = join(home, ".claude");
+  mkdirSync(cdir, { recursive: true });
+  plantGsdCore(cdir, { settings: false });
+  const r2 = runAtHome(home, ["--variant=base", "--uninstall-gsd", "--skip-all"]);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.equal(batches(cdir).length, 1, "the non-relocated run did not reach the removal");
+  assert.ok(r2.stdout.includes(
+    `\n    node "${join(cdir, "bin", "claude-cleanup.mjs").replace(/\\/g, "/")}" restore --ts ${batches(cdir)[0]}\n`),
+    "the default config dir did not get the plain, environment-free restore line");
+  assert.doesNotMatch(r2.stdout, /PowerShell:|\$env:/, "a per-shell split was printed for a config dir that needs none");
+  assert.doesNotMatch(r2.stdout, /CLAUDE_CONFIG_DIR="/, "an env prefix was printed for the default config dir");
+  rmSync(home, { recursive: true, force: true });
+});
+
+test("a malformed settings.hooks shape cannot throw after the files have already moved", () => {
+  // The detector's settings read runs AFTER applyPlan, so anything that throws there strands the
+  // user with files in the trash and no printed way back. Reaching it takes a repo whose
+  // settings.partial.json is absent: with it present the merge in main() crashes on these same
+  // shapes first, harmlessly, before anything has moved.
+  const repo = copyRepoRoot();
+  rmSync(join(repo, "settings.partial.json"), { force: true });
+  for (const hooks of ["x", { Notification: [null] }, { Notification: {} }]) {
+    const label = JSON.stringify(hooks);
+    const dir = mkdtempSync(join(tmpdir(), "cc-gsd-badhooks-"));
+    plantGsdCore(dir, { settings: false });
+    writeFileSync(join(dir, "settings.json"), JSON.stringify({ hooks }, null, 2) + "\n");
+    const r = spawnSync(process.execPath, [join(repo, "setup.mjs"), "--variant=base", "--uninstall-gsd", "--skip-all"],
+      { encoding: "utf8", env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CLAUDE_SETUP_SKIP_PLUGINS: "1" }, timeout: 120000 });
+    assert.equal(r.status, 0, `${label}: ${r.stderr}`);
+    assert.equal(batches(dir).length, 1, `${label}: the run never reached the removal`);
+    assert.ok(!gsdPresent(dir), `${label}: gsd-core was not moved`);
+    assert.ok(r.stdout.includes(`restore --ts ${batches(dir)[0]}`),
+      `${label}: files moved but the rollback for this batch was never printed`);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  rmSync(repo, { recursive: true, force: true });
 });
 
 test("a bulk flag is never consent, and never a prompt either", async () => {

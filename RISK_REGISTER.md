@@ -472,6 +472,50 @@
   scope — it would put a foreign-product check on every session start for a condition the user
   creates deliberately.
 
+## RISK-VARIANT-005 — A declined prune of `gsd-defaults.partial.json` is re-offered on every non-`full` run
+
+- **Status:** Open (accepted, 2026-07-29)
+- **Context:** `pruneStale()` adds `gsd-defaults.partial.json` to its candidate set unconditionally
+  whenever `VARIANT !== "full"` (`setup.mjs:532`). The file is a `full`-only mirror written straight
+  into `~/.claude`, never through `placeFile()` — and `placeFile()` plus the assembled `CLAUDE.md`
+  are the only two writers that push into `manifestNow`. Being untracked is also *why* the candidate
+  is hardcoded rather than derived: there is no manifest entry whose disappearance would put it on
+  the list. Every later gate then declines to apply to it — the `variantExcluded` branch skips the
+  "still referenced in bundle" check, and with no recorded hash the "modified since install" check
+  has nothing to compare — so it reaches the removal list on every `base`/`lite` run. Declining is
+  honoured and the file survives, which is exactly what makes the next run list it again.
+  Pre-existing since `a58bfe9` (2026-07-22); not introduced by the gsd-core detector, which only
+  reads `pruneStale()`'s result.
+- **Mitigation:** none, and none is needed for safety. The file is offered, never removed without a
+  `y` or a bulk flag, and `existsSync` drops it from the candidate set the moment it does go —
+  accepting the prune once ends the offer permanently, as does deleting the mirror by hand.
+- **Residual:** noise, not data loss — one extra line under "stale files no longer in the bundle" on
+  every `base`/`lite` run, for a user who keeps declining. The real fix is to record the mirror in
+  the manifest when `full` writes it, so its staleness is derived like every other file's instead of
+  hardcoded; that changes what `manifestNow` means (files this bundle *ships*, not files it writes)
+  and was too broad to make inside the gsd-core detector's branch.
+
+## RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported
+
+- **Status:** Open (2026-07-29, found while verifying `RISK-VARIANT-005`'s neighbourhood — unfixed)
+- **Context:** `setup.mjs:926` reads `partial` as `partialRaw === undefined ? null : safe(() =>
+  JSON.parse(...))`, and `safe()` returns **`undefined`** when the parse throws, not `null`. So the
+  handler written for exactly this case — `if (partialRaw !== undefined && partial === null)`, which
+  would have recorded `settings.partial.json: failed to parse - settings.json hooks left untouched`
+  — is unreachable, and the guard below it (`partial !== null`, `setup.mjs:932`) lets an `undefined`
+  through into `Object.values(partial.hooks || {})` at `setup.mjs:940`. The run dies there with an
+  unhandled `TypeError: Cannot read properties of undefined (reading 'hooks')`. Reproduced directly:
+  writing `{ not json` over `settings.partial.json` in a copied repository root aborts the install
+  at that line. A *missing* file takes the `null` branch and is handled correctly; only a corrupt
+  one is affected.
+- **Mitigation:** none in code. What limits it is reach: `settings.partial.json` is repository
+  content, not user state, so it is only corrupt after a bad merge, a truncated download, or a hand
+  edit — and the crash happens before anything is written, so the config dir is left as it was.
+- **Residual:** an unhandled stack trace where a one-line summary note was intended, on an input the
+  code already knew could be bad. One-word fix (`?? null`, or comparing against `undefined`) plus a
+  test that the note is actually emitted; left out of the gsd-core detector's fix wave because it is
+  neither that feature's code nor on its recovery path.
+
 ## RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
 
 - **Status:** Open (until tests green)
