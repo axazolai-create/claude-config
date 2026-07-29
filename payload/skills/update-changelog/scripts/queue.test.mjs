@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,4 +82,33 @@ test("append --classify against an unresolvable hash still queues it, level-less
   const hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
   execFileSync(process.execPath, [SCRIPT, "append", hash, "--root", root, "--classify"], { encoding: "utf8" });
   assert.equal(readFileSync(join(root, ".claude", "changelog-queue"), "utf8"), `${hash}\n`);
+});
+
+test("a valueless flag before --root does not swallow it, so the queue lands in --root", () => {
+  const root = mkdtempSync(join(tmpdir(), "queue-root-"));
+  const elsewhere = mkdtempSync(join(tmpdir(), "queue-cwd-"));
+  execFileSync("git", ["init", root], { encoding: "utf8" });
+  const hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+  execFileSync(process.execPath, [SCRIPT, "append", hash, "--classify", "--root", root],
+    { encoding: "utf8", cwd: elsewhere });
+  assert.equal(readFileSync(join(root, ".claude", "changelog-queue"), "utf8"), `${hash}\n`);
+  assert.equal(existsSync(join(elsewhere, ".claude", "changelog-queue")), false);
+});
+
+test("drain keeps git's stderr out of its output for a hash git cannot resolve", () => {
+  const root = mkdtempSync(join(tmpdir(), "queue-"));
+  execFileSync("git", ["init", root], { encoding: "utf8" });
+  mkdirSync(join(root, ".claude"), { recursive: true });
+  writeFileSync(join(root, ".claude", "changelog-queue"), "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n");
+  const r = spawnSync(process.execPath, [SCRIPT, "drain", "--root", root], { encoding: "utf8" });
+  assert.equal(r.stderr, "");
+  assert.equal(JSON.parse(r.stdout).unrecognised, 1);
+});
+
+test("append --classify keeps git's stderr out of its output too", () => {
+  const root = mkdtempSync(join(tmpdir(), "queue-"));
+  execFileSync("git", ["init", root], { encoding: "utf8" });
+  const hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+  const r = spawnSync(process.execPath, [SCRIPT, "append", hash, "--root", root, "--classify"], { encoding: "utf8" });
+  assert.equal(r.stderr, "changelog: could not classify deadbeefdeadbeefdeadbeefdeadbeefdeadbeef, queued unclassified\n");
 });

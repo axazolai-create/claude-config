@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "write-changelog.mjs");
 const run = (args) => execFileSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+const attempt = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
 
 function project(version = "1.2.3") {
   const root = mkdtempSync(join(tmpdir(), "write-changelog-"));
@@ -39,4 +40,24 @@ test("without --version-only an empty entries file is still refused", () => {
   const f = join(root, "entries.json");
   writeFileSync(f, JSON.stringify({ entries: [], finalVersion: "1.3.0" }));
   assert.throws(() => run(["--entries-file", f, "--root", root]));
+});
+
+test("a root with no package.json reports the script's own error, not a stack trace", () => {
+  const root = mkdtempSync(join(tmpdir(), "write-changelog-"));
+  const r = attempt(["--version-only", "--final-version", "1.3.0", "--root", root]);
+  assert.equal(r.status, 1);
+  assert.deepEqual(JSON.parse(r.stdout), { error: `package.json not found at ${root}` });
+  assert.equal(r.stderr, "");
+});
+
+test("a root with no package.json writes no changelog.json either", () => {
+  const root = mkdtempSync(join(tmpdir(), "write-changelog-"));
+  const f = join(root, "entries.json");
+  writeFileSync(f, JSON.stringify({
+    entries: [{ version: "v1.3.0", changes: ["feat: x"] }],
+    finalVersion: "1.3.0",
+  }));
+  const r = attempt(["--entries-file", f, "--root", root]);
+  assert.equal(r.status, 1);
+  assert.equal(existsSync(join(root, "changelog.json")), false);
 });

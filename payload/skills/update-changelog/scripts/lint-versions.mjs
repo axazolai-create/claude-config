@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
 import { realpathSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readEntries } from './queue.mjs';
+import { readEntries, gitLookup } from './queue.mjs';
 import { levelForCommit, accumulate } from './classify-bump.mjs';
 
 // The drain's own bump commits, in both shapes the skill produces: `патч:`/`релиз:` from
@@ -54,10 +53,7 @@ function isMainModule() {
 if (isMainModule()) {
   const i = process.argv.indexOf('--root');
   const root = resolve(i !== -1 ? process.argv[i + 1] : process.cwd());
-  const show = (fmt, h) => execFileSync('git', ['-C', root, 'log', '-1', `--pretty=${fmt}`, h],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  const lookup = (h) => ({ subject: show('%s', h).trim(), body: show('%b', h) });
-  const problems = lintVersions({ entries: readEntries(root), lookup });
+  const problems = lintVersions({ entries: readEntries(root), lookup: gitLookup(root) });
   for (const p of problems) console.error(p.problem);
   process.exit(problems.length ? 1 : 0);
 }

@@ -48,6 +48,14 @@ export function resolveDrain(entries, lookup) {
   });
   return { ...accumulate(results), hashes: entries.map(e => e.hash) };
 }
+// stderr is discarded on purpose: an unresolvable hash is a normal queue state (drain reports
+// it as unrecognised, lint names it), and git's `fatal: bad object` in the middle of a JSON
+// payload or a post-commit hook's output is noise the caller cannot act on.
+export function gitLookup(root) {
+  const show = (fmt, h) => execFileSync('git', ['-C', root, 'log', '-1', `--pretty=${fmt}`, h],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  return h => ({ subject: show('%s', h).trim(), body: show('%b', h) });
+}
 export function isLocked(root) {
   const f = LOCK(root);
   if (!existsSync(f)) return false;
@@ -72,19 +80,21 @@ if (isMainModule()) {
   const rest = process.argv.slice(3);
   const positionals = []; const flags = {};
   for (let i = 0; i < rest.length; i++) {
-    if (rest[i].startsWith('--')) { flags[rest[i].slice(2)] = rest[i + 1]; i++; }
-    else positionals.push(rest[i]);
+    if (!rest[i].startsWith('--')) { positionals.push(rest[i]); continue; }
+    // A flag whose next token is itself a flag takes no value — otherwise `--classify --root
+    // <root>` binds "--root" to classify and the root is lost, silently, to process.cwd().
+    const next = rest[i + 1];
+    if (next !== undefined && !next.startsWith('--')) { flags[rest[i].slice(2)] = next; i++; }
+    else flags[rest[i].slice(2)] = true;
   }
-  const root = flags.root || process.cwd();
+  const value = v => (typeof v === 'string' ? v : null);
+  const root = value(flags.root) || process.cwd();
   if (cmd === 'append') {
     const hash = positionals[0];
-    let level = flags.level ?? null;
+    let level = value(flags.level);
     if (!level && 'classify' in flags) {
-      try {
-        const subject = execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%s', hash], { encoding: 'utf8' }).trim();
-        const body = execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%b', hash], { encoding: 'utf8' });
-        level = levelForCommit({ subject, body }).level;
-      } catch { process.stderr.write(`changelog: could not classify ${hash}, queued unclassified\n`); }
+      try { level = levelForCommit(gitLookup(root)(hash)).level; }
+      catch { process.stderr.write(`changelog: could not classify ${hash}, queued unclassified\n`); }
     }
     appendHash(root, hash, level);
   }
@@ -93,11 +103,6 @@ if (isMainModule()) {
   else if (cmd === 'lock') lock(root);
   else if (cmd === 'unlock') unlock(root);
   else if (cmd === 'is-locked') process.exit(isLocked(root) ? 0 : 1);
-  else if (cmd === 'drain') {
-    const lookup = (h) => ({
-      subject: execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%s', h], { encoding: 'utf8' }).trim(),
-      body: execFileSync('git', ['-C', root, 'log', '-1', '--pretty=%b', h], { encoding: 'utf8' }),
-    });
-    process.stdout.write(JSON.stringify(resolveDrain(readEntries(root), lookup), null, 2) + '\n');
-  }
+  else if (cmd === 'drain')
+    process.stdout.write(JSON.stringify(resolveDrain(readEntries(root), gitLookup(root)), null, 2) + '\n');
 }

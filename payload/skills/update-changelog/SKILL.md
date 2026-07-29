@@ -32,8 +32,14 @@ changelog** belongs here:
   changelogs (Monorepo mode, §M7a). A backend still gets versions and still contributes
   entries; it simply has nowhere of its own to show them.
 
-Any project with a `package.json` is in scope. The old gate is what excluded this repository,
-the ultrapowers fork, and every backend from having a derived version at all.
+Any Node project with a `package.json` is in scope. The old gate is what excluded every Node
+project *without* a React/Next frontend — API backends, CLI parts, shared libraries — from
+having a derived version at all.
+
+What did not change is the `package.json` requirement itself. A repository without one is
+still out of scope, and `detect-project.mjs` says so and exits 1 (`package.json not found at
+repo root — not a Node project.`); so does `write-changelog.mjs`. Stop there rather than
+reaching for `--version-only` — there is nothing to write a version into.
 
 In a **single** project with no frontend, `--version-only` is the whole write: the version
 moves, no `changelog.json` is created, because nothing would render it — the record is the
@@ -188,38 +194,54 @@ level accumulated across the whole range or drain — not once per entry.
 A range holding one `feat` and six `fix` yields a single minor. A range holding only `docs`
 and `chore` yields **no bump at all**: the version is not a commit counter.
 
-**Major is never automatic.** When the classifier reports a proposal, stop and ask, quoting
-the reason it gives. Without approval, fall back to minor and say that you did. This departs
-from strict SemVer deliberately — a major is a promise to consumers, an unwanted one is
-effectively irreversible once published, and the cost of waiting is one question.
+**Major is never automatic.** When a proposal surfaces — from your own classification in manual
+mode, from `lint-versions.mjs` in automated mode (below) — stop and ask, quoting the reason it
+gives. Without approval, fall back to minor and say that you did. This departs from strict
+SemVer deliberately — a major is a promise to consumers, an unwanted one is effectively
+irreversible once published, and the cost of waiting is one question.
 
 A proposal comes only from an **explicit marker**: a `!` on the type, or a `BREAKING CHANGE:`
 footer in the body. Volume never triggers one — a range of forty `feat` commits is still a
 single minor, with no question asked.
 
-`node ~/.claude/skills/update-changelog/scripts/queue.mjs drain --root <root>` returns
-`{ level, proposals, unrecognised, hashes }`. In manual mode, classify the range's commits the
-same way rather than inventing a different rule.
+In **manual** mode you classify the range's commits yourself, by the table above — that is
+where "stop and ask" happens, and where the `unrecognised` count in your report comes from.
+Don't invent a different rule.
 
-`unrecognised` is not noise. A commit with no Conventional-Commits type contributes nothing
-and would otherwise vanish silently. `drain` counts them; this is what names them:
+In **automated** mode the two roles are split between two scripts, and it matters which one
+you ask.
+
+`node ~/.claude/skills/update-changelog/scripts/queue.mjs drain --root <root>` returns
+`{ level, proposals, unrecognised, hashes }`, but it answers exactly one question: **by what
+level does this batch move**. An entry the trigger already classified is taken at its recorded
+level and never re-read, so `proposals` and `unrecognised` stay empty for it — they fill in
+only for the bare hashes an older trigger left behind. A silent `drain` therefore does **not**
+mean "no breaking commit, nothing unparseable". Never read it that way.
+
+Disclosure is `lint`'s job:
 
 ```
 node ~/.claude/skills/update-changelog/scripts/lint-versions.mjs --root <root>
 ```
 
-One line per problem on stderr — queued commits with no recognised type, queued hashes `git log`
-can no longer resolve, a version-bump commit that reached the queue (so a version moved outside
-a drain), and any major proposal still awaiting approval (§4). Exit 1 when it found something,
-0 and silent when it did not, so a script can branch on it. Run it when `unrecognised` is
-non-zero, and offer to look at the commits it names.
+It re-reads **every** queued commit from `git log`, recorded level or not — a recorded level is
+only what the trigger saw at commit time, and re-reading is the only way to notice history has
+drifted from it. One line per problem on stderr: queued commits with no recognised type (a
+commit that bumps nothing would otherwise vanish without a trace), queued hashes `git log` can
+no longer resolve, a version-bump commit that reached the queue (so a version moved outside a
+drain), and any major proposal still awaiting approval. Exit 1 when it found something, 0 and
+silent when it did not, so a script can branch on it.
+
+Run it **unconditionally** before a drain writes (drain step 2), not on a trigger from `drain`'s
+output, and offer to look at the commits it names.
 
 **What is decided by code, and what is not.** Code decides: the level from the commit type,
-which workspaces a commit touched, the root version from parts plus root commits, whether a
-frontend part exists, where the changelog file belongs. A human or the model decides: whether
-a major is warranted, whether another part's change is relevant here, the Russian wording of
-an entry, and whether a change is meaningful at all (§3.1). Automating the second column
-produces confident nonsense.
+which files each commit changed (`list-changed-files.mjs`), whether a frontend part exists,
+where the changelog file belongs. A human or the model decides, working from those outputs:
+which workspace(s) a commit belongs to — the `relDir` prefix match of §M3 — the root version
+from the parts' bumps plus root commits (§M6), whether a major is warranted, whether another
+part's change is relevant here, the Russian wording of an entry, and whether a change is
+meaningful at all (§3.1). Automating the second column produces confident nonsense.
 
 ## 5. Write the files
 
@@ -285,7 +307,8 @@ skipped and why (in general terms — no need to relitigate each one), the final
 files changed, and the commit hash/message just created. Report three things about the version
 specifically: the level §4 settled on and which commit type set it, any major proposal and how
 it was resolved (approved, or fallen back to minor), and the `unrecognised` count when it is
-non-zero. If the level was `none`, say that the version deliberately did not move.
+non-zero. In drain mode those last two come from `lint-versions.mjs`, not from `drain` (§4).
+If the level was `none`, say that the version deliberately did not move.
 
 ## Monorepo mode
 
@@ -455,8 +478,10 @@ Idempotent; installs three things:
   message starts `релиз:`/`патч:` (the drain's own bump commits), so the drain can never
   re-trigger itself. It enqueues `<hash> <level>`, classifying the commit at commit time
   (`queue.mjs append --classify`); if that classification fails the hash is still queued, bare,
-  and gets classified at drain time instead. Nothing walks history at install time, so adopting
-  the trigger on an existing project never moves its version retroactively;
+  and gets classified at drain time instead. The line carries the **level and nothing else** —
+  a breaking marker leaves no trace in the queue, which is why `lint` re-reads the commits
+  rather than trusting it (§4). Nothing walks history at install time, so adopting the trigger
+  on an existing project never moves its version retroactively;
 - `.changelog.config.json` (committed) with the aggregate location + part-name map, if absent;
 - `.gitignore` entries for `.claude/changelog-queue` and `.claude/changelog.lock`.
 
@@ -464,16 +489,23 @@ Idempotent; installs three things:
 
 1. `node scripts/queue.mjs lock --root <root>` — take the lock (TTL 15 min; a stale lock from
    a crashed drain is auto-cleared).
-2. `node scripts/queue.mjs drain --root <root>` — the whole queue's verdict in one call:
+2. `node scripts/queue.mjs drain --root <root>` — the batch's level in one call:
    `{ level, proposals, unrecognised, hashes }`. Entries queued with a level are used as-is;
    bare hashes left by an older trigger are classified here from their `git log` subject/body.
    `level` is already the maximum across the batch — this is §4's single move, computed.
+   Then `node scripts/lint-versions.mjs --root <root>` — **always**, not only when `drain`
+   reported something. `drain` trusts each entry's recorded level, so for a trigger-queued
+   commit its `proposals` and `unrecognised` are empty by construction (§4); `lint` re-reads
+   every queued commit and is the only thing that names a breaking marker, an unparseable
+   subject, or a hash that has drifted out of history. It changes nothing about what gets
+   written — it is what you report.
 3. For each hash in `hashes`, **oldest → newest**, run the §3 editorial pass: a commit that
    passes the meaningfulness test contributes its lines to its home part(s); an insignificant
    or unparseable commit contributes nothing. Then write **once** per part (step 5 / M7) at the
    version `level` implies, plus the aggregate (M7a). If `level` is `none` there is no write at
-   all — an all-`chore` batch leaves every version where it was. If `proposals` is non-empty,
-   drain mode has nobody to ask: fall back to minor, and say so in the report.
+   all — an all-`chore` batch leaves every version where it was. If step 2's `lint` named a
+   major proposal, drain mode has nobody to ask and `level` has already fallen back to minor —
+   don't act on it, disclose it: quote the reason in the report, verbatim.
 4. `clearHashes` **only** the hashes actually processed (append-only queue; unprocessed hashes
    survive a partial run). A `level: none` batch processed nothing, so clear nothing: those
    hashes stay queued and are written out by the first later drain that does move a version.

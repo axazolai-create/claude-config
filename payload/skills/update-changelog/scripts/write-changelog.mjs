@@ -44,6 +44,14 @@ for (const entry of input.entries) {
    }
 }
 
+// Checked before anything is written: a root with no package.json cannot be versioned at all,
+// and half-writing changelog.json first would leave entries under a version that never moved.
+const packageJsonPath = join(cwd, 'package.json')
+if (!existsSync(packageJsonPath)) {
+   console.log(JSON.stringify({ error: `package.json not found at ${cwd}` }))
+   process.exit(1)
+}
+
 // --- changelog.json ---
 let changelogPath = null
 if (!versionOnly) {
@@ -61,7 +69,6 @@ if (!versionOnly) {
 }
 
 // --- package.json (targeted top-level "version" replace — preserves everything else) ---
-const packageJsonPath = join(cwd, 'package.json')
 const packageJsonRaw = readFileSync(packageJsonPath, 'utf8')
 const versionFieldRe = /"version":\s*"[^"]*"/
 if (!versionFieldRe.test(packageJsonRaw)) {
