@@ -230,8 +230,9 @@ Reinstall: `node setup.mjs` (interactively pick the other variant, or pass
   `setup.mjs` run recorded) are never pruned — they're left as-is even if the new variant
   doesn't include them.
 - filters the hook entries and the `statusLine` key in `settings.json` for the new variant:
-  switching to lite drops the GSD hooks and, if it was set, the `gsd-context-meter.mjs` entry in
-  `statusLine` (your own, non-bundle `statusLine` is left alone).
+  switching to base/lite drops the GSD hooks and, if it was set, swaps the `gsd-context-meter.mjs`
+  entry in `statusLine` for those profiles' own renderer, `statusline.mjs`; switching back
+  restores `gsd-context-meter.mjs` (your own, non-bundle `statusLine` is left alone).
 - reconciles the plugin set and prints a plan (what to install/remove, what to enable/disable)
   — asks for confirmation (`y/N`) before calling `claude plugin install/uninstall`; if the
   `claude` CLI isn't on PATH, it prints the commands for you to run by hand instead of
@@ -836,13 +837,18 @@ Not a hook in the `hooks.*` sense (a different `settings.json` mechanism — the
 from this bundle, driving your Claude Code" principle — here for findability:
 
 - **gsd-context-meter.mjs** (`statusLine.command`, registered — see "How the installer works"
-  above; **full variant only** — lite doesn't install this file and leaves `statusLine` alone,
-  see "Bundle variants"). Wraps gsd-core's own `gsd-statusline.js`: calls it as a black box and rewrites only the
+  above; **full variant only** — base/lite don't install this file and register `statusline.mjs`
+  instead, see "Bundle variants"). Wraps gsd-core's own `gsd-statusline.js`: calls it as a black box and rewrites only the
   context-window progress-bar segment into a textual token counter (`[420k/1000k] 42%`) — the
   other segments (model/task/milestone bar) always match what the installed gsd-core actually
   draws, without duplicating its logic. Key property: **it never breaks the statusline** — any
   error (unreadable input JSON, the original script missing/crashed, metric computation failing)
   falls back to the original's raw output or an empty string, never an exception out.
+- **statusline.mjs** (`statusLine.command`, **base/lite**). There is nothing to wrap — these
+  profiles have no gsd-core — so it renders the whole line itself: pending component updates, the
+  context counter (`[420k/1000k] 42%`), and project state (GSD `.planning/`, an `.ultrapowers/sdd/`
+  plan, or just folder + git branch). Same key property: any error yields empty output and exit 0,
+  the statusline never breaks.
 
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or

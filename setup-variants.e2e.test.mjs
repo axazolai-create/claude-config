@@ -50,7 +50,7 @@ test("no *.test.mjs leaks into any resolved profile (alwaysExclude)", () => {
   }
 });
 
-test("lite install: exact tree, 7 hooks, no statusLine, manifest.variant", () => {
+test("lite install: exact tree, 7 hooks, its own statusLine, manifest.variant", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-lite-"));
   plantForeign(dir);
   const r = run(dir, ["--variant=lite", "--replace-all"]);
@@ -70,7 +70,9 @@ test("lite install: exact tree, 7 hooks, no statusLine, manifest.variant", () =>
     for (const e of entries) for (const h of (e.hooks || []))
       for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
   assert.equal(scripts.size, 7);
-  assert.ok(!("statusLine" in settings));
+  assert.equal(settings.statusLine.type, "command");
+  assert.match(settings.statusLine.command, /hooks\/statusline\.mjs"$/);
+  assert.ok(existsSync(join(dir, "hooks/statusline.mjs")), "statusLine points at a file lite does not install");
   assert.equal(JSON.parse(readFileSync(join(dir, "state/bundle-manifest.json"), "utf8")).variant, "lite");
   // lite CLAUDE.md is the overlay version
   assert.match(readFileSync(join(dir, "CLAUDE.md"), "utf8"), /lite variant/);
@@ -143,6 +145,8 @@ test("base install: exact tree, base keep-set present, gsd absent, manifest.prof
   assertTreeEquals(dir, v.rels);
   assert.ok(existsSync(join(dir, "hooks/bg-supervision-nudge.mjs")), "base universal infra hook missing");
   assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd hook should be absent on base");
+  assert.match(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).statusLine.command,
+    /hooks\/statusline\.mjs"$/);
   assert.equal(readManifest(dir).profile, "base");
   assertForeignIntact(dir);
   rmSync(dir, { recursive: true, force: true });
@@ -173,6 +177,43 @@ test("full->base->lite prunes GSD then universal infra; foreign untouched", () =
   assert.equal(readManifest(dir).profile, "lite");
   assertForeignIntact(dir);
 
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// A profile switch that leaves the wrong renderer registered points statusLine at a file the new
+// profile just pruned, which reads as a broken terminal rather than a misconfiguration - so the
+// downgrade and the upgrade are both asserted on the same directory, in sequence.
+test("statusLine follows the profile: full<->base swaps the renderer, and re-running is idempotent", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-sl-"));
+  const statusLine = () => JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).statusLine;
+  const installed = (sl) => existsSync(join(dir, /"(?:.*\/)?(hooks\/[^"]+)"$/.exec(sl.command)[1]));
+
+  assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
+  assert.match(statusLine().command, /hooks\/gsd-context-meter\.mjs"$/);
+
+  assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
+  const base = statusLine();
+  assert.equal(base.type, "command");
+  assert.match(base.command, /hooks\/statusline\.mjs"$/);
+  assert.ok(installed(base), "base registered a renderer it does not install");
+  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd renderer survived the downgrade");
+
+  assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
+  assert.deepEqual(statusLine(), base, "a second base run changed its own entry");
+
+  assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
+  const full = statusLine();
+  assert.match(full.command, /hooks\/gsd-context-meter\.mjs"$/);
+  assert.ok(installed(full), "full registered a renderer it does not install");
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("a hand-set statusLine survives a base install", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-sl-mine-"));
+  writeFileSync(join(dir, "settings.json"),
+    JSON.stringify({ statusLine: { type: "command", command: "echo mine" } }, null, 2) + "\n");
+  assert.equal(run(dir, ["--variant=base", "--merge-all"]).status, 0);
+  assert.equal(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).statusLine.command, "echo mine");
   rmSync(dir, { recursive: true, force: true });
 });
 
