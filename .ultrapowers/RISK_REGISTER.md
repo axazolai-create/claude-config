@@ -480,6 +480,50 @@
   scope — it would put a foreign-product check on every session start for a condition the user
   creates deliberately.
 
+## RISK-VARIANT-005 — A declined prune of `gsd-defaults.partial.json` is re-offered on every non-`full` run
+
+- **Status:** Open (accepted, 2026-07-29)
+- **Context:** `pruneStale()` adds `gsd-defaults.partial.json` to its candidate set unconditionally
+  whenever `VARIANT !== "full"` (`setup.mjs:532`). The file is a `full`-only mirror written straight
+  into `~/.claude`, never through `placeFile()` — and `placeFile()` plus the assembled `CLAUDE.md`
+  are the only two writers that push into `manifestNow`. Being untracked is also *why* the candidate
+  is hardcoded rather than derived: there is no manifest entry whose disappearance would put it on
+  the list. Every later gate then declines to apply to it — the `variantExcluded` branch skips the
+  "still referenced in bundle" check, and with no recorded hash the "modified since install" check
+  has nothing to compare — so it reaches the removal list on every `base`/`lite` run. Declining is
+  honoured and the file survives, which is exactly what makes the next run list it again.
+  Pre-existing since `a58bfe9` (2026-07-22); not introduced by the gsd-core detector, which only
+  reads `pruneStale()`'s result.
+- **Mitigation:** none, and none is needed for safety. The file is offered, never removed without a
+  `y` or a bulk flag, and `existsSync` drops it from the candidate set the moment it does go —
+  accepting the prune once ends the offer permanently, as does deleting the mirror by hand.
+- **Residual:** noise, not data loss — one extra line under "stale files no longer in the bundle" on
+  every `base`/`lite` run, for a user who keeps declining. The real fix is to record the mirror in
+  the manifest when `full` writes it, so its staleness is derived like every other file's instead of
+  hardcoded; that changes what `manifestNow` means (files this bundle *ships*, not files it writes)
+  and was too broad to make inside the gsd-core detector's branch.
+
+## RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported
+
+- **Status:** Open (2026-07-29, found while verifying `RISK-VARIANT-005`'s neighbourhood — unfixed)
+- **Context:** `setup.mjs:926` reads `partial` as `partialRaw === undefined ? null : safe(() =>
+  JSON.parse(...))`, and `safe()` returns **`undefined`** when the parse throws, not `null`. So the
+  handler written for exactly this case — `if (partialRaw !== undefined && partial === null)`, which
+  would have recorded `settings.partial.json: failed to parse - settings.json hooks left untouched`
+  — is unreachable, and the guard below it (`partial !== null`, `setup.mjs:932`) lets an `undefined`
+  through into `Object.values(partial.hooks || {})` at `setup.mjs:940`. The run dies there with an
+  unhandled `TypeError: Cannot read properties of undefined (reading 'hooks')`. Reproduced directly:
+  writing `{ not json` over `settings.partial.json` in a copied repository root aborts the install
+  at that line. A *missing* file takes the `null` branch and is handled correctly; only a corrupt
+  one is affected.
+- **Mitigation:** none in code. What limits it is reach: `settings.partial.json` is repository
+  content, not user state, so it is only corrupt after a bad merge, a truncated download, or a hand
+  edit — and the crash happens before anything is written, so the config dir is left as it was.
+- **Residual:** an unhandled stack trace where a one-line summary note was intended, on an input the
+  code already knew could be bad. One-word fix (`?? null`, or comparing against `undefined`) plus a
+  test that the note is actually emitted; left out of the gsd-core detector's fix wave because it is
+  neither that feature's code nor on its recovery path.
+
 ## RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
 
 - **Status:** Open (until tests green)
@@ -945,3 +989,46 @@
   `git commit`, bounded by queue length — not correctness: the plan's snippet wraps the call in
   `try/catch` plus a `main().catch`, so a *failing* lint stays fail-open and never blocks a commit.
   A *slow* one still delays it, which try/catch cannot help with.
+## RISK-ULTRAPOWERS-009 — Removing foreign hook registrations weakens "only ever touch our own entries"
+
+- **Status:** Mitigated (2026-07-28, with the foreign gsd-core detector in `setup.mjs`)
+- **Context:** the settings merge in `setup.mjs` claims hook slots through `mentionsOurs(e)`, whose
+  basenames are collected dynamically from `settings.partial.json`. Foreign entries are therefore
+  safe *by construction* — the code cannot name a hook this bundle does not ship, so it cannot drop
+  one. `filterGsdHooks` deliberately breaks that property: it matches `hooks/gsd-*` by pattern and
+  removes registrations belonging to another product. It is the first code path in the installer
+  that can delete a settings entry it did not author.
+- **Mitigation:** containment around the match, not a narrower match — the match had to get *wider*,
+  not tighter, to work at all. Every hook of a real gsd-core install is registered as one quoted
+  command line with no `args` array (`"…/node.exe" "…/hooks/gsd-check-update.js"`), so a matcher
+  reading only `args` — the shape this bundle uses — de-registered nothing while the inventory moved
+  the files anyway, leaving 15 registrations pointing at paths that no longer exist. `filterGsdHooks`
+  therefore tests `h.command` as well as `h.args`, unanchored and stopping at a quote or space.
+  What holds the risk is the gate around it: the path runs only on `base`/`lite`, only when
+  `~/.claude/gsd-core/VERSION` exists, and only with consent — the bulk flags (`--replace-all`,
+  `--merge-all`) are neither consent nor even a prompt, scripted use needs the dedicated
+  `--uninstall-gsd`, a bulk or non-TTY run reports and stops, and the interactive default is no.
+  A copy of `settings.json` goes into the cleanup-trash batch *before* the edit and the exact `cp`
+  that restores it is printed. `hooks/lib/gsd-*` stays deliberately unmatched: nothing registers a
+  lib file as a hook, so matching it would widen the reach for no behaviour.
+- **Residual:** any registration whose command line *mentions* a `hooks/gsd-*` path is dropped, so a
+  third-party hook living at that path, or an unrelated command that merely passes one as an
+  argument, goes with it — on a machine that has gsd-core installed and a user who consented.
+  Reversible from the printed `cp`, and the file itself is only moved, never deleted. Accepted: the
+  alternative is reading gsd-core's own manifest, which would couple this bundle to a foreign
+  product's internal layout.
+
+## RISK-ULTRAPOWERS-010 — `/gsd-update` reinstalls gsd-core at any time
+
+- **Status:** Active (accepted, 2026-07-28)
+- **Context:** the detector only observes divergence at the moment `setup.mjs` runs. `/gsd-update`
+  is a separate tool the user can run whenever they like, and it will happily reinstall gsd-core
+  into a `base`/`lite` machine minutes after the detector removed it. Between two `setup.mjs` runs
+  the machine simply drifts, and nothing reports it.
+- **Mitigation:** none beyond re-running `node setup.mjs`, which reports the divergence again and
+  re-offers the removal. The removal is cheap to repeat because it is a move into a dated trash
+  batch, not a destructive uninstall.
+- **Residual:** deliberately not fixed. Enforcing gsd-core's absence at session start would mean a
+  hook that polices another product's installation on every session — a standing background
+  behaviour to remove software the user may have just deliberately installed. That is a worse
+  trade than periodic drift, and it is out of scope for this feature.

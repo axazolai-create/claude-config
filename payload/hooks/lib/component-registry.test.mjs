@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { COMPONENTS, autoUpdateEnabled, decide, pendingCount, formatUpdateNotes } from "./component-registry.mjs";
+import { COMPONENTS, autoUpdateEnabled, decide, pendingCount, pendingNames, formatUpdateNotes } from "./component-registry.mjs";
 
 test("COMPONENTS: known entries with required fields", () => {
   const byName = Object.fromEntries(COMPONENTS.map((c) => [c.name, c]));
@@ -62,4 +62,19 @@ test("formatUpdateNotes: safe-applied says restart; reinit says the command", ()
 test("formatUpdateNotes: handles empty and null state", () => {
   assert.deepEqual(formatUpdateNotes({}), []);
   assert.deepEqual(formatUpdateNotes(null), []);
+});
+
+test("pendingNames lists exactly the components with an update available", () => {
+  const state = {
+    graphify: { updateAvailable: false },
+    "context-mode": { updateAvailable: true },
+    "claude-config": { updateAvailable: true },
+  };
+  assert.deepEqual(pendingNames(state), ["claude-config", "context-mode"]);
+  assert.equal(pendingCount(state), 2);
+});
+
+test("pendingNames tolerates junk", () => {
+  assert.deepEqual(pendingNames(null), []);
+  assert.deepEqual(pendingNames({ a: null, b: "x", c: { updateAvailable: "yes" } }), []);
 });
