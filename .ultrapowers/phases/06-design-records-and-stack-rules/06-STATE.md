@@ -4,7 +4,7 @@ status: complete
 tasks_done: 6
 tasks_total: 7
 branch: feat/design-records-stack-rules
-integration: branch
+integration: merged
 updated: 2026-07-29
 ---
 

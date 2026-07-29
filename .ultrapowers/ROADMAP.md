@@ -8,7 +8,8 @@ phases:
   - { phase: "03", slug: ultrapowers-layer0-patcher, status: abandoned, integration: merged }
   - { phase: "04", slug: ultrapowers-planning-tree, status: complete, integration: merged }
   - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
-  - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: branch }
+  - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
+  - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
 ---
 
 # Roadmap
