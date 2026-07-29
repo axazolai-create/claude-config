@@ -3,8 +3,8 @@
 // Only rewriteContextBar lives here - it exists solely to parse gsd-statusline.js's own
 // output, so it's gsd-core-specific. The profile-neutral formatting/metrics functions
 // live in statusline-lib.mjs; re-exported here so no existing importer breaks.
-export { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, appendUpdatesSegment } from "./statusline-lib.mjs";
-import { formatCurrentTokens, formatContextWindow } from "./statusline-lib.mjs";
+export { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, appendUpdatesSegment, usedTokensOf } from "./statusline-lib.mjs";
+import { formatCurrentTokens, formatContextWindow, usedTokensOf } from "./statusline-lib.mjs";
 
 // Matches gsd-statusline.js's exact bar output: ` \x1b[<color>m` + optional `💀 ` +
 // 10 block/shade chars + ` NN%` + an OPTIONAL native suffix (gsd-core 1.8.0's own
@@ -41,7 +41,7 @@ const MODEL_SEG_RE = /\x1b\[2m[\s\S]*?\x1b\[0m/;
  */
 export function rewriteContextBar(text, { totalCtx, used, usedTokens }) {
   if (typeof text !== "string" || totalCtx == null || used == null) return text;
-  const tokens = usedTokens != null ? usedTokens : (totalCtx * used) / 100;
+  const tokens = usedTokensOf({ totalCtx, used, usedTokens });
 
   const barMatch = BAR_RE.exec(text);
   if (!barMatch) return text;

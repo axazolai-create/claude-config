@@ -57,6 +57,15 @@ export function computeUsedTokenMetrics(data) {
   return { totalCtx, used, usedTokens };
 }
 
+/**
+ * The token figure to display for a computeUsedTokenMetrics() result: the real `current_usage`
+ * sum when the hook input carried one, else the `totalCtx * used%` estimate. Shared so the full
+ * and base/lite statuslines cannot drift on which of the two they show.
+ */
+export function usedTokensOf({ totalCtx, used, usedTokens }) {
+  return usedTokens != null ? usedTokens : (totalCtx * used) / 100;
+}
+
 /** Append a compact ` │ ⬆<count>` segment (yellow) before any trailing newline. */
 export function appendUpdatesSegment(text, count) {
   if (typeof text !== "string" || !Number.isFinite(count) || count < 1) return text;

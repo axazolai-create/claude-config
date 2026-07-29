@@ -1,7 +1,7 @@
 // payload/hooks/lib/statusline-lib.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, appendUpdatesSegment } from "./statusline-lib.mjs";
+import { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, appendUpdatesSegment, usedTokensOf } from "./statusline-lib.mjs";
 
 test("formatCurrentTokens: thousands with one decimal digit", () => {
   assert.equal(formatCurrentTokens(123400), "123.4K");
@@ -62,6 +62,12 @@ test("computeUsedTokenMetrics: used is clamped to [0, 100]", () => {
   assert.equal(low.used, 0);
   const high = computeUsedTokenMetrics({ context_window: { remaining_percentage: 0, total_tokens: 100000 } });
   assert.equal(high.used, 100);
+});
+
+test("usedTokensOf: prefers the real sum, estimates from used% only without one", () => {
+  assert.equal(usedTokensOf({ totalCtx: 200000, used: 50, usedTokens: 43500 }), 43500);
+  assert.equal(usedTokensOf({ totalCtx: 200000, used: 50, usedTokens: null }), 100000);
+  assert.equal(usedTokensOf({ totalCtx: 200000, used: 0, usedTokens: 0 }), 0);
 });
 
 test("appendUpdatesSegment: appends when count>0, no-op otherwise", () => {
