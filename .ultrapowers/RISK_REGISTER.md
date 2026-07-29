@@ -815,3 +815,59 @@
   the fork's README and `plugin.json` description, stated as a fork rather than implied.
 - **Residual:** future releases could become unusable to us. The fork keeps working at whatever
   version we last merged, which is the whole point of holding the objects ourselves.
+
+## RISK-PHASEDIR-001 — `phase-dir` caps a kind at 99, and a leaked lock is never collected
+
+- **Status:** Open (accepted, 2026-07-29)
+- **Context:** two independent limits in the fork's `transform/fork-owned/phase-dir`, the single
+  allocator for `.ultrapowers/{phases,tasks,adhoc}/NN-slug/`. **The ceiling:** the scan for the
+  highest existing number globs `[0-9][0-9]-*`, while `printf '%02d'` treats two digits as a
+  minimum width, not a maximum — so the hundredth allocation writes `100-<slug>`, a name that glob
+  cannot match. Verified empirically: with 99 numbered directories plus `100-a` and `100-b`
+  present, the glob returns 99 and `next` recomputes to 100. Past 99 every distinct slug therefore
+  takes the prefix `100` — `100-a` and `100-b` are different names, both `mkdir` cleanly, and
+  neither is ever counted again. The same blindness breaks re-resolution: asking a second time for
+  a slug already allocated at 100 does not find it, and the plain `mkdir` of the target then fails
+  EEXIST under `set -e`, so the idempotent "same phase, same directory" contract the script's own
+  header promises becomes a hard error rather than a duplicate. **The lock:** `.phase-dir.lock` is
+  released by `trap … EXIT` plus `trap 'exit 1' INT TERM`, which covers a normal exit, a `set -e`
+  abort, INT and TERM — but not SIGKILL, not a power cut, and not SIGHUP, which is untrapped and
+  tears the shell down before EXIT runs. The window is narrow, but nothing anywhere collects a
+  leaked lock, and one leaked lock blocks allocation for that kind on that machine permanently.
+- **Mitigation:** neither failure is silent. When the 300-poll wait is exhausted the script prints
+  the lock's path and, from its mtime, how long it has been held, so an operator can tell a live
+  queue from a corpse; deletion stays manual by design, because the script itself cannot
+  distinguish the two and guessing wrong would break a running allocation. The ceiling sits far
+  above realistic use — the largest kind in this tree holds three directories — and both limits
+  fail loudly rather than corrupting anything.
+- **Residual:** no data-loss exposure in either case. The ceiling yields colliding prefixes plus a
+  visible EEXIST; the leaked lock yields a refusal with an age in the message. Both are recoverable
+  by hand (`rmdir` the lock; rename by hand past 99). Widening the prefix is deferred until a tree
+  approaches the ceiling, since it would rename every existing directory and every document inside
+  it.
+
+## RISK-PLANTREE-001 — The risk register no longer lives where the rules say to look for it
+
+- **Status:** Open (code half fixed 2026-07-29, prose half outstanding)
+- **Context:** moving the register to `.ultrapowers/RISK_REGISTER.md` put it outside the only two
+  places this bundle had ever probed. `hooks/session-init.mjs` and `add-risk.mjs` each checked the
+  project root and walked `.planning/`, so the every-session self-heal the session-init header
+  advertises stopped covering the register — for any project that adopts the tree, since that hook
+  ships in the payload to every install. In this repository the effect was latent rather than
+  active: the step is gated on `.planning/` existing and this repository has none, so its own
+  register was never being appended to either way.
+- **Mitigation:** both probes now include `.ultrapowers/RISK_REGISTER.md`, pinned end-to-end by
+  `payload/hooks/session-init.test.mjs`. The pair must move together — session-init decides whether
+  anything is pending and `add-risk.mjs` does the writing, so patching one alone leaves the hook
+  spawning a subprocess every session that then finds nothing. Depth ordering is untouched: a root
+  register still outranks `.ultrapowers/`, and a `.planning/` register ties with it, so both are
+  maintained. Both READMEs' statement of the search locations was corrected with the code.
+- **Residual:** the prose half is not fixed. The user-scope `~/.claude/CLAUDE.md` still instructs
+  that the register goes in `.planning/` if a GSD project exists and the project root otherwise;
+  that file is hook-protected and the user's to edit, and its source in this bundle
+  (`payload/claude-md/06-collaboration.md`, `06-collaboration.lite.md`) is deliberately left alone,
+  so a fresh install still teaches the old locations. Anything else that hardcodes the root or
+  `.planning/` will miss the register the same way — the `risks.mjs` path resolver specified in the
+  decision-records plan already probes both, but that plan has not been executed. No data-loss
+  exposure: the register is tracked in git and maintained by hand; what was lost was one automatic
+  append.

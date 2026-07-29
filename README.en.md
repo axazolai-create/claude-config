@@ -1165,8 +1165,8 @@ un-updated).
   - Python tools: the `PYTHONIOENCODING=utf-8` variable;
   - Node outputs UTF-8 on its own — ASCII output or a UTF-8 console is enough.
 
-**Where RISK_REGISTER.md is looked for:** at the project root, at the `.planning/` root, and in
-its subfolders (e.g. `.planning/codebase/`). Selection rules:
+**Where RISK_REGISTER.md is looked for:** at the project root, at `.ultrapowers/`, at the
+`.planning/` root, and in its subfolders (e.g. `.planning/codebase/`). Selection rules:
 - if several are found — the **shallowest** one (closest to the root) is used;
 - if there are several at that minimal depth — **each one** is updated, each with its own next
   ID.

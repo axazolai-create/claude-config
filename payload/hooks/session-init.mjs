@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // SessionStart hook (cross-platform).
 // - The RISK_REGISTER step runs EVERY session and is idempotent: it finds the shallowest
-//   RISK_REGISTER.md (root / .planning / its subfolders) and ensures the GSD-clobber entry,
-//   so it self-heals even if the register appears or moves after the first session.
+//   RISK_REGISTER.md (root / .ultrapowers / .planning / its subfolders) and ensures the
+//   GSD-clobber entry, so it self-heals even if the register appears or moves after the
+//   first session.
 // - Auto-mark root CLAUDE.md and the per-project .planning exclude ALSO run every session now
 //   (see the "timing bug" note further down for why - they used to be gated on `firstTime` and
 //   that was wrong).
@@ -118,12 +119,16 @@ const looksGsd = (p) => {
   return /gsd-core|\/gsd-|GSD project|\.planning\/(PROJECT|ROADMAP|STATE)\.md/i.test(t);
 };
 
-// ---- RISK_REGISTER.md discovery (mirrors add-risk.mjs): root, .planning, its subfolders ----
+// ---- RISK_REGISTER.md discovery (mirrors add-risk.mjs - keep both in sync): root,
+// .ultrapowers, .planning and its subfolders. The .ultrapowers probe is an exact path, not a
+// walk: the tree keeps its register at the top level and its sdd/ scratch is ignored. ----
 const SIG = "deny-curated-claude-md.mjs";
 function listRegisters(rootDir) {
   const found = [];
-  const rf = join(rootDir, "RISK_REGISTER.md");
-  if (existsSync(rf)) found.push(rf);
+  for (const rel of ["RISK_REGISTER.md", join(".ultrapowers", "RISK_REGISTER.md")]) {
+    const f = join(rootDir, rel);
+    if (existsSync(f)) found.push(f);
+  }
   const base = join(rootDir, ".planning");
   if (existsSync(base)) {
     const stack = [base];
