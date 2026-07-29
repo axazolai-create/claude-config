@@ -92,11 +92,52 @@ when its phase is created.
   scan found 1504 occurrences across 111 files and 382 distinct spellings against
   a baseline of 119 that had been measured over only three directories. The
   correct status is `superseded by 04`.
-- `integration` is **not** a status axis. Branch and merge state is a delivery
-  fact. Keep the fact, stop calling it a status.
-- The agreed vocabulary, not yet applied: `planned`, `running`, `blocked`,
-  `complete`, `superseded`, `abandoned`. Phases and plans also need explicit
-  dependencies.
 - The unmerged-at-the-time statusline design asserts `STATE.md` and `ROADMAP.md`
   are absent from this tree. That is now false and must become a rule rather than
   something someone remembers.
+
+## Settled 2026-07-29, to be applied by the new phase
+
+The user ruled on the status model after a real GSD `.planning/` tree was read
+side by side with this one. It mixes five status vocabularies that share no
+values — a ROADMAP checkbox, a prose `**Status**: ✅ Complete`, a STATE
+frontmatter verb (`planning`), the risk register's `Open|Mitigated|Accepted|
+Closed`, and a validation table's `⬜ ✅ ❌ ⚠️`. The lesson taken is not a file
+layout but a separation:
+
+- **`status`** — the phase's life cycle, and nothing else: `planned`, `running`,
+  `blocked`, `complete`, `superseded`, `abandoned`.
+- **`delivery`** replaces `integration` — branch and merge state is a delivery
+  fact, not a status: `branch`, `merged`, `deployed`. `deployed_through` stays a
+  waterline on the roadmap; it is not a per-phase flag.
+- **`depends_on` / `blocked_by`** — lists, not prose. A dependency a reader has
+  to infer from a sentence is not a dependency a checker can hold you to.
+
+Two rules are hard, because both failures already exist in this tree:
+
+- **`superseded` must carry `superseded_by`.** Without it phase 03 reads as
+  abandoned again, and the reason it was replaced lives only in a summary nobody
+  loads.
+- **A dropped task is a field, not a sentence.** `07-STATE.md` says
+  `tasks_done: 6 / tasks_total: 7` and explains the seventh in prose, so every
+  parser — the status bar included — will report 86%.
+
+The status bar needs real design work rather than a patch. The floor the user
+set: it always shows pending component updates, and context fill as **both a
+token count and a percentage**. Everything above that floor — which tree it
+reads, how it reports a milestone, what it does when two trees disagree — is
+open. Three findings constrain it, all measured on 2026-07-29:
+
+- The GSD reader's regexes are **correct** against a real `.planning/STATE.md`
+  (rendered `v1.0 [██░] 92% · Phase 13 planning`). The "format nobody verified"
+  caveat in phase 07's plan is discharged.
+- That 92% is **wrong anyway**. The source file states progress three times and
+  disagrees with itself: frontmatter `11/12`, roadmap checkboxes `14/15`, plans
+  `95/95`, with `current_phase: 13` exceeding `total_phases: 12`. A reader that
+  trusts one field silently publishes a false number.
+- Against **this** tree the bar is simply wrong: it renders a stale SDD ledger
+  (`2026-07-28-ultrapowers-planning-tree ✔12 →13`) for a phase that is complete
+  and merged, because `gsdState` requires `.planning/config.json` and `sddState`
+  intercepts first. `.ultrapowers/ROADMAP.md` and `NN-STATE.md` are never read.
+  `sddState` also picks the "plan in flight" by file mtime, so a checkout
+  changes what the bar claims.
