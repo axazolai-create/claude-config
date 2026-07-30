@@ -135,7 +135,10 @@ test("the pure renderers never interpolate undefined", () => {
   assert.doesNotMatch(renderGsd({ milestone: "v1" }), /undefined/);
   // field()/fmField() return null (not undefined) for an absent key, the shape production
   // actually passes; a guard tested only against omitted arguments can miss this.
+  // milestone:null alone is not load-bearing: filter(Boolean) already drops a lone null/undefined
+  // milestone with no phase, guard or not - phase+status is what makes the guard's absence visible.
   assert.equal(renderGsd({ milestone: null }), "");
+  assert.equal(renderGsd({ milestone: null, phase: "3", status: "x" }), "");
   assert.equal(renderSdd({ plan: null }), "");
 });
 
