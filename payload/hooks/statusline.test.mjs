@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderUpdates, renderGit, renderGsd, renderSdd, render } from "./statusline.mjs";
+import { renderUpdates, renderGsd, renderSdd, render } from "./statusline.mjs";
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -21,31 +21,6 @@ test("up to two components are named, the rest collapse", () => {
   assert.equal(strip(renderUpdates(["a", "b", "c", "d"])), "⬆ a b +2");
 });
 
-test("a clean branch renders with a tick", () => {
-  assert.equal(renderGit("## main...origin/main\n"), "main✓");
-});
-
-test("staged, modified, untracked, ahead and behind all render", () => {
-  const out = renderGit([
-    "## main...origin/main [ahead 1, behind 2]",
-    "M  staged.txt",
-    " M dirty.txt",
-    "?? new.txt",
-    "?? other.txt",
-    "?? third.txt",
-    "",
-  ].join("\n"));
-  assert.equal(out, "main+1~1?3↑1↓2");
-});
-
-test("a detached head says so", () => {
-  assert.equal(renderGit("## HEAD (no branch)\n"), "(detached)");
-});
-
-test("an initial branch with no upstream still renders", () => {
-  assert.equal(renderGit("## No commits yet on master\n"), "master✓");
-});
-
 test("the gsd segment mirrors gsd-core's own vocabulary", () => {
   assert.equal(renderGsd({ milestone: "v2.0", phase: "4.5", status: "executing", percent: 40 }),
     "v2.0 [██░] 40% · Phase 4.5 executing");
@@ -55,18 +30,30 @@ test("the sdd segment names the plan and where to resume", () => {
   assert.equal(renderSdd({ plan: "planning-tree", complete: 3, next: 4 }), "planning-tree ✔3 →4");
 });
 
-test("render omits the updates segment and joins the rest", () => {
-  const line = strip(render({ updates: [], context: "45k/200k 22%", state: "claude-config main✓" }));
-  assert.equal(line, "45k/200k 22% │ claude-config main✓");
+test("render joins the floor in order", () => {
+  const line = strip(render({ updates: [], model: "Opus 5 (1M)", context: "45.0K/200K 22%",
+    project: "claude-config" }));
+  assert.equal(line, "Opus 5 (1M) │ 45.0K/200K 22% │ claude-config");
 });
 
-test("render puts updates first when there are any", () => {
-  const line = strip(render({ updates: ["context-mode"], context: "45k/200k 22%", state: "x" }));
-  assert.equal(line, "⬆ context-mode │ 45k/200k 22% │ x");
+test("render puts updates first, named", () => {
+  const line = strip(render({ updates: ["context-mode"], model: "Opus", context: "1.0K/1M 0%",
+    project: "p" }));
+  assert.equal(line, "⬆ context-mode │ Opus │ 1.0K/1M 0% │ p");
+});
+
+test("render appends gsd then up, and omits either when absent", () => {
+  const base = { updates: [], model: "Opus", context: "", project: "p" };
+  assert.equal(strip(render({ ...base, gsd: "v1.0 · Phase 3 executing" })),
+    "Opus │ p │ v1.0 · Phase 3 executing");
+  assert.equal(strip(render({ ...base, up: "08 ✔2/6 running" })), "Opus │ p │ 08 ✔2/6 running");
+  assert.equal(strip(render({ ...base, gsd: "v1.0", up: "08 planned" })),
+    "Opus │ p │ v1.0 │ 08 planned");
 });
 
 test("render survives every segment being empty", () => {
-  assert.equal(strip(render({ updates: [], context: "", state: "" })), "");
+  assert.equal(strip(render({ updates: [], model: "", context: "", project: "" })), "");
+  assert.equal(strip(render()), "");
 });
 
 test("the gsd bar is full only at 100% and empty only at 0%", () => {
@@ -85,10 +72,6 @@ test("the gsd segment drops the bar rather than claim 0% it does not know", () =
 });
 
 test("the pure renderers never throw on absent or malformed input", () => {
-  assert.equal(renderGit(null), "");
-  assert.equal(renderGit(undefined), "");
-  assert.equal(renderGit(""), "");
-  assert.equal(renderGit("not porcelain at all"), "");
   assert.equal(renderUpdates("context-mode"), "");
   assert.equal(renderUpdates({}), "");
   assert.doesNotThrow(() => renderGsd());
@@ -112,6 +95,13 @@ function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR } = {}) {
 }
 
 const payload = (root, extra = {}) => JSON.stringify({ workspace: { current_dir: root }, ...extra });
+
+test("entry point: the project segment is the directory name and nothing else", () => {
+  const root = dir("proj-only");
+  const out = runEntry(payload(root, { model: { display_name: "Opus 5" } }));
+  assert.equal(out.status, 0);
+  assert.equal(strip(out.stdout), "Opus 5 │ proj-only");
+});
 
 test("entry point: malformed JSON on stdin yields a clean line and a zero exit", () => {
   const root = dir("plain-malformed");
@@ -232,7 +222,7 @@ test("entry point: a real GSD project renders the gsd segment", () => {
   write(join(root, ".planning", "STATE.md"), GSD_STATE);
   const out = runEntry(payload(root));
   assert.equal(out.status, 0);
-  assert.equal(strip(out.stdout), "v1.0 [██░] 83% · Phase 05.1 verifying");
+  assert.equal(strip(out.stdout), "gsd-proj │ v1.0 [██░] 83% · Phase 05.1 verifying");
 });
 
 test("entry point: a .planning this parser cannot read falls through, it does not guess", () => {
@@ -271,7 +261,7 @@ test("entry point: an SDD plan in flight renders the sdd segment", () => {
   write(join(root, ".ultrapowers", "sdd", "2026-07-28-current", "progress.md"), LEDGER);
   const out = runEntry(payload(root));
   assert.equal(out.status, 0);
-  assert.equal(strip(out.stdout), "2026-07-28-planning-tree ✔3 →4");
+  assert.equal(strip(out.stdout), "sdd-proj │ 2026-07-28-planning-tree ✔3 →4");
 });
 
 test("entry point: the most recently written ledger wins, not the last name", () => {
@@ -281,7 +271,7 @@ test("entry point: the most recently written ledger wins, not the last name", ()
   const live = write(join(root, ".ultrapowers", "sdd", "2026-07-28-aaa-first-by-name", "progress.md"), LEDGER);
   utimesSync(stale, 1_000_000, 1_000_000);
   utimesSync(live, 2_000_000, 2_000_000);
-  assert.equal(strip(runEntry(payload(root)).stdout), "2026-07-28-planning-tree ✔3 →4");
+  assert.equal(strip(runEntry(payload(root)).stdout), "sdd-mtime │ 2026-07-28-planning-tree ✔3 →4");
 });
 
 test("entry point: an .ultrapowers/sdd with no ledger falls through", () => {
@@ -293,13 +283,14 @@ test("entry point: an .ultrapowers/sdd with no ledger falls through", () => {
   assert.ok(strip(out.stdout).startsWith("sdd-empty"));
 });
 
-test("entry point: gsd wins over sdd when a project has both", () => {
+test("entry point: gsd and up both render when a project has both", () => {
   const root = dir("both-proj");
   write(join(root, ".planning", "config.json"), "{}");
   write(join(root, ".planning", "STATE.md"), GSD_STATE);
   write(join(root, ".ultrapowers", "sdd", "2026-07-28-x", "progress.md"), LEDGER);
   const out = runEntry(payload(root));
-  assert.equal(strip(out.stdout), "v1.0 [██░] 83% · Phase 05.1 verifying");
+  assert.equal(strip(out.stdout),
+    "both-proj │ v1.0 [██░] 83% · Phase 05.1 verifying │ 2026-07-28-planning-tree ✔3 →4");
 });
 
 test("entry point: a workspace directory that does not exist still renders", () => {
@@ -307,15 +298,6 @@ test("entry point: a workspace directory that does not exist still renders", () 
   assert.equal(out.status, 0);
   assert.equal(out.stderr, "");
   assert.equal(strip(out.stdout), "exist");
-});
-
-test("entry point: a real repository renders its branch", () => {
-  const root = dir("git-proj");
-  const init = spawnSync("git", ["-C", root, "init", "-b", "fixture"], { encoding: "utf8" });
-  assert.equal(init.status, 0, init.stderr);
-  const out = runEntry(payload(root));
-  assert.equal(out.status, 0);
-  assert.equal(strip(out.stdout), "git-proj fixture✓");
 });
 
 test("entry point: the same input renders the same line twice", () => {

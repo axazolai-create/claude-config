@@ -4,7 +4,6 @@
 // nothing to wrap, so this renders the whole line itself. Any error yields empty output - the
 // statusline never breaks the prompt.
 import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -23,31 +22,6 @@ export function renderUpdates(names) {
   return YELLOW(`⬆ ${shown.join(" ")}${rest > 0 ? ` +${rest}` : ""}`);
 }
 
-export function renderGit(porcelain) {
-  const lines = String(porcelain ?? "").split("\n");
-  const head = lines[0] ?? "";
-  if (/^## HEAD \(no branch\)/.test(head)) return "(detached)";
-  const named = /^## (?:No commits yet on )?([^.\s]+)/.exec(head);
-  if (!named) return "";
-  const ahead = /\bahead (\d+)/.exec(head);
-  const behind = /\bbehind (\d+)/.exec(head);
-  let staged = 0, modified = 0, untracked = 0;
-  for (const l of lines.slice(1)) {
-    if (!l) continue;
-    if (l.startsWith("??")) { untracked += 1; continue; }
-    if (l[0] && l[0] !== " ") staged += 1;
-    if (l[1] && l[1] !== " ") modified += 1;
-  }
-  const parts = [
-    staged ? `+${staged}` : "",
-    modified ? `~${modified}` : "",
-    untracked ? `?${untracked}` : "",
-    ahead ? `↑${ahead[1]}` : "",
-    behind ? `↓${behind[1]}` : "",
-  ].join("");
-  return `${named[1]}${parts || "✓"}`;
-}
-
 export function renderGsd({ milestone, phase, status, percent } = {}) {
   const n = Number(percent);
   const pct = percent == null || percent === "" || Number.isNaN(n) ? null : Math.max(0, Math.min(100, n));
@@ -64,8 +38,10 @@ export function renderSdd({ plan, complete, next } = {}) {
   return `${plan} ✔${complete} →${next}`;
 }
 
-export function render({ updates, context, state } = {}) {
-  return [renderUpdates(updates), context, state].filter(Boolean).join(DIM(" │ "));
+export function render({ updates, model, context, project, gsd, up } = {}) {
+  return [renderUpdates(updates), model, context, project, gsd, up]
+    .filter(Boolean)
+    .join(DIM(" │ "));
 }
 
 // Frontmatter or bold-markdown scalar, e.g. `milestone: v1.0` / `**Status**: executing`.
@@ -92,8 +68,8 @@ function gsdState(root) {
   // gsd-core writes active_phase while an orchestrator is in flight and current_phase otherwise;
   // a hand-kept STATE.md may just say phase.
   const phase = field(text, "active_phase") || field(text, "current_phase") || field(text, "phase");
-  // A .planning/ this parser cannot read is not an error - it falls through to the plain
-  // project+branch segment, which is always true. Guessing a phase would not be.
+  // A .planning/ this parser cannot read is not an error - the gsd segment just stays absent,
+  // and the project segment renders regardless. Guessing a phase would not be.
   if (!milestone || !phase) return null;
   return renderGsd({ milestone, phase, status: field(text, "status") || "", percent: gsdPercent(text) });
 }
@@ -119,25 +95,19 @@ function sddState(root) {
   return renderSdd({ plan: plan ? basename(plan.trim(), ".md") : name, complete: done.size, next });
 }
 
-function plainState(root) {
-  const branch = safe(() => renderGit(execFileSync("git", ["-C", root, "status", "--porcelain=v1", "-b"], {
-    encoding: "utf8",
-    timeout: 1500,
-    stdio: ["ignore", "pipe", "ignore"],
-  })), "");
-  return [basename(root), branch].filter(Boolean).join(" ");
-}
-
 function main(raw) {
   const data = safe(() => JSON.parse(raw || "{}"), {}) || {};
-  const workspace = data.workspace || {};
-  const root = resolve(workspace.current_dir || workspace.project_dir || process.cwd());
+  const ws = data.workspace || {};
+  const root = resolve(ws.current_dir || ws.project_dir || process.cwd());
   const state = safe(() => JSON.parse(readFileSync(join(CLAUDE_DIR, "state", "component-updates.json"), "utf8")), null);
-  const context = safe(() => computeContext(data), "") || "";
-  // Each source is guarded on its own so a broken one degrades to the next rather than
-  // costing the whole line.
-  const detail = safe(() => gsdState(root)) || safe(() => sddState(root)) || safe(() => plainState(root), "");
-  process.stdout.write(render({ updates: pendingNames(state), context, state: detail }));
+  process.stdout.write(render({
+    updates: pendingNames(state),
+    model: (data.model && data.model.display_name) || "",
+    context: safe(() => computeContext(data), "") || "",
+    project: basename(root),
+    gsd: safe(() => gsdState(root)) || "",
+    up: safe(() => sddState(root)) || "",
+  }));
 }
 
 function isMainModule() {
