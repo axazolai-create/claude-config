@@ -36,19 +36,19 @@ export function renderGsd({ milestone, phase, status, percent } = {}) {
 
 export function renderSdd({ plan, complete, next } = {}) {
   if (!plan) return "";
-  return `${plan} ✔${Number(complete) || 0} →${Number(next) || 1}`;
+  return `${plan} (${Number(complete) || 0}) next ${Number(next) || 1}`;
 }
 
 export function renderPhase({ id, done, total, dropped, status } = {}) {
   if (!id) return "";
   // fmField yields null for an absent key and Number(null) is a finite 0, which would render a
-  // ✔0/0 tally for a phase that simply has no plan yet. == null catches undefined too.
+  // (0/0) tally for a phase that simply has no plan yet. == null catches undefined too.
   const t = total == null ? NaN : Number(total);
   const d = done == null ? NaN : Number(done);
   const effective = Number.isFinite(t) ? t - (Number(dropped) || 0) : null;
   // No percentage, ever: a phase that retires a task states its tally in fields and its reason in
   // prose, so any derived percentage under-reports a phase that is in fact finished.
-  const tally = effective != null && Number.isFinite(d) ? ` ✔${d}/${effective}` : "";
+  const tally = effective != null && Number.isFinite(d) ? ` (${d}/${effective})` : "";
   return `${id}${tally}${status ? ` ${status}` : ""}`;
 }
 
