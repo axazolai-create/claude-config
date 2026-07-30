@@ -154,10 +154,11 @@ const EMPTY_CLAUDE_DIR = dir("claude-empty");
 const GSD_CLAUDE_DIR = dir("claude-gsd-core");
 write(join(GSD_CLAUDE_DIR, "gsd-core", "VERSION"), "1.8.0\n");
 
-function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR } = {}) {
+function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR, env: extraEnv = {} } = {}) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: claudeDir };
   delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
   delete env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE;
+  Object.assign(env, extraEnv);
   return spawnSync(process.execPath, [ENTRY], { input, encoding: "utf8", env, cwd: TMP });
 }
 
@@ -277,6 +278,19 @@ test("entry point: the context segment falls back to the estimate without curren
   const out = runEntry(payload(dir("plain-ctx-est"), { context_window: { total_tokens: 200000, used_percentage: 10 } }));
   assert.equal(out.status, 0);
   assert.ok(strip(out.stdout).startsWith("20.0K/200K 10% │ "), `got: ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: CLAUDE_CODE_AUTO_COMPACT_WINDOW narrows the icon ladder, not the colour ladder", () => {
+  const root = dir("plain-window-narrow");
+  const out = runEntry(payload(root, {
+    context_window: { context_window_size: 1000000, used_percentage: 32 },
+  }), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "600000" } });
+  assert.equal(out.status, 0);
+  // colour: 32% of the full 1M window is the green band - windowPct is never narrowed.
+  assert.match(out.stdout, /\x1b\[32m320\.0K\/1M 32%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
+  // icon: 320K of a 600K capacity is 53% of the way to compaction - past the 💡 floor.
+  // Asserting both, on the same render, fails if colour and icon ever collapse onto one number.
+  assert.match(strip(out.stdout), /320\.0K\/1M 32% 💡/, `icon: got ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: no context_window means no context segment, not a broken one", () => {
