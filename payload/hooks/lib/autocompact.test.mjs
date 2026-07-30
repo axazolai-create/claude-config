@@ -97,7 +97,7 @@ test("observationFrom: nothing usable yields null", () => {
 
 test("promotePending: an unkeyed record becomes a keyed one and the pending clears", () => {
   const state = { pending: { tokens: 835000, model: "claude-opus-5", at: "2026-07-30T18:00:00Z" } };
-  const { next, changed } = promotePending(state, { modelId: "claude-opus-5[1m]", windowSize: 1_000_000, now: new Date("2026-07-30T18:00:01Z").getTime() });
+  const { next, changed } = promotePending(state, { modelId: "claude-opus-5[1m]", windowSize: 1_000_000 });
   assert.equal(changed, true);
   assert.equal(next.pending, undefined);
   assert.equal(next.models["claude-opus-5[1m]"].tokens, 835000);
@@ -107,7 +107,7 @@ test("promotePending: an unkeyed record becomes a keyed one and the pending clea
 test("promotePending: a figure bigger than this window is discarded, not promoted", () => {
   const state = { pending: { tokens: 835000, model: "claude-opus-5", at: "2026-07-30T18:00:00Z" },
     models: { "claude-sonnet-5": { tokens: 100000, windowSize: 200000 } } };
-  const { next, changed } = promotePending(state, { modelId: "claude-opus-5", windowSize: 200000, now: new Date("2026-07-30T18:00:01Z").getTime() });
+  const { next, changed } = promotePending(state, { modelId: "claude-opus-5", windowSize: 200000 });
   assert.equal(changed, true);
   assert.equal(next.pending, undefined);
   // Discarded, not wiped: an unrelated model's entry must survive the clamp branch.
@@ -116,7 +116,7 @@ test("promotePending: a figure bigger than this window is discarded, not promote
 
 test("promotePending: an observation from a different model is not promoted, pending survives", () => {
   const state = { pending: { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" } };
-  const { next, changed } = promotePending(state, { modelId: "claude-opus-5[1m]", windowSize: 1_000_000, now: new Date("2026-07-30T18:00:01Z").getTime() });
+  const { next, changed } = promotePending(state, { modelId: "claude-opus-5[1m]", windowSize: 1_000_000 });
   assert.equal(changed, false);
   assert.deepEqual(next.pending, { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" });
   assert.equal(next.models, undefined);
@@ -133,25 +133,6 @@ test("promotePending: a variant suffix or a date suffix does not block promotion
     { modelId: "claude-opus-5", windowSize: 200000 });
   assert.equal(dated.changed, true);
   assert.equal(dated.next.models["claude-opus-5"].tokens, 150000);
-});
-
-test("promotePending: an over-age pending record is discarded, not promoted", () => {
-  const state = { pending: { tokens: 500000, model: "claude-opus-5", at: "2026-07-30T00:00:00Z" } };
-  const justPastCutoff = new Date("2026-07-30T06:00:01Z").getTime();
-  const { next, changed } = promotePending(state,
-    { modelId: "claude-opus-5", windowSize: 1_000_000, now: justPastCutoff });
-  assert.equal(changed, true);
-  assert.equal(next.pending, undefined);
-  assert.equal(next.models, undefined);
-});
-
-test("promotePending: a record just under the age cutoff is still promoted", () => {
-  const state = { pending: { tokens: 500000, model: "claude-opus-5", at: "2026-07-30T00:00:00Z" } };
-  const justUnderCutoff = new Date("2026-07-30T05:59:59Z").getTime();
-  const { next, changed } = promotePending(state,
-    { modelId: "claude-opus-5", windowSize: 1_000_000, now: justUnderCutoff });
-  assert.equal(changed, true);
-  assert.equal(next.models["claude-opus-5"].tokens, 500000);
 });
 
 test("promotePending: does not mutate the caller's original state object", () => {

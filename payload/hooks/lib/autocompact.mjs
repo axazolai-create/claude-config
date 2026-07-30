@@ -32,25 +32,17 @@ export function observationFrom(records) {
   return null;
 }
 
-// Long enough that a lunch-break or a meeting doesn't strand a legitimate claim; short enough
-// that a record nobody claimed the same day doesn't outlive its session indefinitely.
-const PENDING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
-
 function baseModelId(id) {
   return String(id || "").replace(/-\d{8}$/, "").replace(/\[[^\]]*\]$/, "");
 }
 
 export function promotePending(state, arg) {
-  const { modelId, windowSize, now = Date.now() } = arg || {};
+  const { modelId, windowSize } = arg || {};
   const p = state && state.pending;
   if (!p || !Number.isFinite(Number(p.tokens))) return { next: state || {}, changed: false };
-  const at = Date.parse(p.at);
-  const overAge = Number.isFinite(at) && now - at > PENDING_MAX_AGE_MS;
-  // A stale record still gets purged even for the "wrong" model - it's orphaned either way.
-  if (!overAge && baseModelId(p.model) !== baseModelId(modelId)) return { next: state, changed: false };
+  if (baseModelId(p.model) !== baseModelId(modelId)) return { next: state, changed: false };
   const next = { ...state };
   delete next.pending;
-  if (overAge) return { next, changed: true };
   const w = Number(windowSize);
   if (Number.isFinite(w) && w > 0 && Number(p.tokens) <= w) {
     next.models = { ...(next.models || {}),

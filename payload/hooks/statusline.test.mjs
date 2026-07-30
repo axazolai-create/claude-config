@@ -633,7 +633,7 @@ test("entry point: a pending observation is promoted and cleared", () => {
   const claudeDir = dir("claude-promote");
   const statePath = join(claudeDir, "state", "autocompact.json");
   write(statePath, JSON.stringify({
-    pending: { tokens: 400000, model: "claude-opus-5", at: new Date().toISOString() },
+    pending: { tokens: 400000, model: "claude-opus-5", at: "2026-07-30T18:00:00Z" },
   }));
   const out = runEntry(payload(dir("proj-promote"), {
     model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
@@ -650,9 +650,8 @@ test("entry point: a pending observation is promoted and cleared", () => {
 test("entry point: a pending observation from another model does not get claimed by this render", () => {
   const claudeDir = dir("claude-cross-model");
   const statePath = join(claudeDir, "state", "autocompact.json");
-  const atTime = new Date().toISOString();
   write(statePath, JSON.stringify({
-    pending: { tokens: 180000, model: "claude-sonnet-5", at: atTime },
+    pending: { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" },
   }));
   const out = runEntry(payload(dir("proj-cross-model"), {
     model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
@@ -662,7 +661,7 @@ test("entry point: a pending observation from another model does not get claimed
   }), { claudeDir });
   assert.equal(out.status, 0);
   const after = JSON.parse(readFileSync(statePath, "utf8"));
-  assert.deepEqual(after.pending, { tokens: 180000, model: "claude-sonnet-5", at: atTime });
+  assert.deepEqual(after.pending, { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" });
   assert.equal(after.models, undefined);
   assert.equal(out.stdout.includes("💀"), false, `unexpected skull: ${JSON.stringify(out.stdout)}`);
 });
