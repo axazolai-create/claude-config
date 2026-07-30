@@ -363,6 +363,7 @@ Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/
       leanmode-full-rule.md              # текст правила: full
       leanmode-ultra-rule.md             # текст правила: ultra (расширяет full)
       mark-initstack-done.mjs            # зовётся из /init-stack; ставит initStackRun в project-init.json
+    precompact-observe.mjs               # PreCompact — записывает, где реально сработала автокомпакция
   agents/
     leanmode-executor.md                 # саб-агент для явного per-task lean-опта (см. ниже)
   commands/
@@ -861,7 +862,14 @@ README (источник истины — сами `rules-src/*.md` и их `REA
   1. **ожидающие обновления компонентов**, по **имени** (`⬆ context-mode graphify`), крайние
      слева — не счётчик и не справа, как было у удалённой обёртки;
   2. **модель** — `data.model.display_name` из payload statusLine;
-  3. **контекст** — токены **и** процент, например `165.6K/1M 17%`;
+  3. **контекст** — токены и процент, например `165.6K/1M 17%`, раскрашенные и помеченные по
+     двум разным лесенкам: **цвет** — по проценту окна модели (15/45/70/85/95% → серый/зелёный/
+     жёлтый/оранжевый/красный/ярко-красный), **иконка** — по проценту продвижения к автокомпакции
+     (45/70/85/95% → 💡/⚠️/🔥/💀). Точка автокомпакции резолвится в таком порядке:
+     `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` → наблюдение хука `precompact-observe.mjs` для текущей
+     модели (`~/.claude/state/autocompact.json`) → окно целиком. Дефолт — именно полное окно, не
+     угаданный резерв: прежняя обёртка над gsd-core именно так и угадывала (16.5%) и месяцами
+     расходилась с `/context`;
   4. **проект** — только имя папки, без ветки git;
   5. **статус работы GSD** — только когда gsd-core установлен **и** активен в этом проекте
      (`<claudeDir>/gsd-core/VERSION` существует **и** `<root>/.planning/config.json` существует);
