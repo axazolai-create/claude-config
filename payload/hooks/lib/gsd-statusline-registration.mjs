@@ -23,7 +23,14 @@ export function ensureStatuslineOverride({ claudeDir }) {
   const currentCmd = parsed.statusLine && parsed.statusLine.command;
   const isOurs = typeof currentCmd === "string"
     && (currentCmd.includes("hooks/statusline.mjs") || currentCmd.includes("gsd-context-meter"));
-  if (isOurs) return { changed: false, reason: "already set" };
+  if (isOurs) {
+    if (currentCmd === wanted) return { changed: false, reason: "already set" };
+    // Recognising the retired wrapper only to refuse would leave the command naming a deleted file,
+    // and this function's caller is typically run BECAUSE the statusline went blank.
+    parsed.statusLine = { type: "command", command: wanted };
+    writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + "\n");
+    return { changed: true, reason: `migrated from ${currentCmd}` };
+  }
 
   const isGsdCoreDefault = typeof currentCmd === "string" && currentCmd.includes("gsd-statusline.js");
   if (currentCmd && !isGsdCoreDefault)
