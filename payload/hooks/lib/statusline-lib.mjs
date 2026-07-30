@@ -25,10 +25,10 @@ export function formatContextWindow(n) {
  * session and after /compact, so either half may be missing and the segment degrades to
  * whichever survives.
  */
-export function computeContext(data) {
+export function contextMetrics(data) {
   const cw = data && data.context_window;
-  if (!cw) return "";
-  const total = cw.context_window_size ?? cw.total_tokens ?? 1_000_000;
+  if (!cw) return null;
+  const windowSize = cw.context_window_size ?? cw.total_tokens ?? 1_000_000;
   const u = cw.current_usage;
   let used = null;
   if (u && typeof u === "object") {
@@ -37,8 +37,13 @@ export function computeContext(data) {
     if (sum > 0) used = sum;
   }
   const pct = cw.used_percentage;
-  if (used == null && pct == null) return "";
-  const tokens = used != null ? used : (total * pct) / 100;
-  return `${formatCurrentTokens(tokens)}/${formatContextWindow(total)}` +
-    (pct == null ? "" : ` ${Math.round(pct)}%`);
+  if (used == null && pct == null) return null;
+  return { windowSize, tokens: used != null ? used : (windowSize * pct) / 100, pct };
+}
+
+export function computeContext(data) {
+  const m = contextMetrics(data);
+  if (!m) return "";
+  return `${formatCurrentTokens(m.tokens)}/${formatContextWindow(m.windowSize)}` +
+    (m.pct == null ? "" : ` ${Math.round(m.pct)}%`);
 }

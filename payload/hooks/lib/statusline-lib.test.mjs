@@ -1,7 +1,7 @@
 // payload/hooks/lib/statusline-lib.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrentTokens, formatContextWindow, computeContext } from "./statusline-lib.mjs";
+import { formatCurrentTokens, formatContextWindow, computeContext, contextMetrics } from "./statusline-lib.mjs";
 
 test("formatCurrentTokens: thousands with one decimal digit", () => {
   assert.equal(formatCurrentTokens(123400), "123.4K");
@@ -54,4 +54,26 @@ test("computeContext: the autocompact env var no longer changes anything", () =>
   process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = "500000";
   try { assert.equal(computeContext(data), before); }
   finally { delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; }
+});
+
+test("contextMetrics: the numbers behind the segment", () => {
+  const m = contextMetrics({ context_window: { context_window_size: 200000, used_percentage: 22,
+    current_usage: { input_tokens: 40000, cache_creation_input_tokens: 1000,
+      cache_read_input_tokens: 2000, output_tokens: 500 } } });
+  assert.equal(m.windowSize, 200000);
+  assert.equal(m.tokens, 43500);
+  assert.equal(m.pct, 22);
+});
+
+test("contextMetrics: estimates tokens from the percentage when current_usage is absent", () => {
+  const m = contextMetrics({ context_window: { total_tokens: 200000, used_percentage: 10 } });
+  assert.equal(m.windowSize, 200000);
+  assert.equal(m.tokens, 20000);
+});
+
+test("contextMetrics: null exactly where computeContext returns empty", () => {
+  assert.equal(contextMetrics({}), null);
+  assert.equal(computeContext({}), "");
+  assert.equal(contextMetrics({ context_window: {} }), null);
+  assert.equal(computeContext({ context_window: {} }), "");
 });
