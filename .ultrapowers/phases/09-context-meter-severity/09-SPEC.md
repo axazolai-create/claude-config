@@ -83,8 +83,22 @@ the same technique `token-usage-log.mjs` already uses, over the same helpers
 (`hooks/lib/token-usage-shared.mjs` exports `safe`, `readJSON`, `writeFile`,
 `readJSONLRecords`), so the hook introduces no new way of reading a transcript.
 
-The observation is stored per model id. A figure observed on a 1M session is meaningless on a
-200K one, and `model.id` is the one discriminator available at both ends.
+A figure observed on a 1M session is meaningless on a 200K one, so the observation has to be
+keyed by the window it was taken against. Neither end can do that alone: the hook knows the
+transcript's `message.model` (`claude-opus-5` — no window suffix) but not the window size,
+while the statusline knows both `model.id` (`claude-opus-5[1m]`) and `context_window_size`.
+Keying on the transcript's model id alone would collide exactly where the distinction
+matters, because the 200K and 1M variants of a model share it.
+
+So the write is split. The hook records an **unkeyed pending observation** —
+`{ tokens, model, at }`. The statusline promotes it on its next render, when it knows both
+the id and the window, into `models[<model.id>]` and clears `pending`. A pending figure
+larger than the current window is discarded rather than promoted; it came from a bigger
+window and says nothing about this one.
+
+This costs one write per compaction, not one per render. The statusline writes only when a
+pending observation is actually waiting, which is the render immediately after an automatic
+compaction and no other.
 
 Resolution order, highest first:
 
@@ -133,13 +147,20 @@ which is the whole point of the file:
 
 | unit | what it does | depends on |
 |---|---|---|
-| `payload/hooks/lib/context-severity.mjs` | `severityOf(windowPct, acProgress)` → `{ colour, icon }`. Pure; numbers in, two strings out. | nothing |
-| `payload/hooks/lib/autocompact.mjs` | resolves the autocompact point from env, observation, or the window | nothing (state is passed in) |
-| `payload/hooks/precompact-observe.mjs` | on `PreCompact` with `trigger === "auto"`, sums the transcript's last usage and records it per model id | `token-usage-shared.mjs` |
+| `payload/hooks/lib/context-severity.mjs` | `severityOf({ windowPct, acProgress })` → `{ colour, icon }`. Pure; numbers in, two strings out. | nothing |
+| `payload/hooks/lib/autocompact.mjs` | `resolveAutocompact()` picks the point from env, observation or window; `observationFrom()` reads a transcript's last assistant usage; `promotePending()` turns the unkeyed record into a keyed one; `autoCompactEnabledFrom()` reads the flag out of a settings object. All pure — every caller does its own I/O. | nothing |
+| `payload/hooks/precompact-observe.mjs` | on `PreCompact` with `trigger === "auto"`, sums the transcript's last assistant `usage` and writes it as a pending observation | `token-usage-shared.mjs` |
 
-`computeContext` in `statusline-lib.mjs` gains a second argument (the resolved autocompact
-point) and returns a coloured string with the icon appended, instead of a bare one. Its
-existing contract — return `""` when there is nothing to show — is unchanged.
+`computeContext` in `statusline-lib.mjs` keeps its signature and keeps returning plain text.
+Colouring it in place would break the three existing unit tests that assert its exact string,
+and would fuse two jobs — formatting a figure, and judging it — into one function. Instead the
+parse it already performs is exposed as `contextMetrics(data)` → `{ windowSize, tokens, pct }`,
+`computeContext` becomes a thin consumer of it, and the renderer paints the result. Severity
+and text then read the same numbers from one parse.
+
+The painting itself lives in `statusline.mjs` beside the other segment renderers, as
+`paintContext(text, { colour, icon })`. The icon sits outside the colour escape because the
+emoji ignore it anyway.
 
 Nothing is written to `~/.claude` by hand: all three files ship in `payload/` and reach the
 machine through `setup.mjs`, per the project rule that this repository is the source of an
