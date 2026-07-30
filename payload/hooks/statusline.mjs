@@ -23,6 +23,7 @@ export function renderUpdates(names) {
 }
 
 export function renderGsd({ milestone, phase, status, percent } = {}) {
+  if (!milestone) return "";
   const n = Number(percent);
   const pct = percent == null || percent === "" || Number.isNaN(n) ? null : Math.max(0, Math.min(100, n));
   // Three cells are too coarse for a linear map: a full bar is reserved for an actually
@@ -35,7 +36,8 @@ export function renderGsd({ milestone, phase, status, percent } = {}) {
 }
 
 export function renderSdd({ plan, complete, next } = {}) {
-  return `${plan} ✔${complete} →${next}`;
+  if (!plan) return "";
+  return `${plan} ✔${Number(complete) || 0} →${Number(next) || 1}`;
 }
 
 export function renderPhase({ id, done, total, dropped, status } = {}) {
@@ -203,13 +205,23 @@ if (isMainModule()) {
   let input = "";
   let done = false;
   // No process.exit(): on Windows a pipe write is async, and exiting on the spot can truncate
-  // the line we just wrote. Nothing else holds the loop open, so the process ends on its own.
+  // the line we just wrote. Nothing else holds the loop open once stdin is released below, so
+  // the process ends on its own.
   const finish = () => {
     if (done) return;
     done = true;
+    clearTimeout(guard);
     try { main(input); } catch { /* never break the prompt */ }
     process.exitCode = 0;
+    // Rendering alone does not end the process: the `data` listener below keeps the readable
+    // flowing, so stdin that never closes would hold the event loop open forever after the line
+    // was already printed. Releasing the handle is what lets the loop drain.
+    try { process.stdin.pause(); process.stdin.destroy(); } catch { /* already gone */ }
   };
+  // A statusLine command whose stdin never closes would otherwise hang forever and leave the
+  // prompt with no line at all; rendering what arrived beats rendering nothing.
+  const guard = setTimeout(finish, Number(process.env.CLAUDE_STATUSLINE_STDIN_MS) || 1500);
+  guard.unref();
   if (process.stdin.isTTY) finish();
   else {
     process.stdin.setEncoding("utf8");

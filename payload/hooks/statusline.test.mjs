@@ -1,7 +1,7 @@
 // payload/hooks/statusline.test.mjs
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
@@ -126,6 +126,13 @@ test("the pure renderers never throw on absent or malformed input", () => {
   assert.doesNotThrow(() => renderGsd());
   assert.doesNotThrow(() => renderSdd());
   assert.doesNotThrow(() => render());
+});
+
+test("the pure renderers never interpolate undefined", () => {
+  assert.equal(renderGsd(), "");
+  assert.equal(renderSdd(), "");
+  assert.doesNotMatch(renderSdd({ plan: "p" }), /undefined/);
+  assert.doesNotMatch(renderGsd({ milestone: "v1" }), /undefined/);
 });
 
 const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "statusline.mjs");
@@ -506,4 +513,22 @@ test("entry point: lite suppresses the ultrapowers segment, base keeps it", () =
 
   const noManifest = runEntry(payload(root), { claudeDir: claudeDirWithProfile("cd-nomanifest") });
   assert.match(strip(noManifest.stdout), /my-plan/, "an absent manifest must fail open");
+});
+
+// child.stdin is deliberately never end()ed - that is the condition under test. spawnSync's
+// input option closes stdin for the caller, so it cannot reproduce a hang; only spawn can.
+test("entry point: stdin that never closes still renders and exits", async () => {
+  const root = dir("hang-guard");
+  const child = spawn(process.execPath, [ENTRY], {
+    env: { ...process.env, CLAUDE_CONFIG_DIR: EMPTY_CLAUDE_DIR, CLAUDE_STATUSLINE_STDIN_MS: "50" },
+    cwd: TMP,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  child.stdin.write(payload(root));
+  let out = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (c) => { out += c; });
+  const code = await new Promise((resolve) => child.on("close", resolve));
+  assert.equal(code, 0);
+  assert.ok(strip(out).includes("hang-guard"), `got: ${JSON.stringify(out)}`);
 });
