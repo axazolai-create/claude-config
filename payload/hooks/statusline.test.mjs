@@ -616,6 +616,19 @@ test("entry point: an observed autocompact point makes the icon lead the colour"
   assert.ok(out.stdout.includes("💡"), `expected the lamp: ${JSON.stringify(out.stdout)}`);
 });
 
+test("entry point: a default-configuration render never shows an icon while the colour disagrees", () => {
+  const out = runEntry(payload(dir("proj-collapse"), {
+    context_window: { context_window_size: 1000000, used_percentage: 44,
+      current_usage: { input_tokens: 452000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir: dir("claude-collapse") });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[32m"), `expected green: ${JSON.stringify(out.stdout)}`);
+  for (const icon of ["💡", "⚠️", "🔥", "💀"]) {
+    assert.equal(out.stdout.includes(icon), false, `unexpected ${icon}: ${JSON.stringify(out.stdout)}`);
+  }
+});
+
 test("entry point: a pending observation is promoted and cleared", () => {
   const claudeDir = dir("claude-promote");
   const statePath = join(claudeDir, "state", "autocompact.json");
@@ -632,4 +645,23 @@ test("entry point: a pending observation is promoted and cleared", () => {
   const after = JSON.parse(readFileSync(statePath, "utf8"));
   assert.equal(after.pending, undefined);
   assert.equal(after.models["claude-opus-5[1m]"].tokens, 400000);
+});
+
+test("entry point: a pending observation from another model does not get claimed by this render", () => {
+  const claudeDir = dir("claude-cross-model");
+  const statePath = join(claudeDir, "state", "autocompact.json");
+  write(statePath, JSON.stringify({
+    pending: { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" },
+  }));
+  const out = runEntry(payload(dir("proj-cross-model"), {
+    model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
+    context_window: { context_window_size: 1000000, used_percentage: 17.5,
+      current_usage: { input_tokens: 175000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  const after = JSON.parse(readFileSync(statePath, "utf8"));
+  assert.deepEqual(after.pending, { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" });
+  assert.equal(after.models, undefined);
+  assert.equal(out.stdout.includes("💀"), false, `unexpected skull: ${JSON.stringify(out.stdout)}`);
 });
