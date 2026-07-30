@@ -188,19 +188,19 @@ test("entry point: pending components are named first, in registry order", () =>
 test("entry point: the context segment shows the real current_usage sum", () => {
   const out = runEntry(payload(dir("plain-ctx"), {
     context_window: {
-      remaining_percentage: 72.3,
-      total_tokens: 200000,
+      context_window_size: 200000,
+      used_percentage: 22,
       current_usage: { input_tokens: 40000, cache_creation_input_tokens: 1000, cache_read_input_tokens: 2000, output_tokens: 500 },
     },
   }));
   assert.equal(out.status, 0);
-  assert.ok(strip(out.stdout).startsWith("43.5K/200K 33.2% │ "), `got: ${JSON.stringify(out.stdout)}`);
+  assert.ok(strip(out.stdout).startsWith("43.5K/200K 22% │ "), `got: ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: the context segment falls back to the estimate without current_usage", () => {
-  const out = runEntry(payload(dir("plain-ctx-est"), { context_window: { remaining_percentage: 40 } }));
+  const out = runEntry(payload(dir("plain-ctx-est"), { context_window: { total_tokens: 200000, used_percentage: 10 } }));
   assert.equal(out.status, 0);
-  assert.ok(strip(out.stdout).startsWith("718.6K/1M 71.9% │ "), `got: ${JSON.stringify(out.stdout)}`);
+  assert.ok(strip(out.stdout).startsWith("20.0K/200K 10% │ "), `got: ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: no context_window means no context segment, not a broken one", () => {

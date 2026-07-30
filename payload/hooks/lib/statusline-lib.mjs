@@ -1,9 +1,6 @@
 // payload/hooks/lib/statusline-lib.mjs
-// Profile-neutral statusline logic: token/window formatting and the updates-pending
-// segment, used by both gsd-context-meter.mjs (full) and the base/lite renderer.
-// computeUsedTokenMetrics deliberately duplicates ~/.claude/hooks/gsd-statusline.js's own
-// buffer-normalization math rather than importing gsd-core internals - that file is
-// gsd-core-managed and versioned, its internals aren't a stable import surface.
+// Profile-neutral statusline logic: token/window formatting and the context segment,
+// shared by every profile's renderer (payload/hooks/statusline.mjs).
 
 /** e.g. 123400 -> "123.4K" (thousands, always one decimal digit) */
 export function formatCurrentTokens(n) {
@@ -18,57 +15,30 @@ export function formatContextWindow(n) {
 }
 
 /**
- * Mirrors gsd-statusline.js's context-window bar math: normalizes `remaining_percentage`
- * against Claude Code's autocompact buffer (16.5% default, or derived from
- * CLAUDE_CODE_AUTO_COMPACT_WINDOW when set) to get the same `used` percentage the
- * original bar displays. `used` is returned unrounded so the caller can render
- * one-decimal precision.
+ * The whole context segment, e.g. "165.6K/1M 17%".
  *
- * `usedTokens` is a SEPARATE figure, deliberately not derived from `used` * `totalCtx`:
- * `used` is scaled against the buffer-reduced *usable* window, so multiplying it back
- * against the full `totalCtx` inflates the count (confirmed live: 227.5K/22.8% shown
- * vs the real 190K for the same render). The actual used-token count is the plain sum
- * of `context_window.current_usage` fields - identical to what gsd-statusline.js's own
- * `contextTokenSuffix()` reports - so ours matches the native suffix instead of
- * disagreeing with it. `null` when `current_usage` is absent/empty; the caller
- * (`rewriteContextBar`) falls back to the old percentage-derived estimate in that case.
+ * The window size is `context_window_size`; `total_tokens` is a fallback only because this
+ * bundle read that name for months and no captured payload existed to contradict it.
+ *
+ * The token figure is the plain sum of `current_usage`, and the percentage is the payload's
+ * own `used_percentage` against the full window. Both are documented as null early in a
+ * session and after /compact, so either half may be missing and the segment degrades to
+ * whichever survives.
  */
-export function computeUsedTokenMetrics(data) {
-  const remaining = data && data.context_window && data.context_window.remaining_percentage;
-  if (remaining == null) return null;
-  const totalCtx = (data.context_window && data.context_window.total_tokens) || 1_000_000;
-  const acw = parseInt(process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW || "0", 10);
-  const AUTO_COMPACT_BUFFER_PCT = acw > 0
-    ? Math.min(100, Math.max(0, (1 - acw / totalCtx) * 100))
-    : 16.5;
-  const usableRemaining = Math.max(0, ((remaining - AUTO_COMPACT_BUFFER_PCT) / (100 - AUTO_COMPACT_BUFFER_PCT)) * 100);
-  const used = Math.max(0, Math.min(100, 100 - usableRemaining));
-
-  const currentUsage = data.context_window && data.context_window.current_usage;
-  let usedTokens = null;
-  if (currentUsage && typeof currentUsage === "object") {
-    const sum = (Number(currentUsage.input_tokens) || 0) +
-      (Number(currentUsage.cache_creation_input_tokens) || 0) +
-      (Number(currentUsage.cache_read_input_tokens) || 0) +
-      (Number(currentUsage.output_tokens) || 0);
-    if (sum > 0) usedTokens = sum;
+export function computeContext(data) {
+  const cw = data && data.context_window;
+  if (!cw) return "";
+  const total = cw.context_window_size ?? cw.total_tokens ?? 1_000_000;
+  const u = cw.current_usage;
+  let used = null;
+  if (u && typeof u === "object") {
+    const sum = (Number(u.input_tokens) || 0) + (Number(u.cache_creation_input_tokens) || 0) +
+      (Number(u.cache_read_input_tokens) || 0) + (Number(u.output_tokens) || 0);
+    if (sum > 0) used = sum;
   }
-
-  return { totalCtx, used, usedTokens };
-}
-
-/**
- * The token figure to display for a computeUsedTokenMetrics() result: the real `current_usage`
- * sum when the hook input carried one, else the `totalCtx * used%` estimate. Shared so the full
- * and base/lite statuslines cannot drift on which of the two they show.
- */
-export function usedTokensOf({ totalCtx, used, usedTokens }) {
-  return usedTokens != null ? usedTokens : (totalCtx * used) / 100;
-}
-
-/** Append a compact ` │ ⬆<count>` segment (yellow) before any trailing newline. */
-export function appendUpdatesSegment(text, count) {
-  if (typeof text !== "string" || !Number.isFinite(count) || count < 1) return text;
-  const seg = ` │ \x1b[33m⬆${count}\x1b[0m`;
-  return text.replace(/(\r?\n)?$/, (nl) => seg + (nl || ""));
+  const pct = cw.used_percentage;
+  if (used == null && pct == null) return "";
+  const tokens = used != null ? used : (total * pct) / 100;
+  return `${formatCurrentTokens(tokens)}/${formatContextWindow(total)}` +
+    (pct == null ? "" : ` ${Math.round(pct)}%`);
 }

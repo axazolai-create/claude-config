@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, usedTokensOf } from "./lib/statusline-lib.mjs";
+import { computeContext } from "./lib/statusline-lib.mjs";
 import { pendingNames } from "./lib/component-registry.mjs";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -133,10 +133,7 @@ function main(raw) {
   const workspace = data.workspace || {};
   const root = resolve(workspace.current_dir || workspace.project_dir || process.cwd());
   const state = safe(() => JSON.parse(readFileSync(join(CLAUDE_DIR, "state", "component-updates.json"), "utf8")), null);
-  const m = safe(() => computeUsedTokenMetrics(data), null);
-  const context = m
-    ? `${formatCurrentTokens(usedTokensOf(m))}/${formatContextWindow(m.totalCtx)} ${m.used.toFixed(1)}%`
-    : "";
+  const context = safe(() => computeContext(data), "") || "";
   // Each source is guarded on its own so a broken one degrades to the next rather than
   // costing the whole line.
   const detail = safe(() => gsdState(root)) || safe(() => sddState(root)) || safe(() => plainState(root), "");
