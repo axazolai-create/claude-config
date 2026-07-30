@@ -192,12 +192,16 @@ test("statusLine is the same renderer on every profile, and re-running is idempo
   assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
   const base = statusLine();
   assert.match(base.command, /hooks\/statusline\.mjs"$/);
+  assert.ok(existsSync(join(dir, "hooks/statusline.mjs")), "statusLine points at a file base does not install");
 
   assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
   assert.deepEqual(statusLine(), base, "a second base run changed its own entry");
 
   assert.equal(run(dir, ["--variant=lite", "--replace-all"]).status, 0);
   assert.match(statusLine().command, /hooks\/statusline\.mjs"$/);
+  // The literal production guarantee: a registered command must name a file the profile installs.
+  // The regex above only pins the string; on a profile switch the prune is what could invalidate it.
+  assert.ok(existsSync(join(dir, "hooks/statusline.mjs")), "statusLine points at a file lite does not install");
   rmSync(dir, { recursive: true, force: true });
 });
 

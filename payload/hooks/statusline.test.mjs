@@ -2,7 +2,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync, spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -161,6 +161,25 @@ function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR } = {}) {
 }
 
 const payload = (root, extra = {}) => JSON.stringify({ workspace: { current_dir: root }, ...extra });
+
+// Rendering without a subprocess is the reason the git segment was dropped, so it is a property of
+// the source and not of any one render: a reintroduced spawn would still pass every test below.
+// Method calls are excluded by the lookbehind - `.exec(` on a RegExp is all over this renderer.
+test("no subprocess: neither the entry point nor any lib it imports can spawn one", () => {
+  const seen = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const src = readFileSync(file, "utf8");
+    const where = basename(file);
+    assert.doesNotMatch(src, /child_process/, `${where} reaches for child_process`);
+    assert.doesNotMatch(src, /(?<![.\w])(?:spawn|spawnSync|exec|execSync|execFile|execFileSync)\s*\(/,
+      `${where} calls a subprocess`);
+    for (const m of src.matchAll(/from\s*["'](\.[^"']+)["']/g)) visit(join(dirname(file), m[1]));
+  };
+  visit(ENTRY);
+  assert.ok(seen.size > 1, `the import walk found no libs (${seen.size} file) - it proved nothing`);
+});
 
 test("entry point: the project segment is the directory name and nothing else", () => {
   const root = dir("proj-only");
@@ -505,6 +524,14 @@ const claudeDirWithProfile = (name, profile) => {
 test("installedProfile reads the manifest, and null when there is none", () => {
   assert.equal(installedProfile(claudeDirWithProfile("prof-lite", "lite")), "lite");
   assert.equal(installedProfile(claudeDirWithProfile("prof-none")), null);
+});
+
+// A machine installed by a pre-`profile` bundle carries `variant` only. Without the fallback a
+// legacy lite install resolves to null, fails open, and shows the segment lite exists to suppress.
+test("installedProfile falls back to a pre-profile manifest's variant key", () => {
+  const d = dir("prof-legacy");
+  write(join(d, "state", "bundle-manifest.json"), JSON.stringify({ variant: "lite" }));
+  assert.equal(installedProfile(d), "lite");
 });
 
 test("entry point: lite suppresses the ultrapowers segment, base keeps it", () => {
