@@ -4,7 +4,7 @@ status: running
 delivery: branch
 branch: feat/unified-statusline
 depends_on: []
-tasks_done: 2
+tasks_done: 3
 tasks_total: 8
 updated: 2026-07-30
 ---

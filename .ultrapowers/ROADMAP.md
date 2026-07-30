@@ -27,7 +27,7 @@ merged past phase 05 is still undeployed.
 | 05 versioning-and-changelog | complete | merged, deployed |
 | 06 design-records-and-stack-rules | complete | merged |
 | 07 gsd-core-detector-and-statusline | complete | merged, not deployed |
-| 08 unified-statusline | running | `feat/unified-statusline`, 2/8 tasks |
+| 08 unified-statusline | running | `feat/unified-statusline`, 3/8 tasks |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its
 probe commits and its rollback are both in `master`, and the phase still did not
