@@ -7,7 +7,8 @@ const pick = (table, value, fallback) => {
   return fallback;
 };
 
-export function severityOf({ windowPct, acProgress } = {}) {
+export function severityOf(input) {
+  const { windowPct, acProgress } = input ?? {};
   return {
     colour: pick(COLOURS, Number(windowPct), "2"),
     icon: pick(ICONS, Number(acProgress), ""),

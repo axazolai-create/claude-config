@@ -32,6 +32,7 @@ test("severityOf: the two scales are independent", () => {
 test("severityOf: junk degrades to grey and no icon, never throws", () => {
   assert.deepEqual(severityOf(), { colour: "2", icon: "" });
   assert.deepEqual(severityOf({}), { colour: "2", icon: "" });
+  assert.deepEqual(severityOf(null), { colour: "2", icon: "" });
   assert.deepEqual(severityOf({ windowPct: null, acProgress: undefined }), { colour: "2", icon: "" });
   assert.deepEqual(severityOf({ windowPct: NaN, acProgress: "x" }), { colour: "2", icon: "" });
 });
