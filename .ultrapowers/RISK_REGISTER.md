@@ -1035,7 +1035,18 @@
 
 ## RISK-STATUSLINE-001 — the context-window size field name is documented, not observed
 
-- **Status:** Open (accepted, 2026-07-30)
+- **Status:** Closed (observed, 2026-07-30)
+- **Resolution:** a live payload was captured on Claude Code 2.1.220 through the throwaway
+  `_payload-dump.mjs` registered as `statusLine.command`, and it settles the question: the
+  `context_window` block carries `total_input_tokens`, `total_output_tokens`,
+  `context_window_size`, `current_usage`, `used_percentage`, `remaining_percentage`. The size
+  arrives as **`context_window_size`** (1000000); **`total_tokens` is absent**. So the
+  pre-phase-08 reader had indeed been falling through to the hardcoded `1_000_000` on every
+  render, and phase 08's correction is right. The deploy-gate consistency check passed on the
+  same payload: `current_usage` summed to 314415 against a 1000000 window — 31.4% — while
+  `used_percentage` read 31. Numerator and denominator come from different fields and agree.
+  Phase 08 plan task 1 is discharged; the `?? total_tokens` arm is kept as cheap insurance
+  against a future rename, not because it is reachable today.
 - **Context:** phase 08 found that `statusline-lib.mjs` read the context window size from
   `data.context_window.total_tokens`, a field the documented statusLine payload does not have —
   the documented name is `context_window_size`. Every occurrence of `total_tokens` in this

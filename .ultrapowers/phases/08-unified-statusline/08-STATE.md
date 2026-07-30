@@ -4,14 +4,14 @@ status: complete
 delivery: branch
 branch: feat/unified-statusline
 depends_on: []
-tasks_done: 7
+tasks_done: 8
 tasks_total: 8
 updated: 2026-07-30
 ---
 
 # Phase 08 — unified-statusline — state
 
-Complete on `feat/unified-statusline`, unmerged and undeployed. Executed
+Complete, merged to `master` (`82deacb`) and deployed. Executed
 subagent-driven: one implementer per task, a task-scoped review after each, a
 whole-branch review on the most capable model, and one fix wave. The
 whole-branch re-review's verdict is *ready to merge*; `08-VERIFICATION.md` reads
@@ -24,16 +24,16 @@ segment this bundle never had is in; the context denominator is read from the
 field that exists; and the work in flight is selected deterministically instead of
 by file mtime, which had let a checkout change what the bar claimed.
 
-**`tasks_done: 7 / 8` is a real outstanding task, not a retired one — there is no
-`tasks_dropped` here.** Plan task 1 captures a live statusLine payload to settle
+**Plan task 1 is now discharged.** It captured a live statusLine payload to settle
 whether the context-window size arrives as `context_window_size` or
-`total_tokens`. It needs a Claude Code restart no subagent can perform and was
-deferred by user ruling. Nothing else depended on the answer: the reader is
-`context_window_size ?? total_tokens ?? 1_000_000` and is correct under either
-name. Filed as `RISK-STATUSLINE-001` so it survives this phase, with the
-deploy-gate acceptance check written down: a wrong denominator shows up as an
-internally inconsistent segment, because the token figure and the percentage come
-from different payload fields.
+`total_tokens` — the one step needing a Claude Code restart no subagent can
+perform, deferred by user ruling and carried out on 2026-07-30 against Claude
+Code 2.1.220. The answer is `context_window_size`; `total_tokens` is absent from
+the payload entirely, so the pre-phase reader had been falling through to the
+hardcoded `1_000_000` on every render. The deploy-gate consistency check passed
+on the same payload — `current_usage` summed to 314415 of a 1000000 window,
+31.4%, against a `used_percentage` of 31. `RISK-STATUSLINE-001` is closed as
+observed rather than documented.
 
 ## Picking this up cold
 
