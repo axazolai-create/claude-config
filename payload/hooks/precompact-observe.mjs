@@ -14,6 +14,7 @@ const STATE = join(CLAUDE_DIR, "state", "autocompact.json");
 
 let d = {};
 try { d = JSON.parse(safe(() => readFileSync(0, "utf8")) || "{}"); } catch { process.exit(0); }
+d = (d && typeof d === "object") ? d : {};
 if (d.trigger !== "auto" || !d.transcript_path) process.exit(0);
 
 const seen = safe(() => observationFrom(readJSONLRecords(d.transcript_path)));
