@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// statusLine renderer for the base and lite profiles. full keeps gsd-context-meter.mjs, which
-// wraps gsd-core's own gsd-statusline.js and rewrites one segment; without gsd-core there is
-// nothing to wrap, so this renders the whole line itself. Any error yields empty output - the
-// statusline never breaks the prompt.
+// statusLine renderer for every profile - full, base, lite. Composes pending updates, model,
+// context, project, and (when applicable) gsd and ultrapowers work status into one line, with no
+// subprocess spawned. Any error yields empty output - the statusline never breaks the prompt.
 import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
