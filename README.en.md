@@ -876,7 +876,7 @@ from this bundle, driving your Claude Code" principle — here for findability:
   the segment says nothing rather than guess); else the newest SDD ledger under
   `.ultrapowers/sdd/`. It used to pick by file mtime, and a checkout would change what the bar
   claimed; now mtime is only a tie-breaker among ledgers and can never outrank a declared phase.
-  A phase prints a tally and **never** a percentage — `08 ✔2/6 running`, or `08 planned` when the
+  A phase prints a tally and **never** a percentage — `08 (2/6) running`, or `08 planned` when the
   phase has no plan yet: a phase that retires a task (`tasks_dropped`) states its tally in fields
   and its reason in prose, and a derived percentage would under-report an already-finished phase.
 
