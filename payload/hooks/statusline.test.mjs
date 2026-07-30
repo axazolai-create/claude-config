@@ -133,6 +133,10 @@ test("the pure renderers never interpolate undefined", () => {
   assert.equal(renderSdd(), "");
   assert.doesNotMatch(renderSdd({ plan: "p" }), /undefined/);
   assert.doesNotMatch(renderGsd({ milestone: "v1" }), /undefined/);
+  // field()/fmField() return null (not undefined) for an absent key, the shape production
+  // actually passes; a guard tested only against omitted arguments can miss this.
+  assert.equal(renderGsd({ milestone: null }), "");
+  assert.equal(renderSdd({ plan: null }), "");
 });
 
 const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "statusline.mjs");
