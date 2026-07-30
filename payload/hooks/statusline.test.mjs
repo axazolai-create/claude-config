@@ -293,6 +293,21 @@ test("entry point: CLAUDE_CODE_AUTO_COMPACT_WINDOW narrows the icon ladder, not 
   assert.match(strip(out.stdout), /320\.0K\/1M 32% 💡/, `icon: got ${JSON.stringify(out.stdout)}`);
 });
 
+test("entry point: a disabled autocompact collapses the icon onto windowPct, not the raw ratio", () => {
+  const claudeDir = dir("claude-ac-disabled");
+  write(join(claudeDir, "settings.json"), JSON.stringify({ autoCompactEnabled: false }));
+  const root = dir("plain-ac-disabled");
+  const out = runEntry(payload(root, {
+    context_window: { context_window_size: 200000, used_percentage: 44,
+      current_usage: { input_tokens: 91000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  // 91K/200K is 45.5% raw - past the icon floor - but windowPct (the payload's own 44%) is not;
+  // disabled autocompact has nothing to warn about, so the icon must not fire ahead of the colour.
+  assert.match(out.stdout, /\x1b\[32m91\.0K\/200K 44%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
+  assert.doesNotMatch(strip(out.stdout), /💡|⚠️|🔥|💀/, `icon leaked ahead of windowPct: got ${JSON.stringify(out.stdout)}`);
+});
+
 test("entry point: no context_window means no context segment, not a broken one", () => {
   const out = runEntry(payload(dir("plain-noctx")));
   assert.equal(out.status, 0);

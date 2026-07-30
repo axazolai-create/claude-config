@@ -203,10 +203,11 @@ function contextSegment(data) {
   const ac = safe(() => resolveAutocompact({ windowSize: m.windowSize, modelId, state,
     enabled: autoCompactEnabledFrom(settings) }), null);
   const windowPct = m.pct != null ? Number(m.pct) : (m.tokens / m.windowSize) * 100;
-  // Only collapse onto windowPct when "assumed" also means the full window (no
-  // CLAUDE_CODE_AUTO_COMPACT_WINDOW narrowing it) - a narrowed capacity must still diverge from
-  // windowPct, that divergence is the whole reason the two ladders exist.
-  const collapse = ac && ac.source === "assumed" && ac.tokens === m.windowSize;
+  // Only collapse onto windowPct when the source's point is the full window - "assumed" with no
+  // CLAUDE_CODE_AUTO_COMPACT_WINDOW narrowing it, or "disabled" (which is always the full window).
+  // A narrowed capacity must still diverge from windowPct, that divergence is the whole reason
+  // the two ladders exist.
+  const collapse = ac && (ac.source === "assumed" || ac.source === "disabled") && ac.tokens === m.windowSize;
   const acProgress = ac && !collapse && ac.tokens > 0 ? (m.tokens / ac.tokens) * 100 : windowPct;
   return safe(() => paintContext(text, severityOf({ windowPct, acProgress })), text) || text;
 }
