@@ -870,8 +870,7 @@ from this bundle, driving your Claude Code" principle — here for findability:
      (45/70/85/95% → 💡/⚠️/🔥/💀). The autocompact point resolves in this order:
      `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` → an observation from `precompact-observe.mjs` for the
      current model (`~/.claude/state/autocompact.json`) → the full window. The default is the
-     full window, never a guessed reserve: the old gsd-core wrapper guessed one (16.5%) and
-     disagreed with `/context` for months;
+     full window, never a guessed reserve;
   4. **project** — the directory name only, no git branch;
   5. **gsd work status** — only when gsd-core is installed **and** active for this project
      (`<claudeDir>/gsd-core/VERSION` exists **and** `<root>/.planning/config.json` exists);
