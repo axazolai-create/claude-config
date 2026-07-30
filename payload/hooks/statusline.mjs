@@ -204,7 +204,7 @@ function contextSegment(data) {
     enabled: autoCompactEnabledFrom(settings) }), null);
   const windowPct = m.pct != null ? Number(m.pct) : (m.tokens / m.windowSize) * 100;
   const acProgress = ac && ac.tokens > 0 ? (m.tokens / ac.tokens) * 100 : windowPct;
-  return paintContext(text, severityOf({ windowPct, acProgress }));
+  return safe(() => paintContext(text, severityOf({ windowPct, acProgress })), text) || text;
 }
 
 function main(raw) {
