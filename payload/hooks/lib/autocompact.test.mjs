@@ -20,6 +20,12 @@ test("resolveAutocompact: an observation for another model is not borrowed", () 
     { tokens: 1_000_000, source: "assumed" });
 });
 
+test("resolveAutocompact: an observation larger than the current window is ignored", () => {
+  const state = { models: { m: { tokens: 900000, windowSize: 1_000_000 } } };
+  assert.deepEqual(resolveAutocompact({ windowSize: 200000, modelId: "m", state, env: {}, enabled: true }),
+    { tokens: 200000, source: "assumed" });
+});
+
 test("resolveAutocompact: with nothing known the point is the window itself", () => {
   assert.deepEqual(resolveAutocompact({ windowSize: 200000, modelId: "m", state: null, env: {}, enabled: true }),
     { tokens: 200000, source: "assumed" });
@@ -41,6 +47,7 @@ test("resolveAutocompact: a junk env value is ignored, not obeyed", () => {
 test("resolveAutocompact: null without a usable window", () => {
   assert.equal(resolveAutocompact({ windowSize: 0, modelId: "m", state: null, env: {}, enabled: true }), null);
   assert.equal(resolveAutocompact({ windowSize: NaN, modelId: "m", state: null, env: {}, enabled: true }), null);
+  assert.equal(resolveAutocompact(null), null);
 });
 
 test("observationFrom: sums the last assistant usage", () => {
@@ -82,6 +89,8 @@ test("promotePending: no pending means no write", () => {
   assert.deepEqual(promotePending({ models: {} }, { modelId: "m", windowSize: 1000 }),
     { next: { models: {} }, changed: false });
   assert.equal(promotePending(null, { modelId: "m", windowSize: 1000 }).changed, false);
+  assert.deepEqual(promotePending({}, null),
+    { next: {}, changed: false });
 });
 
 test("autoCompactEnabledFrom: absent means on", () => {

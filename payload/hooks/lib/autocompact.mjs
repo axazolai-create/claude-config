@@ -2,7 +2,8 @@
 // context_window, so the hook records an unkeyed observation in tokens and the statusline
 // promotes it once it knows the model id and window. Keying on the transcript's own model
 // id would collide: its 200K and 1M variants share it.
-export function resolveAutocompact({ windowSize, modelId, state, env = process.env, enabled = true } = {}) {
+export function resolveAutocompact(arg) {
+  const { windowSize, modelId, state, env = process.env, enabled = true } = arg || {};
   const w = Number(windowSize);
   if (!Number.isFinite(w) || w <= 0) return null;
   if (!enabled) return { tokens: w, source: "disabled" };
@@ -10,7 +11,7 @@ export function resolveAutocompact({ windowSize, modelId, state, env = process.e
   if (Number.isFinite(pct) && pct > 0 && pct <= 100) return { tokens: (w * pct) / 100, source: "env" };
   const seen = state && state.models && state.models[modelId];
   const tokens = seen && Number(seen.tokens);
-  if (Number.isFinite(tokens) && tokens > 0) return { tokens, source: "observed" };
+  if (Number.isFinite(tokens) && tokens > 0 && tokens <= w) return { tokens, source: "observed" };
   return { tokens: w, source: "assumed" };
 }
 
@@ -27,7 +28,8 @@ export function observationFrom(records) {
   return null;
 }
 
-export function promotePending(state, { modelId, windowSize } = {}) {
+export function promotePending(state, arg) {
+  const { modelId, windowSize } = arg || {};
   const next = { ...(state || {}) };
   const p = next.pending;
   if (!p || !Number.isFinite(Number(p.tokens))) return { next: state || {}, changed: false };
