@@ -2,11 +2,13 @@
 // statusLine renderer for every profile - full, base, lite. Composes pending updates, model,
 // context, project, and (when applicable) gsd and ultrapowers work status into one line, with no
 // subprocess spawned. Any error yields empty output - the statusline never breaks the prompt.
-import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { computeContext } from "./lib/statusline-lib.mjs";
+import { computeContext, contextMetrics } from "./lib/statusline-lib.mjs";
+import { severityOf } from "./lib/context-severity.mjs";
+import { resolveAutocompact, promotePending, autoCompactEnabledFrom } from "./lib/autocompact.mjs";
 import { pendingNames } from "./lib/component-registry.mjs";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -50,6 +52,13 @@ export function renderPhase({ id, done, total, dropped, status } = {}) {
   // prose, so any derived percentage under-reports a phase that is in fact finished.
   const tally = effective != null && Number.isFinite(d) ? ` (${d}/${effective})` : "";
   return `${id}${tally}${status ? ` ${status}` : ""}`;
+}
+
+export function paintContext(text, opts) {
+  const { colour, icon } = opts || {};
+  if (!text) return "";
+  const painted = colour ? `\x1b[${colour}m${text}\x1b[0m` : text;
+  return icon ? `${painted} ${icon}` : painted;
 }
 
 export function installedProfile(claudeDir) {
@@ -177,6 +186,27 @@ function gsdActive(root) {
     && existsSync(join(root, ".planning", "config.json"));
 }
 
+function contextSegment(data) {
+  const text = safe(() => computeContext(data), "") || "";
+  if (!text) return "";
+  const m = safe(() => contextMetrics(data), null);
+  if (!m) return text;
+  const statePath = join(CLAUDE_DIR, "state", "autocompact.json");
+  const modelId = (data.model && data.model.id) || "";
+  let state = safe(() => JSON.parse(readFileSync(statePath, "utf8")), null) || {};
+  const promoted = safe(() => promotePending(state, { modelId, windowSize: m.windowSize }), null);
+  if (promoted && promoted.changed) {
+    state = promoted.next;
+    safe(() => writeFileSync(statePath, JSON.stringify(state, null, 2)));
+  }
+  const settings = safe(() => JSON.parse(readFileSync(join(CLAUDE_DIR, "settings.json"), "utf8")), null);
+  const ac = safe(() => resolveAutocompact({ windowSize: m.windowSize, modelId, state,
+    enabled: autoCompactEnabledFrom(settings) }), null);
+  const windowPct = m.pct != null ? Number(m.pct) : (m.tokens / m.windowSize) * 100;
+  const acProgress = ac && ac.tokens > 0 ? (m.tokens / ac.tokens) * 100 : windowPct;
+  return paintContext(text, severityOf({ windowPct, acProgress }));
+}
+
 function main(raw) {
   const data = safe(() => JSON.parse(raw || "{}"), {}) || {};
   const ws = data.workspace || {};
@@ -185,7 +215,7 @@ function main(raw) {
   process.stdout.write(render({
     updates: pendingNames(state),
     model: (data.model && data.model.display_name) || "",
-    context: safe(() => computeContext(data), "") || "",
+    context: safe(() => contextSegment(data), "") || "",
     project: basename(root),
     gsd: gsdActive(root) ? (safe(() => gsdState(root)) || "") : "",
     up: installedProfile(CLAUDE_DIR) === "lite" ? "" : (safe(() => upState(root)) || ""),

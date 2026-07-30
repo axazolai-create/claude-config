@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderUpdates, renderGsd, renderSdd, renderPhase, roadmapPhases, render, installedProfile } from "./statusline.mjs";
+import { renderUpdates, renderGsd, renderSdd, renderPhase, roadmapPhases, render, installedProfile, paintContext } from "./statusline.mjs";
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -157,6 +157,7 @@ write(join(GSD_CLAUDE_DIR, "gsd-core", "VERSION"), "1.8.0\n");
 function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR } = {}) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: claudeDir };
   delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+  delete env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE;
   return spawnSync(process.execPath, [ENTRY], { input, encoding: "utf8", env, cwd: TMP });
 }
 
@@ -565,4 +566,70 @@ test("entry point: stdin that never closes still renders and exits", async () =>
   const code = await new Promise((resolve) => child.on("close", resolve));
   assert.equal(code, 0);
   assert.ok(strip(out).includes("hang-guard"), `got: ${JSON.stringify(out)}`);
+});
+
+test("paintContext: wraps in the colour and hangs the icon outside it", () => {
+  assert.equal(paintContext("12K/1M 12%", { colour: "32", icon: "" }), "\x1b[32m12K/1M 12%\x1b[0m");
+  assert.equal(paintContext("12K/1M 12%", { colour: "91", icon: "💀" }), "\x1b[91m12K/1M 12%\x1b[0m 💀");
+  assert.equal(paintContext("", { colour: "91", icon: "💀" }), "");
+});
+
+test("paintContext: a null opts argument does not throw", () => {
+  assert.equal(paintContext("12K/1M 12%", null), "12K/1M 12%");
+});
+
+test("entry point: a full window is bright red and carries the skull", () => {
+  const out = runEntry(payload(dir("proj-hot"), {
+    context_window: { context_window_size: 200000, used_percentage: 96,
+      current_usage: { input_tokens: 192000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir: dir("claude-hot") });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[91m"), `no bright red: ${JSON.stringify(out.stdout)}`);
+  assert.ok(out.stdout.includes("💀"), `no skull: ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: an empty window is grey and silent", () => {
+  const out = runEntry(payload(dir("proj-cold"), {
+    context_window: { context_window_size: 1000000, used_percentage: 3,
+      current_usage: { input_tokens: 30000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir: dir("claude-cold") });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[2m30.0K/1M 3%\x1b[0m"), `got: ${JSON.stringify(out.stdout)}`);
+  for (const icon of ["💡", "⚠️", "🔥", "💀"]) assert.equal(out.stdout.includes(icon), false);
+});
+
+test("entry point: an observed autocompact point makes the icon lead the colour", () => {
+  const claudeDir = dir("claude-lead");
+  write(join(claudeDir, "state", "autocompact.json"), JSON.stringify({
+    models: { "claude-opus-5[1m]": { tokens: 600000, windowSize: 1000000 } },
+  }));
+  const out = runEntry(payload(dir("proj-lead"), {
+    model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
+    context_window: { context_window_size: 1000000, used_percentage: 32,
+      current_usage: { input_tokens: 320000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[32m"), `expected green: ${JSON.stringify(out.stdout)}`);
+  assert.ok(out.stdout.includes("💡"), `expected the lamp: ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: a pending observation is promoted and cleared", () => {
+  const claudeDir = dir("claude-promote");
+  const statePath = join(claudeDir, "state", "autocompact.json");
+  write(statePath, JSON.stringify({
+    pending: { tokens: 400000, model: "claude-opus-5", at: "2026-07-30T18:00:00Z" },
+  }));
+  const out = runEntry(payload(dir("proj-promote"), {
+    model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
+    context_window: { context_window_size: 1000000, used_percentage: 10,
+      current_usage: { input_tokens: 100000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  const after = JSON.parse(readFileSync(statePath, "utf8"));
+  assert.equal(after.pending, undefined);
+  assert.equal(after.models["claude-opus-5[1m]"].tokens, 400000);
 });
