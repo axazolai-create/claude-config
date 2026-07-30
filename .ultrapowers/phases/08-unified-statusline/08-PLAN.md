@@ -805,21 +805,26 @@ test("the pure renderers never interpolate undefined", () => {
   assert.doesNotMatch(renderGsd({ milestone: "v1" }), /undefined/);
 });
 
-test("entry point: stdin that never closes still renders and exits", () => {
+test("entry point: stdin that never closes still renders and exits", async () => {
   const root = dir("hang-guard");
-  const child = spawnSync(process.execPath, [ENTRY], {
-    input: payload(root),
-    encoding: "utf8",
+  const child = spawn(process.execPath, [ENTRY], {
     env: { ...process.env, CLAUDE_CONFIG_DIR: EMPTY_CLAUDE_DIR, CLAUDE_STATUSLINE_STDIN_MS: "50" },
     cwd: TMP,
-    timeout: 5000,
+    stdio: ["pipe", "pipe", "pipe"],
   });
-  assert.equal(child.status, 0);
-  assert.ok(strip(child.stdout).includes("hang-guard"));
+  child.stdin.write(payload(root));
+  let out = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (c) => { out += c; });
+  const code = await new Promise((resolve) => child.on("close", resolve));
+  assert.equal(code, 0);
+  assert.ok(strip(out).includes("hang-guard"), `got: ${JSON.stringify(out)}`);
 });
 ```
 
-The `spawnSync` `input` option closes stdin, so this test proves the timer does not corrupt the normal path. A truly unclosed stdin cannot be produced through `spawnSync`; the guard's value is that the timeout exists and the render is idempotent under it, which `finish()`'s `done` flag gives.
+`child.stdin` is deliberately never `end()`ed — that is the condition under test. `spawnSync` cannot produce it, because its `input` option closes stdin for you, so this test uses `spawn`; add it to the `node:child_process` import.
+
+The assertion that the process **exits** is the load-bearing half. A `data` listener on `process.stdin` keeps the readable flowing and the event loop alive, so a renderer that only rendered on the timer would print its line and then hang forever — which is the same bug wearing a different hat. Step 4's `finish()` therefore destroys stdin as well as rendering.
 
 - [ ] **Step 2: Run them to make sure they fail**
 
@@ -857,6 +862,10 @@ if (isMainModule()) {
     clearTimeout(guard);
     try { main(input); } catch { /* never break the prompt */ }
     process.exitCode = 0;
+    // Rendering is not enough to end the process: the `data` listener below keeps the readable
+    // flowing, so an unclosed stdin would hold the event loop open forever after the line was
+    // already printed. Releasing the handle is what lets the loop drain.
+    try { process.stdin.pause(); process.stdin.destroy(); } catch { /* already gone */ }
   };
   // A statusLine command whose stdin never closes would otherwise hang forever and leave the
   // prompt with no line at all; rendering what arrived beats rendering nothing.
