@@ -860,7 +860,7 @@ from this bundle, driving your Claude Code" principle — here for findability:
   between wrapping gsd-core's `gsd-statusline.js` and base/lite's own renderer; the deleted
   `gsd-context-meter.mjs` was that wrapper). The line renders itself, with no subprocess at all —
   six segments left to right, joined by a dim `│`:
-  1. **pending component updates**, by **name** (`⬆ ultrapowers context-mode`), leftmost — not a
+  1. **pending component updates**, by **name** (`⬆ context-mode graphify`), leftmost — not a
      count, and not on the right the way the deleted wrapper appended it;
   2. **model** — `data.model.display_name` from the statusLine payload;
   3. **context** — tokens **and** percent, e.g. `165.6K/1M 17%`;
