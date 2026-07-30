@@ -38,6 +38,11 @@ export function renderSdd({ plan, complete, next } = {}) {
   return `${plan} ✔${complete} →${next}`;
 }
 
+export function installedProfile(claudeDir) {
+  const m = safe(() => JSON.parse(readFileSync(join(claudeDir, "state", "bundle-manifest.json"), "utf8")));
+  return (m && (m.profile || m.variant)) || null;
+}
+
 export function render({ updates, model, context, project, gsd, up } = {}) {
   return [renderUpdates(updates), model, context, project, gsd, up]
     .filter(Boolean)
@@ -106,7 +111,7 @@ function main(raw) {
     context: safe(() => computeContext(data), "") || "",
     project: basename(root),
     gsd: safe(() => gsdState(root)) || "",
-    up: safe(() => sddState(root)) || "",
+    up: installedProfile(CLAUDE_DIR) === "lite" ? "" : (safe(() => sddState(root)) || ""),
   }));
 }
 

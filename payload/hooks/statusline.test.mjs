@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderUpdates, renderGsd, renderSdd, render } from "./statusline.mjs";
+import { renderUpdates, renderGsd, renderSdd, render, installedProfile } from "./statusline.mjs";
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -304,4 +304,30 @@ test("entry point: the same input renders the same line twice", () => {
   const root = dir("gsd-proj");
   const input = payload(root, { context_window: { remaining_percentage: 72.3, total_tokens: 200000 } });
   assert.equal(runEntry(input).stdout, runEntry(input).stdout);
+});
+
+const claudeDirWithProfile = (name, profile) => {
+  const d = dir(name);
+  if (profile !== undefined) write(join(d, "state", "bundle-manifest.json"), JSON.stringify({ profile }));
+  return d;
+};
+
+test("installedProfile reads the manifest, and null when there is none", () => {
+  assert.equal(installedProfile(claudeDirWithProfile("prof-lite", "lite")), "lite");
+  assert.equal(installedProfile(claudeDirWithProfile("prof-none")), null);
+});
+
+test("entry point: lite suppresses the ultrapowers segment, base keeps it", () => {
+  const root = dir("up-gate");
+  write(join(root, ".ultrapowers", "sdd", "p", "progress.md"),
+    "# SDD ledger — plan: my-plan.md\nTask 1: complete\n");
+
+  const onLite = runEntry(payload(root), { claudeDir: claudeDirWithProfile("cd-lite", "lite") });
+  assert.doesNotMatch(strip(onLite.stdout), /my-plan/);
+
+  const onBase = runEntry(payload(root), { claudeDir: claudeDirWithProfile("cd-base", "base") });
+  assert.match(strip(onBase.stdout), /my-plan/);
+
+  const noManifest = runEntry(payload(root), { claudeDir: claudeDirWithProfile("cd-nomanifest") });
+  assert.match(strip(noManifest.stdout), /my-plan/, "an absent manifest must fail open");
 });
