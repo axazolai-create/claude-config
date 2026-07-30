@@ -10,13 +10,21 @@ phases:
   - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
   - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
-  - { phase: "08", slug: unified-statusline, status: running, delivery: branch }
+  - { phase: "08", slug: unified-statusline, status: complete, delivery: branch }
 ---
 
 # Roadmap
 
-Phase 08 is running. Six phases are complete, one is abandoned, and everything
-merged past phase 05 is still undeployed.
+Nothing is running. Phase 08 is complete and awaiting merge — `current` still
+names it because delivery, not the work, is what is outstanding. Seven phases are
+complete, one is abandoned, and everything past phase 05 — merged or not — is
+still undeployed.
+
+`current` is deliberately not `null` here, and phase 08's own renderer is why:
+with no phase named, the ultrapowers segment falls through to the newest SDD
+ledger, and a finished plan's ledger renders as `08-PLAN ✔7 →1` — accurate about
+the outstanding task, misleading about the phase. Naming the phase until it merges
+costs nothing and says the true thing.
 
 | Phase | Status | Where the work is |
 |---|---|---|
@@ -27,7 +35,7 @@ merged past phase 05 is still undeployed.
 | 05 versioning-and-changelog | complete | merged, deployed |
 | 06 design-records-and-stack-rules | complete | merged |
 | 07 gsd-core-detector-and-statusline | complete | merged, not deployed |
-| 08 unified-statusline | running | `feat/unified-statusline`, 7/8 tasks |
+| 08 unified-statusline | complete | `feat/unified-statusline`, unmerged; 7/8, task 1 open |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its
 probe commits and its rollback are both in `master`, and the phase still did not
@@ -40,8 +48,8 @@ event, and five of them would not happen.
 
 ## Next
 
-1. Finish phase 08 — `08-PLAN.md`, executed subagent-driven; resume from
-   `.ultrapowers/sdd/phases-08-unified-statusline/progress.md`.
+1. Merge `feat/unified-statusline`. Phase 08 is complete and its whole-branch
+   re-review says ready to merge; `08-VERIFICATION.md` reads ACHIEVED.
 2. Deploy from `master` — gated on an audit and a written impact assessment,
    never from a feature branch. Phases 06 and 07 are merged and waiting on it,
    and `master` is 48 commits ahead of the published `origin/master`, which is
