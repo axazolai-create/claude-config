@@ -1084,3 +1084,44 @@
   and removed from the definition of "the suite passes". The present middle state is what hid the
   breakage: the files look like part of the suite, run like part of the suite, and are absent from
   every fresh clone. Only the user can settle which it is.
+
+## RISK-STATUSLINE-002 — the autocompact point is assumed until a compaction is observed
+
+- **Status:** Open (accepted, 2026-07-30)
+- **Context:** phase 09 marks the context segment with an icon by percent of the way to automatic
+  compaction. Where compaction fires cannot be read where it fires: `PreCompact` carries no
+  `context_window`, so neither the percentage nor the window size is available in the hook. It is
+  observed instead, from the transcript's last assistant `usage`, in absolute tokens. Until a first
+  automatic compaction has been seen for a given model, `resolveAutocompact` returns
+  `source: "assumed"` and the point is the full window (or the capacity set by
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, capped at the window). The icon ladder therefore collapses
+  onto the colour ladder, and `💀` cannot appear before a compaction that has never happened.
+- **Mitigation:** deliberate, and chosen over the alternative. The obvious seed is gsd-core's 16.5%
+  reserve, and that is exactly the class of constant `RISK-STATUSLINE-001` was filed about — a
+  number that looks like knowledge and is not. Being late and honest beats being early and invented.
+  The warnings that matter still arrive: `💡` at 45% of the way and `⚠️` at 70%. The state file
+  records `source`, so assumed and observed are distinguishable rather than silently equivalent.
+- **Residual:** the first session on a new model warns later than it eventually will. One automatic
+  compaction per model calibrates it permanently.
+- **Acceptance check, at the deploy gate:** after one automatic compaction,
+  `~/.claude/state/autocompact.json` holds a `models` entry for that model whose `tokens` is below
+  its `windowSize`, and no `pending` key remains. If `pending` survives, promotion is not
+  happening; if `tokens` equals `windowSize`, nothing was learned.
+
+## RISK-HOOKSTDIN-001 — `token-usage-log.mjs` throws on a literal `null` on stdin
+
+- **Status:** Open (2026-07-30) — found by phase 09, not caused by it, and deliberately not fixed there
+- **Context:** `payload/hooks/token-usage-log.mjs:60-61` reads stdin as
+  `try { d = JSON.parse(safe(() => readFileSync(0, "utf8")) || "{}"); } catch { process.exit(0); }`
+  and later reaches `d.cwd` at line 133. `JSON.parse("null")` does not throw — it returns the
+  primitive `null` — so the `catch` never fires and the property access throws a `TypeError`
+  outside any guard, exiting non-zero. Phase 09's `precompact-observe.mjs` was written from this
+  same idiom, inherited the same defect, and had it caught in review; the guard added there is
+  `d = (d && typeof d === "object") ? d : {};` immediately after the parse. This hook is already
+  deployed on this machine.
+- **Mitigation:** none yet. The one-line guard above is known to work and is already proven in a
+  sibling hook.
+- **Residual:** a `Stop` or `SubagentStop` hook exiting non-zero on a malformed payload. The input
+  comes from Claude Code rather than from a user, so the path is unlikely — but "unlikely" is what
+  the same construct was assumed to be in `precompact-observe.mjs` before it was reproduced.
+  Fixing it is a few minutes and belongs to whoever next touches that hook family.
