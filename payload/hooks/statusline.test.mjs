@@ -40,13 +40,19 @@ test("renderPhase subtracts dropped tasks from the denominator", () => {
     "07 ✔6/6 complete");
 });
 
+// null is the shape phaseSegment really supplies, because fmField returns null for an absent key.
 test("renderPhase omits the tally when the phase has no plan yet", () => {
   assert.equal(renderPhase({ id: "08", status: "planned" }), "08 planned");
+  assert.equal(renderPhase({ id: "08", done: null, total: null, dropped: null, status: "planned" }),
+    "08 planned");
+  assert.equal(renderPhase({ id: "08", done: 5, total: null, dropped: null, status: "planned" }),
+    "08 planned");
 });
 
 test("renderPhase never interpolates undefined", () => {
   assert.equal(renderPhase(), "");
   assert.doesNotMatch(renderPhase({ id: "08" }), /undefined/);
+  assert.doesNotMatch(renderPhase({ id: "08", done: null, total: null }), /undefined|NaN/);
 });
 
 test("roadmapPhases parses the inline maps", () => {
@@ -384,6 +390,23 @@ test("entry point: zero or several running phases render no phase segment", () =
     phases: { "07-earlier": STATE_07_RUNNING, "08-unified": STATE_08 },
   });
   assert.doesNotMatch(strip(runEntry(payload(many)).stdout), /✔/);
+});
+
+test("entry point: a phase whose STATE.md predates its plan renders no tally", () => {
+  const root = phaseTree("sel-planned", { current: "09", phases: { "09-later": '---\nstatus: planned\n---\n' } });
+  const out = strip(runEntry(payload(root)).stdout);
+  assert.match(out, /09 planned$/);
+  assert.doesNotMatch(out, /✔/);
+});
+
+test("entry point: tasks_done without tasks_total renders no tally", () => {
+  const root = phaseTree("sel-half-planned", {
+    current: "09",
+    phases: { "09-later": '---\nstatus: planned\ntasks_done: 5\n---\n' },
+  });
+  const out = strip(runEntry(payload(root)).stdout);
+  assert.match(out, /09 planned$/);
+  assert.doesNotMatch(out, /✔/);
 });
 
 test("entry point: tasks_dropped shrinks the denominator end to end", () => {
