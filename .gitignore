@@ -13,3 +13,6 @@ node_modules/
 .test/
 .planning/
 /.idea/
+
+# stray output from the graphify global-sync PostToolUse hook
+graphify-sync.log

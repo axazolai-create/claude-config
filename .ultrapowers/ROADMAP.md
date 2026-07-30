@@ -1,6 +1,6 @@
 ---
-updated: 2026-07-29
-current: null
+updated: 2026-07-30
+current: "08"
 deployed_through: "05"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
@@ -10,13 +10,13 @@ phases:
   - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
   - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
-  - { phase: "08", slug: unified-statusline, status: planned, delivery: none }
+  - { phase: "08", slug: unified-statusline, status: running, delivery: branch }
 ---
 
 # Roadmap
 
-Nothing is running. Six phases are complete, one is abandoned, one is planned,
-and everything merged past phase 05 is still undeployed.
+Phase 08 is running. Six phases are complete, one is abandoned, and everything
+merged past phase 05 is still undeployed.
 
 | Phase | Status | Where the work is |
 |---|---|---|
@@ -27,7 +27,7 @@ and everything merged past phase 05 is still undeployed.
 | 05 versioning-and-changelog | complete | merged, deployed |
 | 06 design-records-and-stack-rules | complete | merged |
 | 07 gsd-core-detector-and-statusline | complete | merged, not deployed |
-| 08 unified-statusline | planned | spec approved, no plan yet |
+| 08 unified-statusline | running | `feat/unified-statusline`, 1/8 tasks |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its
 probe commits and its rollback are both in `master`, and the phase still did not
@@ -40,7 +40,8 @@ event, and five of them would not happen.
 
 ## Next
 
-1. Plan phase 08 from `08-SPEC.md`.
+1. Finish phase 08 — `08-PLAN.md`, executed subagent-driven; resume from
+   `.ultrapowers/sdd/phases-08-unified-statusline/progress.md`.
 2. Deploy from `master` — gated on an audit and a written impact assessment,
    never from a feature branch. Phases 06 and 07 are merged and waiting on it,
    and `master` is 48 commits ahead of the published `origin/master`, which is
