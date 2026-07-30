@@ -992,32 +992,15 @@ async function main() {
       }, []);
     }
 
-    // statusLine: only take over from an absent value or from gsd-core's own default
-    // (gsd-statusline.js) - this path IS shown to the user via the diff+prompt below, so
-    // (unlike the non-interactive CLI's ensureStatuslineOverride) it's safe to compute the
-    // desired value unconditionally and let the existing diff make the change visible.
-    // Either renderer counts as ours in BOTH directions: a profile switch prunes the file the old
-    // entry points at, so a takeover that only recognised the other profile's script would leave
-    // statusLine aimed at nothing and render an empty line on every prompt.
+    // Either historical renderer counts as ours, in both directions: a profile switch prunes the
+    // file the old entry pointed at, so a takeover that recognised only one would leave statusLine
+    // aimed at nothing and render an empty line on every prompt.
     const ourStatusLine = (cmd) => typeof cmd === "string"
       && (cmd.includes("gsd-context-meter") || cmd.includes("hooks/statusline.mjs"));
-    if (partial.statusLine && VARIANT === "full") {
+    if (partial.statusLine) {
       const curCmd = merged.statusLine && merged.statusLine.command;
       const isGsdCoreDefault = typeof curCmd === "string" && curCmd.includes("gsd-statusline.js");
       if (!curCmd || isGsdCoreDefault || ourStatusLine(curCmd)) {
-        // Built from CDIR directly (not the <HOME>-substituted partial.statusLine.command
-        // string) so the written command is byte-identical to gsd-statusline-registration.mjs's
-        // desiredCommand() - quoted + forward-slash, safe if HOME ever contains a space.
-        const scriptPath = join(CDIR, "hooks", "gsd-context-meter.mjs").replace(/\\/g, "/");
-        merged.statusLine = { ...partial.statusLine, command: `node "${scriptPath}"` };
-      }
-    } else if (VARIANT !== "full") {
-      // base/lite lose gsd-context-meter.mjs (it wraps gsd-core's own statusline, which these
-      // profiles do not install) and get the whole-line renderer instead. A user's own custom
-      // statusLine still wins: only an absent value, a prior gsd takeover, or our own entry is
-      // replaced - the last of which is what makes a re-run idempotent rather than additive.
-      const curCmd = merged.statusLine && merged.statusLine.command;
-      if (!merged.statusLine || ourStatusLine(curCmd)) {
         const scriptPath = join(CDIR, "hooks", "statusline.mjs").replace(/\\/g, "/");
         merged.statusLine = { type: "command", ...partial.statusLine, command: `node "${scriptPath}"` };
       }

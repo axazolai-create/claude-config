@@ -9,7 +9,7 @@ import { join } from "node:path";
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 
 function desiredCommand(claudeDir) {
-  const scriptPath = join(claudeDir, "hooks", "gsd-context-meter.mjs").replace(/\\/g, "/");
+  const scriptPath = join(claudeDir, "hooks", "statusline.mjs").replace(/\\/g, "/");
   return `node "${scriptPath}"`;
 }
 
@@ -21,7 +21,8 @@ export function ensureStatuslineOverride({ claudeDir }) {
 
   const wanted = desiredCommand(claudeDir);
   const currentCmd = parsed.statusLine && parsed.statusLine.command;
-  const isOurs = typeof currentCmd === "string" && currentCmd.includes("gsd-context-meter");
+  const isOurs = typeof currentCmd === "string"
+    && (currentCmd.includes("hooks/statusline.mjs") || currentCmd.includes("gsd-context-meter"));
   if (isOurs) return { changed: false, reason: "already set" };
 
   const isGsdCoreDefault = typeof currentCmd === "string" && currentCmd.includes("gsd-statusline.js");
