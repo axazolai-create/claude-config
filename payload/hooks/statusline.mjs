@@ -38,6 +38,17 @@ export function renderSdd({ plan, complete, next } = {}) {
   return `${plan} ✔${complete} →${next}`;
 }
 
+export function renderPhase({ id, done, total, dropped, status } = {}) {
+  if (!id) return "";
+  const t = Number(total);
+  const d = Number(done);
+  const effective = Number.isFinite(t) ? t - (Number(dropped) || 0) : null;
+  // No percentage, ever: a phase that retires a task states its tally in fields and its reason in
+  // prose, so any derived percentage under-reports a phase that is in fact finished.
+  const tally = effective != null && Number.isFinite(d) ? ` ✔${d}/${effective}` : "";
+  return `${id}${tally}${status ? ` ${status}` : ""}`;
+}
+
 export function installedProfile(claudeDir) {
   const m = safe(() => JSON.parse(readFileSync(join(claudeDir, "state", "bundle-manifest.json"), "utf8")));
   return (m && (m.profile || m.variant)) || null;
@@ -100,6 +111,69 @@ function sddState(root) {
   return renderSdd({ plan: plan ? basename(plan.trim(), ".md") : name, complete: done.size, next });
 }
 
+function frontmatter(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text ?? ""));
+  return m ? m[1] : "";
+}
+
+// CR is a JS LineTerminator, so `(.+)$` under /m already stops before CRLF's \r. .trim() is for
+// trailing spaces/tabs, which ARE captured and would leave a quoted value's closing quote intact.
+function fmField(fm, key) {
+  const m = new RegExp(`^[ \\t]*${key}[ \\t]*:[ \\t]*(.+)$`, "m").exec(fm);
+  if (!m) return null;
+  const v = m[1].trim().replace(/^["']|["']$/g, "");
+  return v === "null" || v === "" ? null : v;
+}
+
+export function roadmapPhases(text) {
+  return [...frontmatter(text).matchAll(/^\s*-\s*\{([^}]*)\}\s*$/gm)].map((m) => {
+    const row = {};
+    for (const pair of m[1].split(",")) {
+      const i = pair.indexOf(":");
+      if (i === -1) continue;
+      row[pair.slice(0, i).trim()] = pair.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    }
+    return row;
+  });
+}
+
+// What the tree declares, in order: ROADMAP's `current`, else a single `running` phase. Zero or
+// several running phases means the tree does not know, and the bar says nothing rather than guess.
+function phaseSegment(root) {
+  const tree = join(root, ".ultrapowers");
+  const roadmap = safe(() => readFileSync(join(tree, "ROADMAP.md"), "utf8"), "") ?? "";
+  if (!roadmap) return null;
+  let id = fmField(frontmatter(roadmap), "current");
+  if (!id) {
+    const running = roadmapPhases(roadmap).filter((r) => r.status === "running");
+    if (running.length !== 1) return null;
+    id = running[0].phase;
+  }
+  const names = safe(() => readdirSync(join(tree, "phases")), []) ?? [];
+  const hit = names.find((n) => n.startsWith(`${id}-`));
+  if (!hit) return null;
+  const stateText = safe(() => readFileSync(join(tree, "phases", hit, `${id}-STATE.md`), "utf8"), "") ?? "";
+  if (!stateText) return null;
+  const fm = frontmatter(stateText);
+  return renderPhase({
+    id,
+    done: fmField(fm, "tasks_done"),
+    total: fmField(fm, "tasks_total"),
+    dropped: fmField(fm, "tasks_dropped"),
+    status: fmField(fm, "status"),
+  });
+}
+
+// mtime is a legitimate tie-breaker among ledgers, but it must never outrank a declared phase.
+function upState(root) {
+  return phaseSegment(root) || sddState(root);
+}
+
+function gsdActive(root) {
+  return existsSync(join(CLAUDE_DIR, "gsd-core", "VERSION"))
+    && existsSync(join(root, ".planning", "config.json"));
+}
+
 function main(raw) {
   const data = safe(() => JSON.parse(raw || "{}"), {}) || {};
   const ws = data.workspace || {};
@@ -110,8 +184,8 @@ function main(raw) {
     model: (data.model && data.model.display_name) || "",
     context: safe(() => computeContext(data), "") || "",
     project: basename(root),
-    gsd: safe(() => gsdState(root)) || "",
-    up: installedProfile(CLAUDE_DIR) === "lite" ? "" : (safe(() => sddState(root)) || ""),
+    gsd: gsdActive(root) ? (safe(() => gsdState(root)) || "") : "",
+    up: installedProfile(CLAUDE_DIR) === "lite" ? "" : (safe(() => upState(root)) || ""),
   }));
 }
 

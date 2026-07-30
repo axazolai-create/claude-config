@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderUpdates, renderGsd, renderSdd, render, installedProfile } from "./statusline.mjs";
+import { renderUpdates, renderGsd, renderSdd, renderPhase, roadmapPhases, render, installedProfile } from "./statusline.mjs";
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -28,6 +28,49 @@ test("the gsd segment mirrors gsd-core's own vocabulary", () => {
 
 test("the sdd segment names the plan and where to resume", () => {
   assert.equal(renderSdd({ plan: "planning-tree", complete: 3, next: 4 }), "planning-tree ✔3 →4");
+});
+
+test("renderPhase prints a tally and never a percentage", () => {
+  assert.equal(renderPhase({ id: "08", done: 2, total: 6, status: "running" }), "08 ✔2/6 running");
+  assert.doesNotMatch(renderPhase({ id: "08", done: 6, total: 7, status: "complete" }), /%/);
+});
+
+test("renderPhase subtracts dropped tasks from the denominator", () => {
+  assert.equal(renderPhase({ id: "07", done: 6, total: 7, dropped: 1, status: "complete" }),
+    "07 ✔6/6 complete");
+});
+
+test("renderPhase omits the tally when the phase has no plan yet", () => {
+  assert.equal(renderPhase({ id: "08", status: "planned" }), "08 planned");
+});
+
+test("renderPhase never interpolates undefined", () => {
+  assert.equal(renderPhase(), "");
+  assert.doesNotMatch(renderPhase({ id: "08" }), /undefined/);
+});
+
+test("roadmapPhases parses the inline maps", () => {
+  const rows = roadmapPhases([
+    "---",
+    'current: "08"',
+    "phases:",
+    '  - { phase: "07", slug: a, status: complete, integration: merged }',
+    '  - { phase: "08", slug: b, status: running, delivery: branch }',
+    "---",
+  ].join("\n"));
+  assert.deepEqual(rows.map((r) => [r.phase, r.status]), [["07", "complete"], ["08", "running"]]);
+});
+
+test("roadmapPhases parses CRLF frontmatter", () => {
+  const rows = roadmapPhases([
+    "---",
+    'current: "08"',
+    "phases:",
+    '  - { phase: "07", slug: a, status: complete }',
+    '  - { phase: "08", slug: b, status: running }',
+    "---",
+  ].join("\r\n"));
+  assert.deepEqual(rows.map((r) => [r.phase, r.status]), [["07", "complete"], ["08", "running"]]);
 });
 
 test("render joins the floor in order", () => {
@@ -87,6 +130,9 @@ const write = (path, text) => { mkdirSync(dirname(path), { recursive: true }); w
 const dir = (...parts) => { const p = join(TMP, ...parts); mkdirSync(p, { recursive: true }); return p; };
 
 const EMPTY_CLAUDE_DIR = dir("claude-empty");
+// The gsd segment requires gsd-core installed, so every gsd assertion needs a claudeDir that has it.
+const GSD_CLAUDE_DIR = dir("claude-gsd-core");
+write(join(GSD_CLAUDE_DIR, "gsd-core", "VERSION"), "1.8.0\n");
 
 function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR } = {}) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: claudeDir };
@@ -220,7 +266,7 @@ test("entry point: a real GSD project renders the gsd segment", () => {
   const root = dir("gsd-proj");
   write(join(root, ".planning", "config.json"), "{}");
   write(join(root, ".planning", "STATE.md"), GSD_STATE);
-  const out = runEntry(payload(root));
+  const out = runEntry(payload(root), { claudeDir: GSD_CLAUDE_DIR });
   assert.equal(out.status, 0);
   assert.equal(strip(out.stdout), "gsd-proj │ v1.0 [██░] 83% · Phase 05.1 verifying");
 });
@@ -229,7 +275,7 @@ test("entry point: a .planning this parser cannot read falls through, it does no
   const root = dir("gsd-unparseable");
   write(join(root, ".planning", "config.json"), "{}");
   write(join(root, ".planning", "STATE.md"), "# nothing this parser understands\n");
-  const out = runEntry(payload(root));
+  const out = runEntry(payload(root), { claudeDir: GSD_CLAUDE_DIR });
   assert.equal(out.status, 0);
   assert.equal(out.stderr, "");
   assert.equal(strip(out.stdout).includes("undefined"), false);
@@ -239,7 +285,7 @@ test("entry point: a .planning this parser cannot read falls through, it does no
 test("entry point: a .planning with no STATE.md at all falls through", () => {
   const root = dir("gsd-nostate");
   write(join(root, ".planning", "config.json"), "{}");
-  const out = runEntry(payload(root));
+  const out = runEntry(payload(root), { claudeDir: GSD_CLAUDE_DIR });
   assert.equal(out.status, 0);
   assert.equal(out.stderr, "");
   assert.ok(strip(out.stdout).startsWith("gsd-nostate"));
@@ -288,9 +334,116 @@ test("entry point: gsd and up both render when a project has both", () => {
   write(join(root, ".planning", "config.json"), "{}");
   write(join(root, ".planning", "STATE.md"), GSD_STATE);
   write(join(root, ".ultrapowers", "sdd", "2026-07-28-x", "progress.md"), LEDGER);
-  const out = runEntry(payload(root));
+  const out = runEntry(payload(root), { claudeDir: GSD_CLAUDE_DIR });
   assert.equal(strip(out.stdout),
     "both-proj │ v1.0 [██░] 83% · Phase 05.1 verifying │ 2026-07-28-planning-tree ✔3 →4");
+});
+
+const phaseTree = (name, { current, rows = [], phases = {}, eol = "\n" }) => {
+  const root = dir(name);
+  const fm = ["---", `current: ${current === null ? "null" : `"${current}"`}`, "phases:",
+    ...rows.map((r) => `  - { phase: "${r.phase}", slug: ${r.slug}, status: ${r.status} }`),
+    "---", "", "# Roadmap"].join(eol);
+  write(join(root, ".ultrapowers", "ROADMAP.md"), fm);
+  for (const [id, body] of Object.entries(phases))
+    write(join(root, ".ultrapowers", "phases", id, `${id.slice(0, 2)}-STATE.md`), body.replaceAll("\n", eol));
+  return root;
+};
+
+const STATE_08 = '---\nphase: "08"\nstatus: running\ntasks_done: 2\ntasks_total: 6\n---\n';
+const STATE_07_RUNNING = '---\nphase: "07"\nstatus: running\ntasks_done: 5\ntasks_total: 5\n---\n';
+const STATE_07_DONE = '---\nphase: "07"\nstatus: complete\ntasks_done: 6\ntasks_total: 7\ntasks_dropped: 1\n---\n';
+
+test("entry point: ROADMAP current names the phase in flight", () => {
+  const root = phaseTree("sel-current", { current: "08", phases: { "08-unified": STATE_08 } });
+  assert.match(strip(runEntry(payload(root)).stdout), /08 ✔2\/6 running/);
+});
+
+test("entry point: current null falls back to exactly one running phase", () => {
+  const one = phaseTree("sel-one", {
+    current: null,
+    rows: [{ phase: "07", slug: "a", status: "complete" }, { phase: "08", slug: "b", status: "running" }],
+    phases: { "08-unified": STATE_08 },
+  });
+  assert.match(strip(runEntry(payload(one)).stdout), /08 ✔2\/6 running/);
+});
+
+// Both fixtures give every listed phase a readable STATE.md, so a gate that picked a phase it
+// should not have would render a tally here instead of silently finding no directory.
+test("entry point: zero or several running phases render no phase segment", () => {
+  const none = phaseTree("sel-none", {
+    current: null,
+    rows: [{ phase: "07", slug: "a", status: "complete" }],
+    phases: { "07-earlier": STATE_07_DONE },
+  });
+  assert.doesNotMatch(strip(runEntry(payload(none)).stdout), /✔/);
+
+  const many = phaseTree("sel-many", {
+    current: null,
+    rows: [{ phase: "07", slug: "a", status: "running" }, { phase: "08", slug: "b", status: "running" }],
+    phases: { "07-earlier": STATE_07_RUNNING, "08-unified": STATE_08 },
+  });
+  assert.doesNotMatch(strip(runEntry(payload(many)).stdout), /✔/);
+});
+
+test("entry point: tasks_dropped shrinks the denominator end to end", () => {
+  const root = phaseTree("sel-dropped", { current: "07", phases: { "07-earlier": STATE_07_DONE } });
+  assert.match(strip(runEntry(payload(root)).stdout), /07 ✔6\/6 complete/);
+});
+
+// .trim() in fmField: CR is a JS LineTerminator so `(.+)$` never captures it, but trailing
+// spaces are captured and would leave a quoted id closing-quote intact.
+test("entry point: trailing whitespace in frontmatter does not corrupt the id or status", () => {
+  const root = dir("sel-pad");
+  write(join(root, ".ultrapowers", "ROADMAP.md"), '---\ncurrent: "08"   \nphases:\n---\n');
+  write(join(root, ".ultrapowers", "phases", "08-unified", "08-STATE.md"),
+    '---\nstatus: running  \ntasks_done: 2\ntasks_total: 6\n---\n');
+  assert.match(strip(runEntry(payload(root)).stdout), /08 ✔2\/6 running$/);
+});
+
+test("entry point: a phase outranks an SDD ledger, and mtime cannot change that", () => {
+  const root = phaseTree("sel-outrank", { current: "08", phases: { "08-unified": STATE_08 } });
+  const ledger = write(join(root, ".ultrapowers", "sdd", "p", "progress.md"),
+    "# SDD ledger — plan: stale-plan.md\nTask 1: complete\n");
+  const future = Date.now() / 1000 + 3600;
+  utimesSync(ledger, future, future);
+  const out = strip(runEntry(payload(root)).stdout);
+  assert.match(out, /08 ✔2\/6 running/);
+  assert.doesNotMatch(out, /stale-plan/);
+});
+
+test("entry point: CRLF frontmatter resolves the same phase", () => {
+  const named = phaseTree("sel-crlf-current", { current: "08", eol: "\r\n", phases: { "08-unified": STATE_08 } });
+  assert.match(strip(runEntry(payload(named)).stdout), /08 ✔2\/6 running/);
+
+  const running = phaseTree("sel-crlf-running", {
+    current: null,
+    eol: "\r\n",
+    rows: [{ phase: "07", slug: "a", status: "complete" }, { phase: "08", slug: "b", status: "running" }],
+    phases: { "08-unified": STATE_08 },
+  });
+  assert.match(strip(runEntry(payload(running)).stdout), /08 ✔2\/6 running/);
+});
+
+test("entry point: a ROADMAP without a resolvable phase still falls back to the ledger", () => {
+  const root = phaseTree("sel-fallback", { current: "09", phases: { "08-unified": STATE_08 } });
+  write(join(root, ".ultrapowers", "sdd", "p", "progress.md"),
+    "# SDD ledger — plan: live-plan.md\nTask 1: complete\n");
+  assert.match(strip(runEntry(payload(root)).stdout), /live-plan ✔1 →2/);
+});
+
+test("entry point: the gsd segment needs gsd-core installed, not just .planning", () => {
+  const root = dir("gsd-gate");
+  write(join(root, ".planning", "config.json"), "{}");
+  write(join(root, ".planning", "STATE.md"),
+    '---\nmilestone: v1.0\ncurrent_phase: 3\nstatus: executing\npercent: 40\n---\n');
+
+  const without = runEntry(payload(root), { claudeDir: dir("cd-nogsd") });
+  assert.doesNotMatch(strip(without.stdout), /v1\.0/);
+
+  const withCore = dir("cd-gsd");
+  write(join(withCore, "gsd-core", "VERSION"), "1.8.0\n");
+  assert.match(strip(runEntry(payload(root), { claudeDir: withCore }).stdout), /v1\.0/);
 });
 
 test("entry point: a workspace directory that does not exist still renders", () => {
