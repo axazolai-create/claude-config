@@ -567,6 +567,27 @@ async function pruneStale() {
   return considered;
 }
 
+/* The settings.json diff and the stale prune are two independent decisions, so answering (s) to the
+ * diff and yes to the prune repoints nothing and deletes the file the old command named - a blank
+ * statusline with no visible cause. Report it: silently rewriting settings the user chose to skip
+ * would be the worse answer, and naming the re-run that repairs it is the whole fix. */
+function warnStatuslineNamesMissingFile() {
+  const cmd = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8")).statusLine.command);
+  if (typeof cmd !== "string") return;
+  const fwd = cmd.replace(/\\/g, "/");
+  const under = CDIR.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+  // Quoted first (the shape every generated command uses, and the only one safe for a path with a
+  // space in it), bare whitespace-split as a fallback for a hand-written unquoted command.
+  const tokens = [...[...fwd.matchAll(/"([^"]+)"/g)].map((m) => m[1]), ...fwd.split(/\s+/)];
+  const missing = tokens.find((t) => t.startsWith(under) && !existsSync(t));
+  if (!missing) return;
+  log(`\nWARNING: settings.json statusLine.command names a file that is not on disk:`);
+  log(`  ${missing}`);
+  log(`  The statusline will render an empty line until the command is repointed. Re-run`);
+  log(`  'node setup.mjs' and answer (r) or (m) at the settings.json diff - or pass --replace-all /`);
+  log(`  --merge-all - to point it at hooks/statusline.mjs.`);
+}
+
 /* ---------- foreign gsd-core: report it, and offer a reversible removal (base/lite only) ----------
  * gsd-core is a separate product installed by /gsd-update, not by this bundle. On base/lite it has
  * no place here, but nothing about that justifies deleting it: every removal is a MOVE into the
@@ -992,32 +1013,15 @@ async function main() {
       }, []);
     }
 
-    // statusLine: only take over from an absent value or from gsd-core's own default
-    // (gsd-statusline.js) - this path IS shown to the user via the diff+prompt below, so
-    // (unlike the non-interactive CLI's ensureStatuslineOverride) it's safe to compute the
-    // desired value unconditionally and let the existing diff make the change visible.
-    // Either renderer counts as ours in BOTH directions: a profile switch prunes the file the old
-    // entry points at, so a takeover that only recognised the other profile's script would leave
-    // statusLine aimed at nothing and render an empty line on every prompt.
+    // Either historical renderer counts as ours, in both directions: a profile switch prunes the
+    // file the old entry pointed at, so a takeover that recognised only one would leave statusLine
+    // aimed at nothing and render an empty line on every prompt.
     const ourStatusLine = (cmd) => typeof cmd === "string"
       && (cmd.includes("gsd-context-meter") || cmd.includes("hooks/statusline.mjs"));
-    if (partial.statusLine && VARIANT === "full") {
+    if (partial.statusLine) {
       const curCmd = merged.statusLine && merged.statusLine.command;
       const isGsdCoreDefault = typeof curCmd === "string" && curCmd.includes("gsd-statusline.js");
       if (!curCmd || isGsdCoreDefault || ourStatusLine(curCmd)) {
-        // Built from CDIR directly (not the <HOME>-substituted partial.statusLine.command
-        // string) so the written command is byte-identical to gsd-statusline-registration.mjs's
-        // desiredCommand() - quoted + forward-slash, safe if HOME ever contains a space.
-        const scriptPath = join(CDIR, "hooks", "gsd-context-meter.mjs").replace(/\\/g, "/");
-        merged.statusLine = { ...partial.statusLine, command: `node "${scriptPath}"` };
-      }
-    } else if (VARIANT !== "full") {
-      // base/lite lose gsd-context-meter.mjs (it wraps gsd-core's own statusline, which these
-      // profiles do not install) and get the whole-line renderer instead. A user's own custom
-      // statusLine still wins: only an absent value, a prior gsd takeover, or our own entry is
-      // replaced - the last of which is what makes a re-run idempotent rather than additive.
-      const curCmd = merged.statusLine && merged.statusLine.command;
-      if (!merged.statusLine || ourStatusLine(curCmd)) {
         const scriptPath = join(CDIR, "hooks", "statusline.mjs").replace(/\\/g, "/");
         merged.statusLine = { type: "command", ...partial.statusLine, command: `node "${scriptPath}"` };
       }
@@ -1262,6 +1266,8 @@ async function main() {
   // a file this bundle installed under `full` and no longer ships under base/lite is pruneStale's
   // to remove, under pruneStale's own gates, so the detector is handed what it already claimed.
   await detectForeignGsdCore(await pruneStale());
+  // After the prune, which is what can delete the file the command names.
+  warnStatuslineNamesMissingFile();
   if (!DRY) {
     const installedSha = await resolveInstalledSha();
     const maxPluginTier = profilesOf(loadVariants(REPO_ROOT))[VARIANT]?.maxPluginTier;

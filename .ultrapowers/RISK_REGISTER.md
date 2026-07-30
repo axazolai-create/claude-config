@@ -1032,3 +1032,44 @@
   hook that polices another product's installation on every session — a standing background
   behaviour to remove software the user may have just deliberately installed. That is a worse
   trade than periodic drift, and it is out of scope for this feature.
+
+## RISK-STATUSLINE-001 — the context-window size field name is documented, not observed
+
+- **Status:** Open (accepted, 2026-07-30)
+- **Context:** phase 08 found that `statusline-lib.mjs` read the context window size from
+  `data.context_window.total_tokens`, a field the documented statusLine payload does not have —
+  the documented name is `context_window_size`. Every occurrence of `total_tokens` in this
+  repository was self-authored, in our own tests and design documents; no captured live payload
+  existed anywhere in the tree. So the denominator had been falling through to a hardcoded
+  `1_000_000` on every render regardless of model, and looked right only because the machine
+  reporting it ran a 1M-context session. The correction is in, but the field name still comes
+  from documentation rather than from an observed payload.
+- **Mitigation:** the reader is `context_window_size ?? total_tokens ?? 1_000_000`, so it is
+  correct under either name and degrades to the old behaviour if both are absent. Plan task 1 of
+  phase 08 exists to capture a live payload and settle it; it was deferred because it needs a
+  Claude Code restart no subagent can perform, and it remains outstanding rather than dropped.
+- **Residual:** if the real field is neither name, the denominator silently reverts to 1M. The
+  failure is self-diagnosing on the first render after a deploy: the token figure comes from the
+  real `current_usage` sum while the percentage comes from `used_percentage`, so a wrong
+  denominator shows up as an internally inconsistent segment — `34.0K/1M 17%` rather than a
+  consistent pair. Treat that consistency check as the deploy-gate acceptance criterion for the
+  statusline, which is what makes the outstanding task non-blocking in practice as well as in
+  principle.
+
+## RISK-TESTUNIT-001 — `.test/unit/` is gitignored, so tests there rot unnoticed
+
+- **Status:** Open (2026-07-30) — needs a decision, not a mitigation
+- **Context:** `.gitignore` excludes `.test/` entirely and commit `496eb1b` deliberately untracked
+  the three files under `.test/unit/`, recording that they stay on disk and run via `node --test`.
+  Phase 08 hit both consequences. First, deleting `gsd-context-meter-lib.mjs` orphaned its test
+  and left two `ensureStatuslineOverride` assertions expecting a path the code no longer writes —
+  three failures nobody saw, because the task's own sweep and the pre-plan blast-radius grep both
+  reached only tracked files. Second and more pointed: the phase's final review raised a merge
+  gate in `ensureStatuslineOverride`, the fix landed, and its entire regression coverage lives in
+  that untracked directory — so the branch ships a merge-gate fix with no test inside it.
+- **Mitigation:** none in place. The three files were repaired on disk during phase 08 and cannot
+  be committed without `git add -f`, which would silently reverse `496eb1b`.
+- **Residual:** either `.test/unit/` returns to git, or it is formally accepted as a local sandbox
+  and removed from the definition of "the suite passes". The present middle state is what hid the
+  breakage: the files look like part of the suite, run like part of the suite, and are absent from
+  every fresh clone. Only the user can settle which it is.

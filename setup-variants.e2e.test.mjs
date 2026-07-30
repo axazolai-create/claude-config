@@ -84,13 +84,13 @@ test("switch full->lite prunes surplus; lite->full restores; foreign untouched",
   const dir = mkdtempSync(join(tmpdir(), "cc-sw-"));
   plantForeign(dir);
   assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
-  assert.ok(existsSync(join(dir, "hooks/gsd-context-meter.mjs")));
+  assert.ok(existsSync(join(dir, "hooks/gsd-config-patch.mjs")));
   assert.equal(run(dir, ["--variant=lite", "--replace-all"]).status, 0);
-  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd hook not pruned");
+  assert.ok(!existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "gsd hook not pruned");
   assert.ok(!existsSync(join(dir, "hooks/lib/context-mode-gsd-agents.mjs")), "gsd lib not pruned (name-gate bypass broken?)");
   assert.ok(!existsSync(join(dir, "gsd-defaults.partial.json")), "gsd-defaults mirror not pruned");
   assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
-  assert.ok(existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "full files not restored");
+  assert.ok(existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "full files not restored");
   assert.equal(JSON.parse(readFileSync(join(dir, "state/bundle-manifest.json"), "utf8")).variant, "full");
   for (const f of FOREIGN) assert.equal(readFileSync(join(dir, f), "utf8"), `foreign:${f}`);
   rmSync(dir, { recursive: true, force: true });
@@ -105,7 +105,7 @@ test("manifest without variant field = full (no surplus prune on full reinstall)
   writeFileSync(mPath, JSON.stringify(m, null, 2));
   const r = run(dir, ["--replace-all"]); // no flag, non-TTY -> detected = full
   assert.equal(r.status, 0);
-  assert.ok(existsSync(join(dir, "hooks/gsd-context-meter.mjs")));
+  assert.ok(existsSync(join(dir, "hooks/gsd-config-patch.mjs")));
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -122,7 +122,7 @@ test("manifest profile round-trips and falls back to variant", () => {
   writeFileSync(mPath, JSON.stringify(m, null, 2));
   assert.equal(run(dir, ["--replace-all"]).status, 0); // no --variant flag: detected from manifest
   assert.equal(readManifest(dir).profile, "base");
-  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "should stay on base, not fall back to full");
+  assert.ok(!existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "should stay on base, not fall back to full");
 
   // NEITHER key present -> true legacy fallback path ("full" default), the case the old
   // "manifest without variant field" test claimed to cover but didn't (it left .profile behind).
@@ -132,7 +132,7 @@ test("manifest profile round-trips and falls back to variant", () => {
   writeFileSync(mPath, JSON.stringify(m, null, 2));
   assert.equal(run(dir, ["--replace-all"]).status, 0);
   assert.equal(readManifest(dir).profile, "full");
-  assert.ok(existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "neither key present -> falls back to full");
+  assert.ok(existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "neither key present -> falls back to full");
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -144,7 +144,7 @@ test("base install: exact tree, base keep-set present, gsd absent, manifest.prof
   const v = resolveVariant({ repoRoot: ROOT, variant: "base" });
   assertTreeEquals(dir, v.rels);
   assert.ok(existsSync(join(dir, "hooks/bg-supervision-nudge.mjs")), "base universal infra hook missing");
-  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd hook should be absent on base");
+  assert.ok(!existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "gsd hook should be absent on base");
   assert.match(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).statusLine.command,
     /hooks\/statusline\.mjs"$/);
   assert.equal(readManifest(dir).profile, "base");
@@ -157,13 +157,13 @@ test("full->base->lite prunes GSD then universal infra; foreign untouched", () =
   plantForeign(dir);
 
   assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
-  assert.ok(existsSync(join(dir, "hooks/gsd-context-meter.mjs")));
+  assert.ok(existsSync(join(dir, "hooks/gsd-config-patch.mjs")));
   assert.ok(existsSync(join(dir, "hooks/bg-supervision-nudge.mjs")));
   assertForeignIntact(dir);
 
   // full -> base: GSD-everything pruned, universal infra (base's own keep-set) stays.
   assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
-  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd hook not pruned on full->base");
+  assert.ok(!existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "gsd hook not pruned on full->base");
   assert.ok(!existsSync(join(dir, "hooks/lib/context-mode-gsd-agents.mjs")), "gsd lib not pruned on full->base");
   assert.ok(!existsSync(join(dir, "gsd-defaults.partial.json")), "gsd-defaults mirror not pruned on full->base");
   assert.ok(existsSync(join(dir, "hooks/bg-supervision-nudge.mjs")), "universal infra wrongly pruned on full->base");
@@ -173,38 +173,35 @@ test("full->base->lite prunes GSD then universal infra; foreign untouched", () =
   // base -> lite: the universal infra base kept now gets pruned too.
   assert.equal(run(dir, ["--variant=lite", "--replace-all"]).status, 0);
   assert.ok(!existsSync(join(dir, "hooks/bg-supervision-nudge.mjs")), "universal infra not pruned on base->lite");
-  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd hook still absent on lite");
+  assert.ok(!existsSync(join(dir, "hooks/gsd-config-patch.mjs")), "gsd hook still absent on lite");
   assert.equal(readManifest(dir).profile, "lite");
   assertForeignIntact(dir);
 
   rmSync(dir, { recursive: true, force: true });
 });
 
-// A profile switch that leaves the wrong renderer registered points statusLine at a file the new
-// profile just pruned, which reads as a broken terminal rather than a misconfiguration - so the
-// downgrade and the upgrade are both asserted on the same directory, in sequence.
-test("statusLine follows the profile: full<->base swaps the renderer, and re-running is idempotent", () => {
+test("statusLine is the same renderer on every profile, and re-running is idempotent", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-sl-"));
   const statusLine = () => JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).statusLine;
-  const installed = (sl) => existsSync(join(dir, /"(?:.*\/)?(hooks\/[^"]+)"$/.exec(sl.command)[1]));
 
   assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
-  assert.match(statusLine().command, /hooks\/gsd-context-meter\.mjs"$/);
+  assert.match(statusLine().command, /hooks\/statusline\.mjs"$/);
+  assert.ok(existsSync(join(dir, "hooks/statusline.mjs")));
+  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "the wrapper is gone");
 
   assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
   const base = statusLine();
-  assert.equal(base.type, "command");
   assert.match(base.command, /hooks\/statusline\.mjs"$/);
-  assert.ok(installed(base), "base registered a renderer it does not install");
-  assert.ok(!existsSync(join(dir, "hooks/gsd-context-meter.mjs")), "gsd renderer survived the downgrade");
+  assert.ok(existsSync(join(dir, "hooks/statusline.mjs")), "statusLine points at a file base does not install");
 
   assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);
   assert.deepEqual(statusLine(), base, "a second base run changed its own entry");
 
-  assert.equal(run(dir, ["--variant=full", "--replace-all"]).status, 0);
-  const full = statusLine();
-  assert.match(full.command, /hooks\/gsd-context-meter\.mjs"$/);
-  assert.ok(installed(full), "full registered a renderer it does not install");
+  assert.equal(run(dir, ["--variant=lite", "--replace-all"]).status, 0);
+  assert.match(statusLine().command, /hooks\/statusline\.mjs"$/);
+  // The literal production guarantee: a registered command must name a file the profile installs.
+  // The regex above only pins the string; on a profile switch the prune is what could invalidate it.
+  assert.ok(existsSync(join(dir, "hooks/statusline.mjs")), "statusLine points at a file lite does not install");
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -494,7 +491,7 @@ test("a bulk flag is never consent, and never a prompt either", async () => {
 test("a file this bundle owns is never claimed as foreign, even when the stale prune declined it", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-gsd-downgrade-"));
   assert.equal(run(dir, ["--variant=full", "--skip-all"]).status, 0);
-  const ours = ["hooks/gsd-context-meter.mjs", "hooks/gsd-config-patch.mjs",
+  const ours = ["hooks/gsd-config-patch.mjs",
     "hooks/lib/gsd-agent-patches.mjs", "hooks/lib/gsd-skill-patches.mjs", "agents/gsd-task-verifier.md"];
   for (const rel of ours) assert.ok(existsSync(join(dir, rel)), `full install is missing ${rel}`);
   plantGsdCore(dir, { settings: false });

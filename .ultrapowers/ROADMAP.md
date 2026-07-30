@@ -1,6 +1,6 @@
 ---
-updated: 2026-07-29
-current: null
+updated: 2026-07-30
+current: "08"
 deployed_through: "05"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
@@ -10,12 +10,21 @@ phases:
   - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
   - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
+  - { phase: "08", slug: unified-statusline, status: complete, delivery: branch }
 ---
 
 # Roadmap
 
-Nothing is running. Five phases are complete, one is abandoned, and one of the
-complete ones is still sitting on its branch.
+Nothing is running. Phase 08 is complete and awaiting merge — `current` still
+names it because delivery, not the work, is what is outstanding. Seven phases are
+complete, one is abandoned, and everything past phase 05 — merged or not — is
+still undeployed.
+
+`current` is deliberately not `null` here, and phase 08's own renderer is why:
+with no phase named, the ultrapowers segment falls through to the newest SDD
+ledger, and a finished plan's ledger renders as `08-PLAN ✔7 →1` — accurate about
+the outstanding task, misleading about the phase. Naming the phase until it merges
+costs nothing and says the true thing.
 
 | Phase | Status | Where the work is |
 |---|---|---|
@@ -24,7 +33,9 @@ complete ones is still sitting on its branch.
 | 03 ultrapowers-layer0-patcher | abandoned | branch merged, nothing shipped |
 | 04 ultrapowers-planning-tree | complete | merged, deployed |
 | 05 versioning-and-changelog | complete | merged, deployed |
-| 06 design-records-and-stack-rules | complete | `feat/design-records-stack-rules`, unmerged |
+| 06 design-records-and-stack-rules | complete | merged |
+| 07 gsd-core-detector-and-statusline | complete | merged, not deployed |
+| 08 unified-statusline | complete | `feat/unified-statusline`, unmerged; 7/8, task 1 open |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its
 probe commits and its rollback are both in `master`, and the phase still did not
@@ -37,28 +48,21 @@ event, and five of them would not happen.
 
 ## Next
 
-1. Write `06-SUMMARY.md` — the only phase document still owed by a finished
-   phase.
-2. Merge `feat/design-records-stack-rules`.
-3. Deploy from `master` after the merge, never from a feature branch.
+1. Merge `feat/unified-statusline`. Phase 08 is complete and its whole-branch
+   re-review says ready to merge; `08-VERIFICATION.md` reads ACHIEVED.
+2. Deploy from `master` — gated on an audit and a written impact assessment,
+   never from a feature branch. Phases 06 and 07 are merged and waiting on it,
+   and `master` is 48 commits ahead of the published `origin/master`, which is
+   why a machine bootstrapped from GitHub installs neither of them.
+3. Give phase 07 its `07-SPEC.md` and `07-PLAN.md` by moving
+   `.ultrapowers/archive/{specs,plans}/2026-07-28-gsd-core-detector-and-statusline*.md`
+   into its directory, and repair the references the move breaks.
 
 ## Not yet phases
 
-Two pieces of work exist without a phase directory, because nothing in this tree
+One piece of work exists without a phase directory, because nothing in this tree
 is scaffolded before it has content.
 
-- **The gsd-core detector and the `base`/`lite` statusline.** Complete on
-  `feat/gsd-core-detector` — ten commits ahead of `master` from base `103699b`,
-  tip `86353fe` — unmerged, with no phase directory yet. Design:
-  `.ultrapowers/archive/specs/2026-07-28-gsd-core-detector-and-statusline-design.md`.
-  Plan: `.ultrapowers/archive/plans/2026-07-28-gsd-core-detector-and-statusline.md`.
-  Two things about it are now out of date and were true when it was designed.
-  Its design says "only the GSD *names* (`STATE.md`, `ROADMAP.md`) are absent"
-  from this tree and routes the ultrapowers case through the SDD ledger instead;
-  that premise is false as of these files. And its GSD reader parses
-  `.planning/STATE.md` with regexes written against a format nobody verified —
-  the plan says so itself. Neither is a defect in the branch; both are work for
-  whoever teaches the statusline to read the files here.
 - **The decision-records CLI.** Never started. Plan:
   `.ultrapowers/archive/plans/2026-07-28-decision-records.md`. It runs last by
   its own constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/`

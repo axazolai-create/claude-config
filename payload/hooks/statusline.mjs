@@ -1,14 +1,12 @@
 #!/usr/bin/env node
-// statusLine renderer for the base and lite profiles. full keeps gsd-context-meter.mjs, which
-// wraps gsd-core's own gsd-statusline.js and rewrites one segment; without gsd-core there is
-// nothing to wrap, so this renders the whole line itself. Any error yields empty output - the
-// statusline never breaks the prompt.
+// statusLine renderer for every profile - full, base, lite. Composes pending updates, model,
+// context, project, and (when applicable) gsd and ultrapowers work status into one line, with no
+// subprocess spawned. Any error yields empty output - the statusline never breaks the prompt.
 import { readFileSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, usedTokensOf } from "./lib/statusline-lib.mjs";
+import { computeContext } from "./lib/statusline-lib.mjs";
 import { pendingNames } from "./lib/component-registry.mjs";
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -23,32 +21,8 @@ export function renderUpdates(names) {
   return YELLOW(`⬆ ${shown.join(" ")}${rest > 0 ? ` +${rest}` : ""}`);
 }
 
-export function renderGit(porcelain) {
-  const lines = String(porcelain ?? "").split("\n");
-  const head = lines[0] ?? "";
-  if (/^## HEAD \(no branch\)/.test(head)) return "(detached)";
-  const named = /^## (?:No commits yet on )?([^.\s]+)/.exec(head);
-  if (!named) return "";
-  const ahead = /\bahead (\d+)/.exec(head);
-  const behind = /\bbehind (\d+)/.exec(head);
-  let staged = 0, modified = 0, untracked = 0;
-  for (const l of lines.slice(1)) {
-    if (!l) continue;
-    if (l.startsWith("??")) { untracked += 1; continue; }
-    if (l[0] && l[0] !== " ") staged += 1;
-    if (l[1] && l[1] !== " ") modified += 1;
-  }
-  const parts = [
-    staged ? `+${staged}` : "",
-    modified ? `~${modified}` : "",
-    untracked ? `?${untracked}` : "",
-    ahead ? `↑${ahead[1]}` : "",
-    behind ? `↓${behind[1]}` : "",
-  ].join("");
-  return `${named[1]}${parts || "✓"}`;
-}
-
 export function renderGsd({ milestone, phase, status, percent } = {}) {
+  if (!milestone) return "";
   const n = Number(percent);
   const pct = percent == null || percent === "" || Number.isNaN(n) ? null : Math.max(0, Math.min(100, n));
   // Three cells are too coarse for a linear map: a full bar is reserved for an actually
@@ -61,11 +35,32 @@ export function renderGsd({ milestone, phase, status, percent } = {}) {
 }
 
 export function renderSdd({ plan, complete, next } = {}) {
-  return `${plan} ✔${complete} →${next}`;
+  if (!plan) return "";
+  return `${plan} ✔${Number(complete) || 0} →${Number(next) || 1}`;
 }
 
-export function render({ updates, context, state } = {}) {
-  return [renderUpdates(updates), context, state].filter(Boolean).join(DIM(" │ "));
+export function renderPhase({ id, done, total, dropped, status } = {}) {
+  if (!id) return "";
+  // fmField yields null for an absent key and Number(null) is a finite 0, which would render a
+  // ✔0/0 tally for a phase that simply has no plan yet. == null catches undefined too.
+  const t = total == null ? NaN : Number(total);
+  const d = done == null ? NaN : Number(done);
+  const effective = Number.isFinite(t) ? t - (Number(dropped) || 0) : null;
+  // No percentage, ever: a phase that retires a task states its tally in fields and its reason in
+  // prose, so any derived percentage under-reports a phase that is in fact finished.
+  const tally = effective != null && Number.isFinite(d) ? ` ✔${d}/${effective}` : "";
+  return `${id}${tally}${status ? ` ${status}` : ""}`;
+}
+
+export function installedProfile(claudeDir) {
+  const m = safe(() => JSON.parse(readFileSync(join(claudeDir, "state", "bundle-manifest.json"), "utf8")));
+  return (m && (m.profile || m.variant)) || null;
+}
+
+export function render({ updates, model, context, project, gsd, up } = {}) {
+  return [renderUpdates(updates), model, context, project, gsd, up]
+    .filter(Boolean)
+    .join(DIM(" │ "));
 }
 
 // Frontmatter or bold-markdown scalar, e.g. `milestone: v1.0` / `**Status**: executing`.
@@ -92,8 +87,8 @@ function gsdState(root) {
   // gsd-core writes active_phase while an orchestrator is in flight and current_phase otherwise;
   // a hand-kept STATE.md may just say phase.
   const phase = field(text, "active_phase") || field(text, "current_phase") || field(text, "phase");
-  // A .planning/ this parser cannot read is not an error - it falls through to the plain
-  // project+branch segment, which is always true. Guessing a phase would not be.
+  // A .planning/ this parser cannot read is not an error - the gsd segment just stays absent,
+  // and the project segment renders regardless. Guessing a phase would not be.
   if (!milestone || !phase) return null;
   return renderGsd({ milestone, phase, status: field(text, "status") || "", percent: gsdPercent(text) });
 }
@@ -119,28 +114,82 @@ function sddState(root) {
   return renderSdd({ plan: plan ? basename(plan.trim(), ".md") : name, complete: done.size, next });
 }
 
-function plainState(root) {
-  const branch = safe(() => renderGit(execFileSync("git", ["-C", root, "status", "--porcelain=v1", "-b"], {
-    encoding: "utf8",
-    timeout: 1500,
-    stdio: ["ignore", "pipe", "ignore"],
-  })), "");
-  return [basename(root), branch].filter(Boolean).join(" ");
+function frontmatter(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text ?? ""));
+  return m ? m[1] : "";
+}
+
+// CR is a JS LineTerminator, so `(.+)$` under /m already stops before CRLF's \r. .trim() is for
+// trailing spaces/tabs, which ARE captured and would leave a quoted value's closing quote intact.
+function fmField(fm, key) {
+  const m = new RegExp(`^[ \\t]*${key}[ \\t]*:[ \\t]*(.+)$`, "m").exec(fm);
+  if (!m) return null;
+  const v = m[1].trim().replace(/^["']|["']$/g, "");
+  return v === "null" || v === "" ? null : v;
+}
+
+export function roadmapPhases(text) {
+  return [...frontmatter(text).matchAll(/^\s*-\s*\{([^}]*)\}\s*$/gm)].map((m) => {
+    const row = {};
+    for (const pair of m[1].split(",")) {
+      const i = pair.indexOf(":");
+      if (i === -1) continue;
+      row[pair.slice(0, i).trim()] = pair.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    }
+    return row;
+  });
+}
+
+// What the tree declares, in order: ROADMAP's `current`, else a single `running` phase. Zero or
+// several running phases means the tree does not know, and the bar says nothing rather than guess.
+function phaseSegment(root) {
+  const tree = join(root, ".ultrapowers");
+  const roadmap = safe(() => readFileSync(join(tree, "ROADMAP.md"), "utf8"), "") ?? "";
+  if (!roadmap) return null;
+  let id = fmField(frontmatter(roadmap), "current");
+  if (!id) {
+    const running = roadmapPhases(roadmap).filter((r) => r.status === "running");
+    if (running.length !== 1) return null;
+    id = running[0].phase;
+  }
+  const names = safe(() => readdirSync(join(tree, "phases")), []) ?? [];
+  const hit = names.find((n) => n.startsWith(`${id}-`));
+  if (!hit) return null;
+  const stateText = safe(() => readFileSync(join(tree, "phases", hit, `${id}-STATE.md`), "utf8"), "") ?? "";
+  if (!stateText) return null;
+  const fm = frontmatter(stateText);
+  return renderPhase({
+    id,
+    done: fmField(fm, "tasks_done"),
+    total: fmField(fm, "tasks_total"),
+    dropped: fmField(fm, "tasks_dropped"),
+    status: fmField(fm, "status"),
+  });
+}
+
+// mtime is a legitimate tie-breaker among ledgers, but it must never outrank a declared phase.
+function upState(root) {
+  return phaseSegment(root) || sddState(root);
+}
+
+function gsdActive(root) {
+  return existsSync(join(CLAUDE_DIR, "gsd-core", "VERSION"))
+    && existsSync(join(root, ".planning", "config.json"));
 }
 
 function main(raw) {
   const data = safe(() => JSON.parse(raw || "{}"), {}) || {};
-  const workspace = data.workspace || {};
-  const root = resolve(workspace.current_dir || workspace.project_dir || process.cwd());
+  const ws = data.workspace || {};
+  const root = resolve(ws.current_dir || ws.project_dir || process.cwd());
   const state = safe(() => JSON.parse(readFileSync(join(CLAUDE_DIR, "state", "component-updates.json"), "utf8")), null);
-  const m = safe(() => computeUsedTokenMetrics(data), null);
-  const context = m
-    ? `${formatCurrentTokens(usedTokensOf(m))}/${formatContextWindow(m.totalCtx)} ${m.used.toFixed(1)}%`
-    : "";
-  // Each source is guarded on its own so a broken one degrades to the next rather than
-  // costing the whole line.
-  const detail = safe(() => gsdState(root)) || safe(() => sddState(root)) || safe(() => plainState(root), "");
-  process.stdout.write(render({ updates: pendingNames(state), context, state: detail }));
+  process.stdout.write(render({
+    updates: pendingNames(state),
+    model: (data.model && data.model.display_name) || "",
+    context: safe(() => computeContext(data), "") || "",
+    project: basename(root),
+    gsd: gsdActive(root) ? (safe(() => gsdState(root)) || "") : "",
+    up: installedProfile(CLAUDE_DIR) === "lite" ? "" : (safe(() => upState(root)) || ""),
+  }));
 }
 
 function isMainModule() {
@@ -155,13 +204,23 @@ if (isMainModule()) {
   let input = "";
   let done = false;
   // No process.exit(): on Windows a pipe write is async, and exiting on the spot can truncate
-  // the line we just wrote. Nothing else holds the loop open, so the process ends on its own.
+  // the line we just wrote. Nothing else holds the loop open once stdin is released below, so
+  // the process ends on its own.
   const finish = () => {
     if (done) return;
     done = true;
+    clearTimeout(guard);
     try { main(input); } catch { /* never break the prompt */ }
     process.exitCode = 0;
+    // Rendering alone does not end the process: the `data` listener below keeps the readable
+    // flowing, so stdin that never closes would hold the event loop open forever after the line
+    // was already printed. Releasing the handle is what lets the loop drain.
+    try { process.stdin.pause(); process.stdin.destroy(); } catch { /* already gone */ }
   };
+  // A statusLine command whose stdin never closes would otherwise hang forever and leave the
+  // prompt with no line at all; rendering what arrived beats rendering nothing.
+  const guard = setTimeout(finish, Number(process.env.CLAUDE_STATUSLINE_STDIN_MS) || 1500);
+  guard.unref();
   if (process.stdin.isTTY) finish();
   else {
     process.stdin.setEncoding("utf8");

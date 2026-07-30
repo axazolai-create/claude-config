@@ -229,10 +229,11 @@ Reinstall: `node setup.mjs` (interactively pick the other variant, or pass
   **Curated files and files you've edited by hand** (on-disk hash doesn't match what the last
   `setup.mjs` run recorded) are never pruned — they're left as-is even if the new variant
   doesn't include them.
-- filters the hook entries and the `statusLine` key in `settings.json` for the new variant:
-  switching to base/lite drops the GSD hooks and, if it was set, swaps the `gsd-context-meter.mjs`
-  entry in `statusLine` for those profiles' own renderer, `statusline.mjs`; switching back
-  restores `gsd-context-meter.mjs` (your own, non-bundle `statusLine` is left alone).
+- filters the hook entries in `settings.json` for the new variant: switching to base/lite drops
+  the GSD hooks, switching back restores them. The `statusLine` key no longer varies by profile —
+  the same `statusline.mjs` is registered on full/base/lite (see "What each hook does and why"
+  below), so switching variants leaves it alone; your own, non-bundle `statusLine` is still left
+  alone too.
 - reconciles the plugin set and prints a plan (what to install/remove, what to enable/disable)
   — asks for confirmation (`y/N`) before calling `claude plugin install/uninstall`; if the
   `claude` CLI isn't on PATH, it prints the commands for you to run by hand instead of
@@ -517,8 +518,13 @@ the merge is always additive and can't silently clobber anything.
   `ensureStatuslineOverride()` (`hooks/lib/gsd-statusline-registration.mjs`) — not a shared
   implementation with `setup.mjs`'s inline block but a second, independent one (the CLI has no
   interactive diff to fall back on, so the overwrite decision must be unconditionally safe on its
-  own), both deliberately solving the same three-way problem. Handy to re-run in isolation after
-  editing `gsd-defaults.partial.json`, without a full `setup.mjs`.
+  own), both deliberately solving the same three-way problem. Both also still recognize the old
+  `gsd-context-meter.mjs` command in an already-written `statusLine.command` — that file is
+  deleted in this version, but the recognition is kept on purpose: a machine carrying that old
+  registration is recognized as ours and migrates to `statusline.mjs`, rather than being treated
+  as a custom `statusLine`.
+  Handy to re-run in isolation after editing `gsd-defaults.partial.json`, without a full
+  `setup.mjs`.
 
 ### Flags (non-interactive / for CI)
 
@@ -849,19 +855,33 @@ Not a hook in the `hooks.*` sense (a different `settings.json` mechanism — the
 `statusLine` key, not the `PreToolUse`/`PostToolUse`/event hooks above), but the same "a script
 from this bundle, driving your Claude Code" principle — here for findability:
 
-- **gsd-context-meter.mjs** (`statusLine.command`, registered — see "How the installer works"
-  above; **full variant only** — base/lite don't install this file and register `statusline.mjs`
-  instead, see "Bundle variants"). Wraps gsd-core's own `gsd-statusline.js`: calls it as a black box and rewrites only the
-  context-window progress-bar segment into a textual token counter (`[420k/1000k] 42%`) — the
-  other segments (model/task/milestone bar) always match what the installed gsd-core actually
-  draws, without duplicating its logic. Key property: **it never breaks the statusline** — any
-  error (unreadable input JSON, the original script missing/crashed, metric computation failing)
-  falls back to the original's raw output or an empty string, never an exception out.
-- **statusline.mjs** (`statusLine.command`, **base/lite**). There is nothing to wrap — these
-  profiles have no gsd-core — so it renders the whole line itself: pending component updates, the
-  context counter (`[420k/1000k] 42%`), and project state (GSD `.planning/`, an `.ultrapowers/sdd/`
-  plan, or just folder + git branch). Same key property: any error yields empty output and exit 0,
-  the statusline never breaks.
+- **statusline.mjs** (`statusLine.command`, registered — see "How the installer works" above;
+  **all three profiles** — `full`, `base`, `lite` — one renderer instead of the former choice
+  between wrapping gsd-core's `gsd-statusline.js` and base/lite's own renderer; the deleted
+  `gsd-context-meter.mjs` was that wrapper). The line renders itself, with no subprocess at all —
+  six segments left to right, joined by a dim `│`:
+  1. **pending component updates**, by **name** (`⬆ context-mode graphify`), leftmost — not a
+     count, and not on the right the way the deleted wrapper appended it;
+  2. **model** — `data.model.display_name` from the statusLine payload;
+  3. **context** — tokens **and** percent, e.g. `165.6K/1M 17%`;
+  4. **project** — the directory name only, no git branch;
+  5. **gsd work status** — only when gsd-core is installed **and** active for this project
+     (`<claudeDir>/gsd-core/VERSION` exists **and** `<root>/.planning/config.json` exists);
+  6. **ultrapowers work status** — on every profile except `lite`. The profile is read from
+     `~/.claude/state/bundle-manifest.json`; an absent or unreadable manifest fails **open** (the
+     segment shows) — only `lite` suppresses it.
+
+  Segment 6 selects what to name deterministically, in this order: `.ultrapowers/ROADMAP.md`'s
+  frontmatter `current`; else the single phase whose `status: running` (zero or several matches —
+  the segment says nothing rather than guess); else the newest SDD ledger under
+  `.ultrapowers/sdd/`. It used to pick by file mtime, and a checkout would change what the bar
+  claimed; now mtime is only a tie-breaker among ledgers and can never outrank a declared phase.
+  A phase prints a tally and **never** a percentage — `08 ✔2/6 running`, or `08 planned` when the
+  phase has no plan yet: a phase that retires a task (`tasks_dropped`) states its tally in fields
+  and its reason in prose, and a derived percentage would under-report an already-finished phase.
+
+  Same key property throughout: any single source's error costs only its own segment, never the
+  whole line — empty output and exit 0, the statusline never breaks.
 
 All hooks are Node-based and registered in **exec form** (`command: "node"`, `args: [abs.
 path]`): no shell, so they work on Windows without Git Bash too, with no `$HOME` or

@@ -1,7 +1,7 @@
 // payload/hooks/lib/statusline-lib.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatCurrentTokens, formatContextWindow, computeUsedTokenMetrics, appendUpdatesSegment, usedTokensOf } from "./statusline-lib.mjs";
+import { formatCurrentTokens, formatContextWindow, computeContext } from "./statusline-lib.mjs";
 
 test("formatCurrentTokens: thousands with one decimal digit", () => {
   assert.equal(formatCurrentTokens(123400), "123.4K");
@@ -14,73 +14,44 @@ test("formatContextWindow: compact K/M label, trailing .0 stripped", () => {
   assert.equal(formatContextWindow(1500000), "1.5M");
 });
 
-test("computeUsedTokenMetrics: null when remaining_percentage absent", () => {
-  assert.equal(computeUsedTokenMetrics({}), null);
-  assert.equal(computeUsedTokenMetrics(null), null);
-  assert.equal(computeUsedTokenMetrics({ context_window: {} }), null);
+test("computeContext: window size comes from context_window_size", () => {
+  assert.equal(
+    computeContext({ context_window: { context_window_size: 200000, used_percentage: 22,
+      current_usage: { input_tokens: 40000, cache_creation_input_tokens: 1000,
+        cache_read_input_tokens: 2000, output_tokens: 500 } } }),
+    "43.5K/200K 22%");
 });
 
-test("computeUsedTokenMetrics: sums current_usage fields, default 16.5% buffer", () => {
-  const result = computeUsedTokenMetrics({
-    context_window: {
-      remaining_percentage: 72.3,
-      total_tokens: 200000,
-      current_usage: { input_tokens: 40000, cache_creation_input_tokens: 1000, cache_read_input_tokens: 2000, output_tokens: 500 },
-    },
-  });
-  assert.equal(result.totalCtx, 200000);
-  assert.equal(result.usedTokens, 43500);
-  assert.equal(result.used.toFixed(1), "33.2");
+test("computeContext: falls back to total_tokens, then to 1M", () => {
+  assert.equal(computeContext({ context_window: { total_tokens: 200000, used_percentage: 10 } }),
+    "20.0K/200K 10%");
+  assert.equal(computeContext({ context_window: { used_percentage: 10 } }), "100.0K/1M 10%");
 });
 
-test("computeUsedTokenMetrics: usedTokens null when current_usage absent, defaults totalCtx to 1M", () => {
-  const result = computeUsedTokenMetrics({ context_window: { remaining_percentage: 40 } });
-  assert.equal(result.usedTokens, null);
-  assert.equal(result.totalCtx, 1_000_000);
-  assert.equal(result.used.toFixed(1), "71.9");
+test("computeContext: the real usage sum wins over the percentage estimate", () => {
+  const out = computeContext({ context_window: { context_window_size: 1000000, used_percentage: 50,
+    current_usage: { input_tokens: 1000, output_tokens: 500 } } });
+  assert.equal(out, "1.5K/1M 50%");
 });
 
-test("computeUsedTokenMetrics: usedTokens null when current_usage sums to zero", () => {
-  const result = computeUsedTokenMetrics({ context_window: { remaining_percentage: 50, total_tokens: 100000, current_usage: {} } });
-  assert.equal(result.usedTokens, null);
+test("computeContext: tokens without a percentage, and a percentage without tokens", () => {
+  assert.equal(computeContext({ context_window: { context_window_size: 200000,
+    current_usage: { input_tokens: 5000 } } }), "5.0K/200K");
+  assert.equal(computeContext({ context_window: { context_window_size: 200000, used_percentage: 3 } }),
+    "6.0K/200K 3%");
 });
 
-test("computeUsedTokenMetrics: derives buffer from CLAUDE_CODE_AUTO_COMPACT_WINDOW when set", () => {
-  const prev = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
-  process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = "50000";
-  try {
-    const result = computeUsedTokenMetrics({ context_window: { remaining_percentage: 90, total_tokens: 100000 } });
-    assert.equal(result.used.toFixed(1), "20.0");
-  } finally {
-    if (prev === undefined) delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
-    else process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = prev;
-  }
+test("computeContext: nothing to show yields an empty segment", () => {
+  assert.equal(computeContext({}), "");
+  assert.equal(computeContext({ context_window: {} }), "");
+  assert.equal(computeContext({ context_window: { current_usage: {} } }), "");
+  assert.equal(computeContext(null), "");
 });
 
-test("computeUsedTokenMetrics: used is clamped to [0, 100]", () => {
-  const low = computeUsedTokenMetrics({ context_window: { remaining_percentage: 100, total_tokens: 100000 } });
-  assert.equal(low.used, 0);
-  const high = computeUsedTokenMetrics({ context_window: { remaining_percentage: 0, total_tokens: 100000 } });
-  assert.equal(high.used, 100);
-});
-
-test("usedTokensOf: prefers the real sum, estimates from used% only without one", () => {
-  assert.equal(usedTokensOf({ totalCtx: 200000, used: 50, usedTokens: 43500 }), 43500);
-  assert.equal(usedTokensOf({ totalCtx: 200000, used: 50, usedTokens: null }), 100000);
-  assert.equal(usedTokensOf({ totalCtx: 200000, used: 0, usedTokens: 0 }), 0);
-});
-
-test("appendUpdatesSegment: appends when count>0, no-op otherwise", () => {
-  assert.equal(appendUpdatesSegment("bar", 0), "bar");
-  assert.equal(appendUpdatesSegment("bar", undefined), "bar");
-  assert.equal(appendUpdatesSegment(null, 2), null);
-  const out = appendUpdatesSegment("bar", 2);
-  assert.match(out, /⬆2/);
-  assert.ok(out.startsWith("bar"));
-});
-
-test("appendUpdatesSegment: inserts before a trailing newline", () => {
-  const out = appendUpdatesSegment("bar\n", 1);
-  assert.ok(out.endsWith("\n"));
-  assert.match(out, /⬆1[^\n]*\n$/);
+test("computeContext: the autocompact env var no longer changes anything", () => {
+  const data = { context_window: { context_window_size: 1000000, used_percentage: 20 } };
+  const before = computeContext(data);
+  process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = "500000";
+  try { assert.equal(computeContext(data), before); }
+  finally { delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; }
 });

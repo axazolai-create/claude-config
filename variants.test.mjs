@@ -107,7 +107,6 @@ test("lite drops base's universal infra + neo4j", () => {
 
 test("full variant is identity over payload/ (minus alwaysExclude)", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
-  assert.ok(v.rels.includes("hooks/gsd-context-meter.mjs"));
   // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
   // .test.mjs), every **.test.mjs (tests are never shipped to any profile), and every
   // claude-md/ fragment (build input for assemble-claude-md.mjs — CLAUDE.md itself is
@@ -265,8 +264,6 @@ test("hook registrations: lite keeps exactly the 7 lite hooks, and its own statu
     "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "graphify-grep-nudge.mjs", "inject-axes.mjs",
     "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
   ]);
-  // lite has no gsd-core, so the wrapper is out and the whole-line renderer is what gets registered.
-  assert.ok(!basenames.has("gsd-context-meter.mjs"));
   assert.ok(basenames.has("statusline.mjs"));
 });
 
@@ -283,7 +280,7 @@ test("base hook registrations resolve to base's file set", () => {
   for (const s of ["bg-supervision-nudge.mjs", "schedulewakeup-loop-only-nudge.mjs"])
     assert.ok(scripts.has(s), `base settings must register ${s}`);
   // full-only / GSD infra MUST NOT be registered for base:
-  for (const s of ["db-live-access-gate.mjs", "ci-watch-nudge.mjs", "gsd-context-meter.mjs", "task-lifecycle-probe.mjs"])
+  for (const s of ["db-live-access-gate.mjs", "ci-watch-nudge.mjs", "task-lifecycle-probe.mjs"])
     assert.ok(!scripts.has(s), `base settings must NOT register ${s}`);
   // pnpm-phantom-fix-hook.mjs is deliberately NEVER globally registered in settings.partial.json
   // (.ultrapowers/archive/specs/2026-07-21-pnpm-phantom-fix-design.md, decision C2: "settings.partial.json
