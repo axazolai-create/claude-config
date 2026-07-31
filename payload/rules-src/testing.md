@@ -38,6 +38,11 @@ paths:
 - Test through the public interface; don't mock the unit under test itself, only its
   external dependencies (network, DB, clock, filesystem).
 - Deterministic: no real sleep/network/wall-clock; inject/fake time, fake I/O boundaries.
+- A default parameter is not injection. A fixture that hardcodes an absolute timestamp while
+  the code under test defaults its own `now` to the real clock is a dated bomb: it passes
+  until the encoded date falls outside whatever window the code applies, then fails forever,
+  and it fails on a machine nobody changed. Pass the clock in from the test. When a suite
+  already has such fixtures, the fix is the injection point, not a fresher date.
 - Prefer real objects/fixtures over mocks when cheap; mock only true external boundaries.
 - Cover failure paths and edge cases, not just the happy path — a bug fix needs a
   regression test that fails before the fix and passes after.
