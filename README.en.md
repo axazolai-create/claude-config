@@ -304,6 +304,11 @@ tests `*.test.mjs`, run via `node --test`):
   task's completion re-invokes the model by itself, so polling wakeups are pure waste).
 - **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
   exports the cross-project graph into Neo4j (details — the graphify section below).
+  The push is automatic: `hooks/lib/graphify-global-sync-run.mjs` runs it in the tail of the same
+  background process as the `extract`, inside the same lock. The script exists only in installs
+  that took the `neo4j` option (profile `base` excludes it); `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` turns
+  it off. The result lands in `~/.claude/state/graphify-neo4j-push.log`. The manual path remains:
+  `graphify-sync-all.mjs --neo4j-push`.
 
 Permissions in `settings.partial.json` are normalized on merge: `Write(x)`/`MultiEdit(x)` →
 `Edit(x)` (+ dedup), since Claude Code now matches all file tools via `Edit(path)`, and
@@ -715,7 +720,11 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   edit, delete or move any path listed in a `.protected` file — `.gitignore` format, binding at
   its own directory and every level below. Reading is untouched and copying **from** a protected
   path is allowed; `cp` is judged by direction, and a command that cannot be parsed but mentions
-  a protected path is denied, since that is where a lost file is most likely. Two rules are
+  a protected path is denied, since that is where a lost file is most likely. Creating a file
+  that does not exist yet is allowed even under a matching rule: the prohibition reads "edit,
+  delete or move" and creation is none of them — otherwise a phase could not write its own spec.
+  Overwriting an existing file stays denied, and "delete it, then create it again" is not a way
+  around that, because the deletion is refused. Two rules are
   intrinsic rather than list entries: `.protected` may be edited but never deleted, and a
   `.protected` that `.gitignore` would hide denies every write in its scope — a protection
   living on one machine is not a project rule — with `.gitignore` and `.protected` themselves
@@ -753,10 +762,13 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
 - **graphify-global-sync.mjs** (PostToolUse: `Bash`) + **hooks/lib/graphify-global-sync-run.mjs**
   (shared worker). After a `git commit` made by Claude via the Bash tool, in the background
   (detached, doesn't block the session), refreshes this project's entry in the cross-project
-  `~/.graphify/global-graph.json` (`graphify extract . --global --as <name>`). No-op if
+  `~/.graphify/global-graph.json` (`graphify extract . --code-only --global --as <name>` — local
+  AST, no LLM key and no cost). No-op if
   `graphify` isn't installed, if it's not a `git commit`, or if the commit didn't succeed. A
   PID/mtime lock at `~/.claude/state/graphify-sync-<name>.lock` keeps concurrent triggers from
-  spawning parallel extractions; the lock is considered stale after 10 minutes.
+  spawning parallel extractions; the lock is considered stale after 10 minutes. In the tail of the
+  same process, inside the same lock, the Neo4j push runs — if `bin/graphify-neo4j-push.mjs` is
+  installed and `CLAUDE_GRAPHIFY_NEO4J_PUSH` is not `0`.
   **Limitation:** Claude Code hooks only see tool calls Claude itself makes — a manual
   `git commit`/`--amend` from a terminal or IDE is invisible to this hook in principle. That's
   what the native git hook below closes. Disable both: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.

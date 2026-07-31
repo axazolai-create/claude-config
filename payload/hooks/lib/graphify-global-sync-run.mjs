@@ -26,16 +26,19 @@
 // signal of their own (no tag, no distinct command) - that case is covered incidentally by
 // the commit/push triggers, since finishing an Ultrapowers branch always ends in one of those.
 // Usage: node graphify-global-sync-run.mjs [repoPath]  (defaults to cwd)
+// Also pushes the refreshed global graph to Neo4j when bin/graphify-neo4j-push.mjs is
+// installed - same detached process, inside the same lock. Toggle: CLAUDE_GRAPHIFY_NEO4J_PUSH=0.
 // Never throws, never blocks: no-ops (exit 0) if this isn't a git repo, HEAD has no
 // commits yet, or `graphify` isn't installed - this must never surface as an error
 // to whichever caller ran it (a Claude Code hook or git itself).
-import { existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { buildSyncCommand } from "./graphify-sync-command.mjs";
+import { isHeld, take } from "./state-lock.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
-const STALE_LOCK_MS = 10 * 60 * 1000; // guards against a crashed prior run
 const IS_WIN = platform() === "win32";
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 
@@ -59,24 +62,23 @@ if (!gv || gv.error || gv.status !== 0) process.exit(0);
 // git hook firing for the same commit, or rapid consecutive commits) don't pile up
 // concurrent extractions of the same project. A stale lock is ignored after TTL.
 const stateDir = join(CLAUDE_DIR, "state");
-safe(() => mkdirSync(stateDir, { recursive: true }));
 const lock = join(stateDir, `graphify-sync-${name}.lock`);
-if (existsSync(lock)) {
-  const age = Date.now() - (safe(() => statSync(lock).mtimeMs) || 0);
-  if (age < STALE_LOCK_MS) process.exit(0);
-}
-safe(() => writeFileSync(lock, String(process.pid)));
+if (isHeld(lock)) process.exit(0);
+take(lock);
 
 // Run graphify, then remove the lock, all inside one detached background process -
 // the caller (Claude Code hook or git itself) is never delayed by this.
-const args = ["extract", root, "--global", "--as", name];
-const quoted = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
-if (IS_WIN) {
-  const inner = `graphify ${args.map(quoted).join(" ")} & del /f /q ${quoted(lock)}`;
-  spawn("cmd", ["/c", inner], { cwd: root, detached: true, stdio: "ignore", windowsHide: true }).unref();
-} else {
-  const inner = `graphify ${args.map(quoted).join(" ")}; rm -f ${quoted(lock)}`;
-  spawn("sh", ["-c", inner], { cwd: root, detached: true, stdio: "ignore" }).unref();
-}
+// The push is opt-in twice over: the script only exists in installs that took the neo4j
+// option, and CLAUDE_GRAPHIFY_NEO4J_PUSH=0 turns it off without touching the sync.
+const pushScript = join(CLAUDE_DIR, "bin", "graphify-neo4j-push.mjs");
+const pushWanted = process.env.CLAUDE_GRAPHIFY_NEO4J_PUSH !== "0" && existsSync(pushScript);
+const cmd = buildSyncCommand({
+  root, name, lock, isWin: IS_WIN,
+  pushScript: pushWanted ? pushScript : null,
+  node: process.execPath,
+  logPath: join(stateDir, "graphify-neo4j-push.log"),
+});
+spawn(cmd.shell, [cmd.flag, cmd.inner],
+  { cwd: root, detached: true, stdio: "ignore", windowsHide: true }).unref();
 
 process.exit(0);

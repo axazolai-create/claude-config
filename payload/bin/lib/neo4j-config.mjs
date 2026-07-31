@@ -132,6 +132,25 @@ export function ensureNeo4jDriver(python, { run = spawnSync } = {}) {
   return { ok: false, error: "could not install the neo4j driver (tried uv/pipx/pip)" };
 }
 
+// The interpreter prune and the driver both need. A machine that wrote neo4j.env has already
+// consented to the driver, so a missing one is restored rather than reported and abandoned:
+// `uv tool install graphifyy` without `--with neo4j` is the ordinary upgrade, and it drops it.
+export function resolveDriverPython({
+  find = findGraphifyPython, installed = driverInstalled, ensure = ensureNeo4jDriver,
+} = {}) {
+  const python = find();
+  if (!python) {
+    return { ok: false, error: "no python with graphify found (run: node ~/.claude/bin/graphify-setup.mjs)" };
+  }
+  if (installed(python)) return { ok: true, python };
+  ensure(python);
+  if (installed(python)) return { ok: true, python, recovered: true };
+  return {
+    ok: false,
+    error: "neo4j driver missing and could not be installed (run: uv tool install graphifyy --with neo4j)",
+  };
+}
+
 export function parseReadResult(stdout) {
   const m = String(stdout).match(/READ_OK nodes=(\d+)/);
   return m ? { ok: true, nodeCount: Number(m[1]) } : { ok: false };

@@ -1,6 +1,6 @@
 ---
 updated: 2026-07-31
-current: null
+current: "13"
 deployed_through: "12"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, delivery: merged }
@@ -15,11 +15,14 @@ phases:
   - { phase: "10", slug: phase-progress-segment, status: complete, delivery: merged }
   - { phase: "11", slug: protected-paths, status: complete, delivery: merged }
   - { phase: "12", slug: decision-records, status: complete, delivery: branch }
+  - { phase: "13", slug: graphify-neo4j-autosync, status: running, delivery: branch }
 ---
 
 # Roadmap
 
-Nothing is running. Eleven phases are complete and one is superseded by phase 04. Everything
+Phase 13 is running: the graphify chain reaches Neo4j on its own, or it does not reach it at
+all — investigation found it broken in four places and frozen since 3 July. Twelve phases are
+complete and one is superseded by phase 04. Everything
 through phase 08 is deployed; phases 09, 10 and 11 are merged and undeployed, and phase 12 sits
 on `feat/decision-records` awaiting its merge. Phases 10, 11 and 12 were all specified and
 implemented on 2026-07-31 — the statusline segment, the `.protected` mechanism and the decision
@@ -52,6 +55,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 10 phase-progress-segment | complete | merged, deployed |
 | 11 protected-paths | complete | merged, deployed |
 | 12 decision-records | complete | merged, deployed |
+| 13 graphify-neo4j-autosync | running | specified, on `feat/graphify-neo4j-autosync` |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
