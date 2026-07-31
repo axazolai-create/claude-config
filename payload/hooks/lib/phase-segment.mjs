@@ -118,6 +118,11 @@ export function readPhaseState(root) {
   const n = (key) => Number(fmField(fm, key)) || 0;
   const fixing = n("tasks_fixing"), blocked = n("tasks_blocked");
   const active = ledger.unreported - fixing - blocked;
-  const queued = ledger.total - ledger.done - active - fixing - blocked - n("tasks_dropped");
+  // `tasks_dropped` is deliberately NOT subtracted here. It belongs to a frontmatter tally,
+  // where the denominator counts tasks that were planned; the ledger's total counts briefs that
+  // were actually written, so a retired task is either already among the unreported briefs or
+  // was never in the total at all. Subtracting it a second time drives the queue negative and
+  // costs the segment its counters.
+  const queued = ledger.total - ledger.done - active - fixing - blocked;
   return { ...base, mode: "executing", counts: { done: ledger.done, active, fixing, queued, blocked } };
 }
