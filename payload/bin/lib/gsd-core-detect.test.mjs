@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gsdCorePresent, buildGsdInventory, filterGsdHooks } from "./gsd-core-detect.mjs";
+import { gsdCorePresent, buildGsdInventory, filterGsdHooks, gsdCoreInstallPlan } from "./gsd-core-detect.mjs";
 
 function claudeDir(files = {}) {
   const dir = mkdtempSync(join(tmpdir(), "gsd-detect-"));
@@ -140,4 +140,46 @@ test("a hooks-less settings object survives untouched", () => {
   const { settings, removed } = filterGsdHooks({ model: "opus" });
   assert.deepEqual(settings, { model: "opus" });
   assert.deepEqual(removed, []);
+});
+
+// The full profile ships the GSD machinery (agents, hooks, rules) but gsd-core itself comes from
+// npx, never a marketplace. Detecting it by VERSION on disk is the only honest check: an enabled
+// plugin entry proved nothing, and that was the old mistake.
+test("full without gsd-core installed asks, and the command installs globally for Claude", () => {
+  const plan = gsdCoreInstallPlan({ variant: "full", present: false, interactive: true });
+  assert.equal(plan.action, "ask");
+  assert.match(plan.command, /^npx -y @opengsd\/gsd-core@latest /);
+  assert.match(plan.command, /--global/);
+  assert.match(plan.command, /--claude/);
+});
+
+test("without a TTY the same situation only prints the command", () => {
+  const plan = gsdCoreInstallPlan({ variant: "full", present: false, interactive: false });
+  assert.equal(plan.action, "print");
+  assert.match(plan.command, /@opengsd\/gsd-core/);
+});
+
+test("gsd-core already on disk means nothing to do", () => {
+  assert.equal(gsdCoreInstallPlan({ variant: "full", present: true, interactive: true }).action, "none");
+});
+
+// base and lite deliberately exclude the GSD machinery; offering to install the tool there would
+// contradict the detector that offers to REMOVE it.
+test("base and lite never offer to install it", () => {
+  for (const variant of ["base", "lite"]) {
+    assert.equal(gsdCoreInstallPlan({ variant, present: false, interactive: true }).action, "none");
+  }
+});
+
+test("a non-default config dir is passed through, and omitted when default", () => {
+  const custom = gsdCoreInstallPlan({
+    variant: "full", present: false, interactive: true,
+    configDir: "D:/alt/.claude", defaultConfigDir: "C:/Users/x/.claude",
+  });
+  assert.match(custom.command, /--config-dir "D:\/alt\/\.claude"/);
+  const plain = gsdCoreInstallPlan({
+    variant: "full", present: false, interactive: true,
+    configDir: "C:/Users/x/.claude", defaultConfigDir: "C:/Users/x/.claude",
+  });
+  assert.doesNotMatch(plain.command, /--config-dir/);
 });

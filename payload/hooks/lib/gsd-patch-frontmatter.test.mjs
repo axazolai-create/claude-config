@@ -85,3 +85,39 @@ test("key only in the body, not frontmatter, is noKey (body never mutated)", () 
   assert.equal(kind, "noKey");
   assert.equal(content, src);
 });
+
+// gsd-core 1.9.1 stopped shipping `effort:` on any agent, so a patch that only rewrites an
+// existing value became a silent no-op. insertIfMissing restores the intent: pin the value.
+const PINS = { key: "effort", from: ["low"], to: "medium", insertIfMissing: true };
+
+test("a missing key is inserted when the patch asks for it", () => {
+  const src = "---\nname: x\ntools: Read\n---\nBody.\n";
+  const { content, kind } = setFrontmatterField(src, PINS);
+  assert.equal(kind, "applied");
+  assert.match(content, /^effort: medium$/m);
+  assert.ok(content.startsWith("---\nname: x\ntools: Read\neffort: medium\n---\n"), content.slice(0, 60));
+});
+
+test("insertIfMissing keeps CRLF when the file uses it", () => {
+  const src = "---\r\nname: x\r\ntools: Read\r\n---\r\nBody.\r\n";
+  const { content, kind } = setFrontmatterField(src, PINS);
+  assert.equal(kind, "applied");
+  assert.ok(content.includes("effort: medium\r\n"), "inserted line keeps CRLF");
+});
+
+test("insertIfMissing never fires when the key is already there", () => {
+  assert.equal(setFrontmatterField(fm("effort: medium"), PINS).kind, null);
+  assert.equal(setFrontmatterField(fm("effort: high"), PINS).kind, "skippedForeign");
+});
+
+test("without insertIfMissing a missing key stays noKey", () => {
+  const src = "---\nname: x\ntools: Read\n---\nBody.\n";
+  assert.equal(setFrontmatterField(src, P).kind, "noKey");
+});
+
+test("a file with no frontmatter is never given one", () => {
+  const src = "Just a body, no frontmatter.\n";
+  const { content, kind } = setFrontmatterField(src, PINS);
+  assert.equal(kind, "noKey");
+  assert.equal(content, src);
+});

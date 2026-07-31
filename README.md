@@ -156,10 +156,9 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 Бандл ставится в одном из двух вариантов. Выбор не привязан к первой установке — переключиться
 можно в любой момент повторным запуском `setup.mjs`.
 
-- **full** (дефолт) — всё, что описано в этом README: все хуки, все команды, все скиллы, плагин
-  `gsd` в довесок к остальным.
+- **full** (дефолт) — всё, что описано в этом README: все хуки, все команды, все скиллы.
 - **lite** — облегчённый набор без GSD-machinery:
-  - плагины — только `ultrapowers`, `context-mode`, `context7` (без `gsd`);
+  - плагины — те же `ultrapowers`, `context-mode`, `context7`, что и в full;
   - ровно 10 хуков: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
     `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
     `precompact-observe`, `token-usage-log`, `session-init` (последний работает, но пропускает все
@@ -945,7 +944,7 @@ README (источник истины — сами `rules-src/*.md` и их `REA
 ## Кросс-инструментные патчи gsd-core (агенты, воркфлоу, tool-grant)
 
 Файлы `~/.claude/agents/gsd-*.md` и `~/.claude/gsd-core/workflows/execute-phase.md` принадлежат
-**отдельному инструменту `gsd-core`** (`npx gsd-core`), не этому бандлу. Набор всё же дообслуживает
+**отдельному инструменту `gsd-core`** (`npx @opengsd/gsd-core@latest`), не этому бандлу. Набор всё же дообслуживает
 их — best-effort, идемпотентно, версионированными маркерами
 `<!-- gsd-patch:ID vN -->…<!-- /gsd-patch:ID -->` (сравнение по СОДЕРЖИМОМУ, не по наличию: при
 bump версии патча устаревший текст заменяется свежим, а не пропускается). Три механизма с разной

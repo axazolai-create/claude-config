@@ -35,8 +35,6 @@
   },
   "commit_docs": true,
   "parallelization": true,
-  "branching_strategy": "phase",
-  "quick_branch_template": null,
   "workflow": {
     "research": true,
     "plan_check": true,
@@ -58,6 +56,6 @@
   "intel": { "enabled": true },
   "features": { "global_learnings": true },
   "graphify": { "enabled": true, "auto_update": true },
-  "git": { "create_tag": true },
+  "git": { "create_tag": true, "branching_strategy": "phase", "quick_branch_template": null },
   "hooks": { "context_warnings": true }
 }
