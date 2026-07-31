@@ -29,14 +29,14 @@
 // Never throws, never blocks: no-ops (exit 0) if this isn't a git repo, HEAD has no
 // commits yet, or `graphify` isn't installed - this must never surface as an error
 // to whichever caller ran it (a Claude Code hook or git itself).
-import { existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { buildSyncCommand } from "./graphify-sync-command.mjs";
+import { isHeld, take } from "./state-lock.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
-const STALE_LOCK_MS = 10 * 60 * 1000; // guards against a crashed prior run
 const IS_WIN = platform() === "win32";
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
 
@@ -60,13 +60,9 @@ if (!gv || gv.error || gv.status !== 0) process.exit(0);
 // git hook firing for the same commit, or rapid consecutive commits) don't pile up
 // concurrent extractions of the same project. A stale lock is ignored after TTL.
 const stateDir = join(CLAUDE_DIR, "state");
-safe(() => mkdirSync(stateDir, { recursive: true }));
 const lock = join(stateDir, `graphify-sync-${name}.lock`);
-if (existsSync(lock)) {
-  const age = Date.now() - (safe(() => statSync(lock).mtimeMs) || 0);
-  if (age < STALE_LOCK_MS) process.exit(0);
-}
-safe(() => writeFileSync(lock, String(process.pid)));
+if (isHeld(lock)) process.exit(0);
+take(lock);
 
 // Run graphify, then remove the lock, all inside one detached background process -
 // the caller (Claude Code hook or git itself) is never delayed by this.
