@@ -99,9 +99,15 @@ function applyNuance(lines, nuance, fallbackDate) {
   if (!nuance) return lines;
   const sentence = `Status nuance (migrated ${fallbackDate}): ${nuance}`;
   if (lines.some((l) => l.includes(sentence))) return lines;
-  const i = lines.findIndex((l) => /^-\s+\*\*Mitigation:\*\*/.test(l));
-  if (i === -1) return [...lines, `- **Mitigation:** ${sentence}`];
-  return lines.map((l, n) => (n === i ? `${l.replace(/\s*$/, "")} ${sentence}` : l));
+  const start = lines.findIndex((l) => /^-\s+\*\*Mitigation:\*\*/.test(l));
+  if (start === -1) return [...lines, `- **Mitigation:** ${sentence}`];
+  // A field is its bullet plus every wrapped continuation line under it. Appending to the FIRST
+  // line splices the sentence into the middle of whatever the field was saying.
+  let end = start;
+  while (end + 1 < lines.length && lines[end + 1].trim() && !/^\s*-\s+\*\*/.test(lines[end + 1])) end += 1;
+  const out = [...lines];
+  out[end] = `${out[end].replace(/\s*$/, "")} ${sentence}`;
+  return out;
 }
 
 export function normalizeRegister({ entries }, { fallbackDate }) {
