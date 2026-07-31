@@ -32,15 +32,13 @@ ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
 - **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
-- **The status/delivery vocabulary migration.** Ruled on 2026-07-29, never applied; the
-  ruling is recorded under Rulings below. It now has a home: phase 10's first step, because
-  the segment that phase builds reads the fields being renamed, and renaming them from
-  outside would touch every state file twice. `ROADMAP.md`'s frontmatter is mixed until then
-  — phase 10's row carries `delivery`, the earlier rows still carry `integration`.
-- **Two phase-sized items still queued, and one now specified.** The statusline's ultrapowers
-  segment became phase 10 on 2026-07-31 and has an approved spec but no plan. The `.protected`
-  mechanism and the decision-records CLI remain unstarted. `ROADMAP.md` carries what each one
-  is and what constrains its order.
+- **Merge `feat/phase-progress-segment`.** Phase 10 is implemented and complete, both suites
+  green (572 from the root plus 23 in the hidden `.test/unit/`), and unmerged. The deploy
+  should carry it, so the order is merge, then audit the merged result, then deploy — the
+  written assessment of 2026-07-31 describes `master` without this branch.
+- **Two phase-sized items still queued.** The `.protected` mechanism and the decision-records
+  CLI remain unstarted; `ROADMAP.md` carries what each one is and what constrains its order.
+  The third, the statusline's ultrapowers segment, became phase 10 and shipped on 2026-07-31.
 - **The decision-records plan still owes its phase directory.** When that phase is created,
   `archive/plans/2026-07-28-decision-records.md` moves into it as `NN-PLAN.md`, the same way
   phase 07's documents moved on 2026-07-31.
@@ -108,6 +106,11 @@ fixed on 2026-07-31, the second still stands:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
+- **Phase 10 shipped the statusline segment** — three display modes, five colour states across
+  four count positions, and the status/delivery migration owed since 2026-07-29, applied to
+  every state file. The live SDD ledger is read structurally, by counting briefs against
+  reports, so no prose is parsed and a foreign ledger can no longer take the segment. On
+  `feat/phase-progress-segment`, complete, unmerged. 2026-07-31.
 - **Three shipped rules corrected, and the class filed** — the register's location, a `graphify`
   skill that exists nowhere and that nothing in the bundle installs, and `/ctx-doctor` where the
   plugin's trigger is `/context-mode:ctx-doctor`. `rules-src/` swept the same way and clean. The
