@@ -167,10 +167,10 @@ switch at any time by re-running `setup.mjs`.
   skill, plus the `gsd` plugin on top of the rest.
 - **lite** — a slimmed-down set with no GSD machinery:
   - plugins — only `ultrapowers`, `context-mode`, `context7` (no `gsd`);
-  - exactly 9 hooks: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
-    `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`, `precompact-observe`,
-    `token-usage-log`, `session-init` (the last one still runs, but skips every GSD-specific
-    step — see the callout in "Project auto-init" below);
+  - exactly 10 hooks: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
+    `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
+    `precompact-observe`, `token-usage-log`, `session-init` (the last one still runs, but skips
+    every GSD-specific step — see the callout in "Project auto-init" below);
   - `graphify` without the neo4j add-on; `leanmode`; three "lazy" skills
     (`model-selection-policy`, `token-usage`, `update-changelog`);
   - its own `/init-stack` — stack detection + assembling `.claude/stack-rules.md` only, no
@@ -721,6 +721,13 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   living on one machine is not a project rule — with `.gitignore` and `.protected` themselves
   left writable so the repair is possible. A nested `.protected` may extend **or** override what
   it inherits, which means it can also unprotect: that escape hatch is deliberate and known.
+- **decision-records-nudge.mjs** (PreToolUse: `Bash`). On a `git commit` that stages the risk
+  register, an ADR or the glossary, runs the matching lint and prints what is wrong together with
+  the command that fixes it. **Never blocks** — an unnormalised register is untidy, not
+  dangerous — and any error exits 0 silently. It reads the staged index, never the commit
+  message, so a message that happens to mention a record does not trip it. The three CLIs behind
+  it are `bin/risks.mjs` (`lint`, `normalize`, `add`), `bin/adr.mjs` (`new`, `lint`) and
+  `bin/glossary.mjs` (`lint`, `suggest`).
 - **secrets-gate.mjs** (PreToolUse: `Bash`). On `git commit`, scans `git diff --cached`: AWS
   keys, private keys, Slack/GitHub tokens, creds in connection strings, explicit secret
   assignments (env references are filtered out, for fewer false positives). If `gitleaks` is

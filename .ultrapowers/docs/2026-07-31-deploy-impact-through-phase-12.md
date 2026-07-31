@@ -1,4 +1,15 @@
-# Deploy impact assessment — master through phase 09
+# Deploy impact assessment — master through phase 12
+
+> **Re-measured 2026-07-31 after phases 10, 11 and 12 merged.** The delta is now **14 created,
+> 4 updated, 148 unchanged, nothing pruned**, plus three hook registrations in `settings.json`:
+> `protected-guard`, `decision-records-nudge` and the `PreCompact` observer. New files are the
+> phase-segment renderer, the `.protected` guard and its library, and the seven decision-record
+> units (`bin/risks.mjs`, `bin/adr.mjs`, `bin/glossary.mjs` and their four libraries).
+>
+> This document was named `…through-phase-09` until the same day. It was renamed rather than
+> superseded because it is the standing assessment for the deploy that has not happened yet —
+> and because a file whose name states a phase it no longer covers is the exact failure the
+> checks added alongside it are meant to catch.
 
 Written 2026-07-31, before the deploy carrying phase 09 and the two `rules-src/` rules added
 the same day. Evidence is a `node setup.mjs --dry-run` run captured this session (output kept

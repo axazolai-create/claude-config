@@ -12,23 +12,26 @@ Nothing is running, and the phase queue is empty — phases 10, 11 and 12 were a
 implemented and merged on 2026-07-31. `master` carries them but has **not** been pushed since
 phase 10; the fork stands at `6.2.0-up.5`. Two things are owed that are only
 keystrokes — the deploy from `master`, and `/plugin update` plus a restart — and until both
-happen the five process rules added on 2026-07-31 bind nothing on this machine. All three
-items that needed a decision rather than a keystroke were settled on 2026-07-31: phase 03's
-status is corrected, the risk register's location is reconciled, and the status/delivery
-vocabulary migration shipped as phase 10's first task. Two phase-sized pieces of work remain
-queued and unstarted: the `.protected` mechanism and the decision-records CLI.
+happen the five process rules added on 2026-07-31 bind nothing on this machine — and neither do
+phases 11 and 12, whose hooks live in `payload/` until a deploy carries them. All three items
+that needed a decision rather than a keystroke were settled on 2026-07-31: phase 03's status is
+corrected, the risk register's location is reconciled, and the status/delivery vocabulary
+migration shipped as phase 10's first task.
 
 ## Open
 
 - **Deploy from `master`.** The gate is satisfied: the audit ran on 2026-07-31 and its
-  written impact assessment is `docs/2026-07-31-deploy-impact-through-phase-09.md`. What is
+  written impact assessment is `docs/2026-07-31-deploy-impact-through-phase-12.md`. What is
   left is the keystroke, `node setup.mjs` in a terminal, from `master` and never from a
   feature branch — `setup.mjs` prunes against the previous manifest, so two branch deploys
-  make each prune the other's files. The measured delta is small: 3 files created, 4 updated,
-  149 unchanged, **nothing pruned**, plus one additive `PreCompact` registration in
-  `settings.json`. An interactive run will also offer to replace the default model
-  `opus[1m]` with `claude-opus-5` — a separate decision, not part of the bundle. Until the
-  deploy runs, the two `rules-src/` rules bind nothing on this machine.
+  make each prune the other's files. Re-measured after phase 12 merged: **14 files created, 4
+  updated, 148 unchanged, nothing pruned**, plus three hook registrations in `settings.json`
+  (`protected-guard`, `decision-records-nudge` and the `PreCompact` observer). The curated
+  `~/.claude/CLAUDE.md` is a conflict whose default answer changes nothing — it needs an explicit
+  `replace` to land the corrected rules. An interactive run will also offer to replace the
+  default model `opus[1m]` with `claude-opus-5` — a separate decision, not part of the bundle.
+  Until the deploy runs, the two `rules-src/` rules, the `.protected` guard and the
+  decision-records nudge all bind nothing on this machine.
 - **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
@@ -49,7 +52,7 @@ reversible trash.* The audit of 2026-07-31 measured the machine and found no gsd
 never moved it and no restore window is open. Only `~/.gsd/defaults.json` and one
 `Bash(npx gsd-core *)` permission remain, both out of the installer's reach. The detector
 prints nothing and there is no consent prompt to answer. The evidence is in
-`docs/2026-07-31-deploy-impact-through-phase-09.md`.
+`docs/2026-07-31-deploy-impact-through-phase-12.md`.
 
 ## Rulings that stand, and are not to be re-decided
 
@@ -66,6 +69,20 @@ branch.
 `phases/NN-slug/refs/`, unprefixed and named for what they decide; artefacts belonging to
 more than one phase go to `.ultrapowers/docs/`, by kind, with a subject subfolder only once a
 kind outgrows a flat list. Another phase needing a spec links to it rather than copying it.
+
+**State reaches every dependent document, not just the two named ones — ruled 2026-07-31.** The
+earlier ruling below said `NN-STATE.md` and `ROADMAP.md`, and both were kept current through
+phases 10-12 while four other documents silently fell behind: the deploy impact assessment did
+not know phases 11 and 12 existed and its filename still said "through-phase-09", the roadmap
+quoted a superseded delta, and both READMEs neither described the new nudge hook nor had the
+right hook count. The user's diagnosis is the correct one and is recorded as such: this was not
+forgetfulness to apologise for, it was a rule that named too few points, backed by checks that
+only ran in one direction, in a repository where the process rules themselves are not installed
+until a deploy runs. The rule now reads: **a change of status updates every document that
+states that status** — the phase's own file, the roadmap, the resume, any impact assessment
+that names a phase range, and the READMEs where a shipped unit is described or counted.
+`docs-coverage.test.mjs` enforces the mechanical part; the rest is judgement and is why the
+rule is written here rather than only in a test.
 
 **State.** Each phase has `NN-STATE.md`; the tree has `ROADMAP.md`. Both are written when a
 status they record changes — not on a did-it/didn't basis. Neither ever drops what is done:

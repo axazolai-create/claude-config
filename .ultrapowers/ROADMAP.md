@@ -68,7 +68,7 @@ writes for one event, and most of them would not happen.
 ## Next
 
 1. Deploy from `master` — the audit ran on 2026-07-31 and its written impact assessment is
-   `docs/2026-07-31-deploy-impact-through-phase-09.md`, so what is left is the keystroke,
+   `docs/2026-07-31-deploy-impact-through-phase-12.md`, so what is left is the keystroke,
    never from a feature branch. Measured against the merged tree after phase 10: 4 created,
    4 updated, nothing pruned, plus one additive `PreCompact` registration in `settings.json`
    and a curated `CLAUDE.md` conflict that needs an explicit `replace` to land. Two acceptance

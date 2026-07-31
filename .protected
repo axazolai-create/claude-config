@@ -1,0 +1,19 @@
+# Closed records: they say what happened, and nothing that happened changes.
+# Format is .gitignore's. This file binds here and every level below; it may be edited but
+# never deleted, and that rule is intrinsic to the mechanism rather than an entry below.
+#
+# Deliberately NOT protected, because the process writes to them constantly:
+#   .ultrapowers/ROADMAP.md, RESUME.md, RISK_REGISTER.md, GLOSSARY.md, phases/*/NN-STATE.md
+#
+# .ultrapowers/sdd/ is NOT here either, and that is a knowing trade. It holds closed ledgers
+# worth protecting AND the live one a running phase writes to every task, and no static pattern
+# separates them - protecting the directory would have blocked the next phase's own reports.
+# Protecting it later means adding `!.ultrapowers/sdd/phases-NN-<slug>/` for whichever phase is
+# running, which is a step someone must remember, so the simpler rule wins until it bites.
+
+.ultrapowers/archive/
+.ultrapowers/adr/
+.ultrapowers/phases/*/[0-9]*-SPEC.md
+.ultrapowers/phases/*/[0-9]*-PLAN.md
+.ultrapowers/phases/*/[0-9]*-SUMMARY.md
+.ultrapowers/phases/*/[0-9]*-VERIFICATION.md

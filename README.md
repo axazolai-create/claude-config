@@ -160,9 +160,9 @@ notepad bootstrap.ps1; .\bootstrap.ps1
   `gsd` в довесок к остальным.
 - **lite** — облегчённый набор без GSD-machinery:
   - плагины — только `ultrapowers`, `context-mode`, `context7` (без `gsd`);
-  - ровно 9 хуков: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
-    `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`, `precompact-observe`,
-    `token-usage-log`, `session-init` (последний работает, но пропускает все
+  - ровно 10 хуков: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
+    `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
+    `precompact-observe`, `token-usage-log`, `session-init` (последний работает, но пропускает все
     GSD-специфичные шаги — см. врезку в «Авто-инициализация проектов» ниже);
   - `graphify` без neo4j-надстройки; `leanmode`; три «ленивых» скилла
     (`model-selection-policy`, `token-usage`, `update-changelog`);
@@ -715,6 +715,13 @@ README (источник истины — сами `rules-src/*.md` и их `REA
   `.protected` остаются доступными для записи, иначе починка невозможна. Вложенный `.protected`
   может расширять **или** переопределять унаследованное, то есть и снимать защиту: это осознанно
   принятая лазейка.
+- **decision-records-nudge.mjs** (PreToolUse: `Bash`). На `git commit`, который стейджит
+  риск-регистр, ADR или глоссарий, запускает соответствующий линтер и печатает, что не так, вместе
+  с командой, которая это чинит. **Никогда не блокирует** — ненормализованный регистр неопрятен,
+  но не опасен — и при любой ошибке молча выходит с кодом 0. Читает staged-индекс, а не сообщение
+  коммита, поэтому сообщение, случайно упоминающее запись, его не задевает. За ним стоят три CLI:
+  `bin/risks.mjs` (`lint`, `normalize`, `add`), `bin/adr.mjs` (`new`, `lint`) и
+  `bin/glossary.mjs` (`lint`, `suggest`).
 - **secrets-gate.mjs** (PreToolUse: `Bash`). На `git commit` сканирует `git diff --cached`:
   AWS-ключи, приватные ключи, токены Slack/GitHub, креды в строках подключения, явные присваивания
   секретов (env-ссылки отфильтровываются, чтобы меньше ложных). Если установлен `gitleaks` — он
