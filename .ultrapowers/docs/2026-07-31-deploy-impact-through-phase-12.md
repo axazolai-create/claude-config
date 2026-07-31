@@ -1,5 +1,24 @@
 # Deploy impact assessment — master through phase 12
 
+> **The deploy ran on 2026-07-31, at `ebfba7d`.** Outcome against this assessment: 14 files
+> created and 4 updated as measured, nothing pruned, `settings.json` merged additively with the
+> three registrations. Two predictions in this document proved to matter more than expected.
+>
+> The curated `CLAUDE.md` warning was right and the remedy was wrong. `setup.mjs` asks nothing
+> without a TTY — and Claude Code's `!` prefix does not provide one, which this document assumed
+> it would — so the first run answered its own question with the non-interactive default and left
+> the file `kept`. A second pass with `--replace-all` finished it, after a dry run proved that it
+> would touch `CLAUDE.md` and nothing else: `settings.json` had already been merged and so no
+> longer conflicted. Anyone repeating this should run the dry run first for the same reason.
+>
+> The default model was left at `opus[1m]` by decision. The installer reports it as superseded
+> from its migration table, but the change would cost the 1M context window.
+>
+> One defect surfaced immediately that the suite had not caught: `node ~/.claude/bin/adr.mjs
+> lint` reported all three ADRs as missing their `status`, because git checks them out with CRLF
+> and the frontmatter pattern required `\n` directly after `---`. Fixed, redeployed, and pinned
+> by a CRLF test. Running the deployed artefact is what found it.
+
 > **Re-measured 2026-07-31 after phases 10, 11 and 12 merged.** The delta is now **14 created,
 > 4 updated, 148 unchanged, nothing pruned**, plus three hook registrations in `settings.json`:
 > `protected-guard`, `decision-records-nudge` and the `PreCompact` observer. New files are the

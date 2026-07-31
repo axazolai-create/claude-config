@@ -81,6 +81,7 @@
 - **Residual:** Standard installer trust model — user must trust the repo owner. Accepted.
 
 
+
 ### RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
 
 - **Status:** Active
@@ -114,6 +115,7 @@
   edit SKILL.md text reviewed on 2026-07-28 and belong in a deliberate follow-up, not a drive-by.
 
 
+
 ### RISK-CHANGELOG-002 — `lint` costs two `git log` subprocesses per queued entry, on every commit once the nudge lands
 
 - **Status:** Active
@@ -142,6 +144,7 @@
   A *slow* one still delays it, which try/catch cannot help with.
 
 
+
 ### RISK-CLAUDEMD-001 — Legacy `@.claude/CLAUDE.md` imports double-load project context
 
 - **Status:** Active
@@ -153,6 +156,7 @@
   deny hook rightly blocks writes). Remove the `@.claude/CLAUDE.md` line by hand when
   touching an affected project's root `CLAUDE.md`. Status nuance (migrated 2026-07-31): accepted, manual cleanup
 - **Residual:** duplicated context in affected projects until manually cleaned. Accepted.
+
 
 
 ### RISK-CLAUDEMD-002 — the shipped rules name commands, skills and paths that nothing verifies
@@ -198,6 +202,7 @@
   Fixing it is a few minutes and belongs to whoever next touches that hook family.
 
 
+
 ### RISK-DESIGNSTACK-003 — Pro Max search requires Python 3
 
 - **Status:** Active
@@ -211,6 +216,7 @@
   ranked search — reduced quality, not a failure. Accepted.
 
 
+
 ### RISK-DESIGNSTACK-006 — Pinned npm package ids can drift or rename
 
 - **Status:** Active
@@ -222,6 +228,7 @@
   without aborting `/init-stack`. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a silent rename leaves the components un-updated until the ids are corrected;
   detection is manual. Accepted / low.
+
 
 
 ### RISK-GSDEXEC-001 — `gsd-executor-decomposing.md` is a full fork with no inheritance, will drift
@@ -246,6 +253,7 @@
   the cost of the only mechanism that gives a genuinely structural (tools-grant-based, not
   prose-based) depth-3 cap — see `rules-src/gsd.md`'s "The one sanctioned depth-3 exception"
   section for why the alternative (a prose-conditional single file) was rejected.
+
 
 
 ### RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
@@ -293,6 +301,7 @@
 - **Mitigation:** Status nuance (migrated 2026-07-31): Root-caused 2026-07-28 — a LAN-side proxy timeout, not a Claude Code defect. Mitigated
 
 
+
 ### RISK-HOOKSTDIN-001 — `token-usage-log.mjs` throws on a literal `null` on stdin
 
 - **Status:** Active
@@ -308,6 +317,7 @@
   sibling hook. Status nuance (migrated 2026-07-31): 2026-07-30 — found by phase 09, not caused by it, and deliberately not fixed there
 
 
+
 ### RISK-NEO4J-003 — Neo4j credentials leaking into the repo or argv
 
 - **Status:** Active
@@ -320,6 +330,7 @@
   remains the backstop. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a user could still hand-paste creds into a committed file; the gate catches common
   shapes but not all. Accepted.
+
 
 
 ### RISK-NEO4J-004 — graphify upgrade breaks the write path or the agent patch
@@ -337,6 +348,7 @@
   quality-check queries failing. Accepted.
 
 
+
 ### RISK-NEO4J-005 — Same repo cloned on two PCs flip-flops in Neo4j
 
 - **Status:** Active
@@ -349,6 +361,7 @@
   distinct nodes. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** transient oscillation for a genuinely divergent shared repo under frequent dual
   sync. Accepted; revisit only if observed.
+
 
 
 ### RISK-PHASEDIR-001 — `phase-dir` caps a kind at 99, and a leaked lock is never collected
@@ -380,6 +393,7 @@
   by hand (`rmdir` the lock; rename by hand past 99). Widening the prefix is deferred until a tree
   approaches the ceiling, since it would rename every existing directory and every document inside
   it.
+
 
 
 ### RISK-PLANTREE-001 — The risk register no longer lives where the rules say to look for it
@@ -428,6 +442,7 @@
   maintained by hand; what was lost was one automatic append.
 
 
+
 ### RISK-PNPM-001 — False positives from dynamic/conditional imports
 
 - **Status:** Active
@@ -444,6 +459,7 @@
 - **Residual:** at worst a harmless, unused optional-peer line in `pnpm-workspace.yaml`. Accepted.
 
 
+
 ### RISK-PNPM-002 — Native-trigger coverage gap for sub-package installs
 
 - **Status:** Active
@@ -456,6 +472,7 @@
   detection latency, not a wrong write. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a phantom introduced by a manual sub-package install stays latent until the next
   top-level install or manual scan. Accepted; documented as a caveat in the command.
+
 
 
 ### RISK-PNPM-003 — Auto-writing pnpm-workspace.yaml
@@ -471,6 +488,7 @@
   unit tests. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** an unusual hand-authored `pnpm-workspace.yaml` shape falls back to manual entry
   rather than an automated fix. Accepted — safety over convenience.
+
 
 
 ### RISK-RULESREACH-001 — Process rules bind only after a deploy, so a repository can run for weeks under rules it does not have
@@ -489,12 +507,17 @@
   roadmap row. `docs-claims.test.mjs` covers the forward direction. Both run in the repository's
   own suite, which needs no deploy to bind — that is the point of putting them there rather than
   in `rules-src/`.
+- **Update 2026-07-31 — the rules now bind.** The deploy ran, so the two `rules-src/` rules and
+  the corrected `~/.claude/CLAUDE.md` are on this machine at last; the fork's deltas 011-013 still
+  wait on `/plugin update`. The reach problem is narrowed, not closed: the rules bind on the next
+  session start, and they bound nothing while phases 10-12 were being built.
 - **Residual:** the judgement half cannot be tested. "Update every document that states this
   status" is prose, and prose only binds once deployed — which is the risk restating itself one
   level up. Two structural options remain open and are the user's call: run the deploy so the
   rules-src rules actually bind, or move the rules that matter most into checks that live in the
   repository, where a test gates a commit without any installation step. The second is what this
   entry's own mitigation did, and it is the only half that worked today.
+
 
 
 ### RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported
@@ -519,6 +542,7 @@
   neither that feature's code nor on its recovery path.
 
 
+
 ### RISK-STACKRULES-001 — Model-driven rules compilation can lose requirements
 
 - **Status:** Active
@@ -531,6 +555,7 @@
   frontmatter marks it machine-owned so fixes go into `rules-src/` (source of truth) and a
   rebuild is idempotent; the snapshot is a reviewable file, not hidden state. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** prose-level nuance can still be lossy between rebuilds. Accepted.
+
 
 
 ### RISK-STACKRULES-002 — Snapshot desync / stale auto-loading copies
@@ -565,6 +590,7 @@
   stay on the old (working) mechanism until they run it. All accepted.
 
 
+
 ### RISK-STATUSLINE-002 — the autocompact point is assumed until a compaction is observed
 
 - **Status:** Active
@@ -589,6 +615,7 @@
   happening; if `tokens` equals `windowSize`, nothing was learned.
 
 
+
 ### RISK-SUP-001 — Hang supervision depends on the model wrapping the job
 
 - **Status:** Active
@@ -603,6 +630,7 @@
   Accepted — this is the ceiling of what hooks can enforce.
 
 
+
 ### RISK-SUP-003 — supervise-bg could kill a legitimately long or quiet job
 
 - **Status:** Active
@@ -613,6 +641,7 @@
   skips obvious long-lived servers entirely, so those are not wrapped in the first place. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a mis-tuned bound on an atypical job could kill it early; the `HANG` marker and
   exit code 124 make that diagnosable. Accepted.
+
 
 
 ### RISK-TESTUNIT-001 — `.test/unit/` is gitignored, so tests there rot unnoticed
@@ -643,6 +672,7 @@
   "run the full suite" needs an invocation that actually collects these files.
 
 
+
 ### RISK-TOKENLOG-001 — Scraped model pricing can silently break
 
 - **Status:** Active
@@ -659,6 +689,7 @@
   token counts only). Status nuance (migrated 2026-07-31): accepted
 - **Residual:** `cost_usd` is always a **best-effort local estimate**, never billing-grade — same
   disclaimer Claude Code's own `/usage` command carries for its dollar figure. Accepted.
+
 
 
 ### RISK-ULTRAPOWERS-001 — Owning a fork carries merge burden on every upstream release
@@ -679,6 +710,7 @@
   upstream has since implemented is reported as obsolete instead of carried forever. Status nuance (migrated 2026-07-31): accepted, 2026-07-27; rewritten the same day, when the fork replaced the patcher
 - **Residual:** a release that restructures the tree wholesale still needs a human read. That is
   what the size threshold exists to surface rather than hide.
+
 
 
 ### RISK-ULTRAPOWERS-004 — Keep-list rot devalues the completeness check
@@ -708,6 +740,7 @@
 - **Mitigation:** Status nuance (migrated 2026-07-31): Open (mitigated by design; narrowed 2026-07-27 when the ignore list became a
 
 
+
 ### RISK-ULTRAPOWERS-006 — Agent registry adds resident context cost every session
 
 - **Status:** Active
@@ -725,6 +758,7 @@
   tier selection. Accepted.
 
 
+
 ### RISK-ULTRAPOWERS-008 — Upstream may change its licence or its direction
 
 - **Status:** Active
@@ -737,6 +771,7 @@
   the fork's README and `plugin.json` description, stated as a fork rather than implied. Status nuance (migrated 2026-07-31): accepted, 2026-07-27
 - **Residual:** future releases could become unusable to us. The fork keeps working at whatever
   version we last merged, which is the whole point of holding the objects ourselves.
+
 
 
 ### RISK-ULTRAPOWERS-010 — `/gsd-update` reinstalls gsd-core at any time
@@ -753,6 +788,7 @@
   hook that polices another product's installation on every session — a standing background
   behaviour to remove software the user may have just deliberately installed. That is a worse
   trade than periodic drift, and it is out of scope for this feature.
+
 
 
 ### RISK-VARIANT-001 — Variant switch could delete a file the user hand-edited under `~/.claude`
@@ -775,6 +811,7 @@
   list first — the hash gate still protects modified files even then, but curated/unmodified
   surplus is removed without a per-file prompt. Accepted — same trust model as every other
   bulk-flag use in this installer.
+
 
 
 ### RISK-VARIANT-002 — `managedPlugins` marketplace ids can drift from the live marketplace
@@ -811,6 +848,7 @@
   confirming the id on a machine that has `gsd` installed via the marketplace.
 
 
+
 ### RISK-VARIANT-003 — The gsd-core detector edits hook entries this bundle does not own
 
 - **Status:** Active
@@ -830,6 +868,7 @@
   separately. Accepted: the alternative is leaving dead registrations pointing at deleted files.
 
 
+
 ### RISK-VARIANT-004 — `/gsd-update` reinstalls gsd-core behind the detector's back
 
 - **Status:** Active
@@ -843,6 +882,7 @@
   says it should not be in, with no signal. A session-start guard was considered and left out of
   scope — it would put a foreign-product check on every session start for a condition the user
   creates deliberately.
+
 
 
 ### RISK-VARIANT-005 — A declined prune of `gsd-defaults.partial.json` is re-offered on every non-`full` run
@@ -869,6 +909,7 @@
   and was too broad to make inside the gsd-core detector's branch.
 
 
+
 ### RISK-VERBOSITY-001 — "Terse" verbosity axis slides into minification or drops load-bearing intent
 
 - **Status:** Active
@@ -882,6 +923,7 @@
   construction (same carve-out leanmode makes). Status nuance (migrated 2026-07-31): accepted, behavioral
 - **Residual:** prose-guided behavior can still misfire on an edge case; caught in review, not
   hook-enforced. Accepted.
+
 
 
 ## Deferred
@@ -900,6 +942,7 @@
   test green, or is deferred to its own spec.
 
 
+
 ### RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
 
 - **Status:** Deferred (until tests green)
@@ -915,6 +958,7 @@
   leanmode suite + new tests are green.
 
 
+
 ### RISK-SUP-002 — Task* hook events unverified in this harness build
 
 - **Status:** Deferred (verification pending)
@@ -924,6 +968,7 @@
   not exist, the entries are inert (unknown events are ignored). Real handling is wired only after
   the probe log confirms they fire and reveals their schema (post-restart).
 - **Residual:** the cleaner TaskCreated launch surface stays unused until verified. Accepted.
+
 
 
 ## Mitigated
@@ -960,6 +1005,7 @@
   `--exclude-session <uuid>` plus the age-based KEEP window.)
 
 
+
 ### RISK-DESIGNSTACK-001 — Impeccable installer footgun writes into all harnesses + settings.local.json
 
 - **Status:** Mitigated
@@ -978,6 +1024,7 @@
   Impeccable that ignores them would need the orchestrator pinned/updated. Accepted.
 
 
+
 ### RISK-DESIGNSTACK-002 — `impeccable update` clobbers the Pro Max content-graft
 
 - **Status:** Mitigated
@@ -993,6 +1040,7 @@
   detector still works, just without Pro Max enrichment until the anchors are refreshed. Accepted.
 
 
+
 ### RISK-DESIGNSTACK-004 — Registered hook path couples to the installed skill's script location
 
 - **Status:** Mitigated
@@ -1005,6 +1053,7 @@
   present. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** between an upstream rename and the next `/init-stack`/update cycle the hook could be
   stale. Low (Impeccable's script layout has been stable at v3.3.1); accepted.
+
 
 
 ### RISK-NEO4J-001 — Multi-source staleness when several PCs push the global graph to one Neo4j
@@ -1023,6 +1072,7 @@
   See RISK-NEO4J-005 for the same-repo-two-PCs case. Accepted.
 
 
+
 ### RISK-NEO4J-002 — NAS/Neo4j unavailable at push time
 
 - **Status:** Mitigated
@@ -1034,6 +1084,7 @@
   push is never a prerequisite for any commit/sync step. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** Neo4j can lag the JSON until the next successful push. Acceptable — JSON is the
   source of truth graphify reads; Neo4j is an eventually-consistent mirror. Accepted.
+
 
 
 ### RISK-NEO4J-006 — Connection test at setup time depends on the neo4j driver being present
@@ -1051,6 +1102,7 @@
   failure). Governed by decision D1 in the plan. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** on a PC with no way to install the driver, Neo4j config is deferred, not saved
   broken. Accepted — deferral is the correct outcome there.
+
 
 
 ### RISK-PNPM-004 — enableGlobalVirtualStore structurally incompatible with Turbopack
@@ -1080,6 +1132,7 @@
   the fallback (disable gVS, store in-tree) is noted in the recipe. Accepted.
 
 
+
 ### RISK-ULTRAPOWERS-005 — Migration can mis-pair spec and plan documents
 
 - **Status:** Mitigated
@@ -1093,6 +1146,7 @@
   at. Acceptance counts files in and out. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** a confirmed-but-wrong pairing. Recoverable — `git mv` keeps history, so the move
   is reversible.
+
 
 
 ### RISK-ULTRAPOWERS-007 — A fork left un-updated drifts until merging stops being mechanical
@@ -1110,6 +1164,7 @@
   about. Status nuance (migrated 2026-07-31): mitigated by design, 2026-07-27
 - **Residual:** the command still has to be run. Whether a periodic nudge is warranted should be
   decided after the first few real updates, not guessed now.
+
 
 
 ### RISK-ULTRAPOWERS-009 — Removing foreign hook registrations weakens "only ever touch our own entries"
@@ -1142,6 +1197,7 @@
   product's internal layout.
 
 
+
 ## Closed
 ### RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill
 
@@ -1162,6 +1218,7 @@
 - **Residual:** if `uipro` is run OUTSIDE the orchestrator first (extras pre-exist the orchestrator's
   snapshot) they are treated as user content and left in place — acceptable (the orchestrator only
   prunes what it installs). Accepted.
+
 
 
 ### RISK-FALLOW-001 — `fallow.enabled` is set optimistically, not gated on binary presence
@@ -1225,6 +1282,7 @@
   tooling conventions) — a project on npm/yarn only would need to adapt the command by hand.
 
 
+
 ### RISK-INITSTACK-001 — `/init-stack` GSD-free rewrite deleted steps 6-11; ~24 stale references + 2 dropped capabilities
 
 - **Status:** Closed (2026-07-27) — the stale references were fixed first; the two
@@ -1277,6 +1335,7 @@
   from the dormant reference doc rather than resuming this risk.
 
 
+
 ### RISK-STATUSLINE-001 — the context-window size field name is documented, not observed
 
 - **Status:** Closed (2026-07-31) — observed, 2026-07-30
@@ -1312,6 +1371,7 @@
   principle.
 
 
+
 ### RISK-ULTRAPOWERS-002 — Rebrand is machine-wide and cannot be gated per project
 
 - **Status:** Closed (2026-07-27) — the fork removed the premise, not just the symptom.
@@ -1324,6 +1384,7 @@
 - **Resolution:** a fork is a plugin, enabled and disabled per project like any other, so the
   existing gate reaches it. Nothing needed to be built for this; the limitation was an artefact
   of patching a machine-wide cache.
+
 
 
 ### RISK-ULTRAPOWERS-003 — Blind replacement would break `superpowers:` skill resolution

@@ -20,18 +20,12 @@ migration shipped as phase 10's first task.
 
 ## Open
 
-- **Deploy from `master`.** The gate is satisfied: the audit ran on 2026-07-31 and its
-  written impact assessment is `docs/2026-07-31-deploy-impact-through-phase-12.md`. What is
-  left is the keystroke, `node setup.mjs` in a terminal, from `master` and never from a
-  feature branch — `setup.mjs` prunes against the previous manifest, so two branch deploys
-  make each prune the other's files. Re-measured after phase 12 merged: **14 files created, 4
-  updated, 148 unchanged, nothing pruned**, plus three hook registrations in `settings.json`
-  (`protected-guard`, `decision-records-nudge` and the `PreCompact` observer). The curated
-  `~/.claude/CLAUDE.md` is a conflict whose default answer changes nothing — it needs an explicit
-  `replace` to land the corrected rules. An interactive run will also offer to replace the
-  default model `opus[1m]` with `claude-opus-5` — a separate decision, not part of the bundle.
-  Until the deploy runs, the two `rules-src/` rules, the `.protected` guard and the
-  decision-records nudge all bind nothing on this machine.
+- **Restart Claude Code.** The deploy ran on 2026-07-31 and everything is on disk, but hooks
+  load at startup: `protected-guard`, `decision-records-nudge` and the `PreCompact` observer are
+  installed and inert until a restart. `/hooks` should then show `PreToolUse` x9, `PreCompact` x1.
+- **`RISK-STATUSLINE-002` is still unobserved.** `~/.claude/state/autocompact.json` does not
+  exist yet; it appears after the first genuine automatic compaction, and the acceptance check
+  is a `models` entry whose `tokens` is below its `windowSize` with no `pending` left.
 - **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
@@ -119,6 +113,14 @@ fixed on 2026-07-31, the second still stands:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
+- **The deploy ran, at `ebfba7d`** — 14 created, 4 updated, nothing pruned, `settings.json`
+  merged with three registrations. Two lessons, both recorded because they generalise: `setup.mjs`
+  asks nothing without a TTY and Claude Code's `!` prefix does not supply one, so the curated
+  `CLAUDE.md` came back `kept` until a second pass with `--replace-all` — proven by dry run to
+  touch that one file. And the deployed `adr lint` immediately found a defect the suite had not:
+  git checks ADRs out with CRLF, and an LF-only frontmatter pattern reported every one of them as
+  missing its status. Fixed and redeployed. The default model stays `opus[1m]` by decision.
+  2026-07-31.
 - **Phase 12 made the decision records a practice** — `risks`, `adr` and `glossary` CLIs over
   pure libraries, a non-blocking nudge when one is staged, the register normalised into four
   sections with a four-value vocabulary, and three retrospective ADRs plus a glossary so the

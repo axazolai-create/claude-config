@@ -1,7 +1,7 @@
 ---
 updated: 2026-07-31
 current: null
-deployed_through: "08"
+deployed_through: "12"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, delivery: merged }
   - { phase: "02", slug: ai-development-mode, status: complete, delivery: merged }
@@ -48,10 +48,10 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 06 design-records-and-stack-rules | complete | merged, deployed |
 | 07 gsd-core-detector-and-statusline | complete | merged, deployed |
 | 08 unified-statusline | complete | merged at `82deacb`, deployed |
-| 09 context-meter-severity | complete | merged at `4918208`, not deployed |
-| 10 phase-progress-segment | complete | merged, not deployed |
-| 11 protected-paths | complete | merged, not deployed |
-| 12 decision-records | complete | on `feat/decision-records`, awaiting merge |
+| 09 context-meter-severity | complete | merged, deployed |
+| 10 phase-progress-segment | complete | merged, deployed |
+| 11 protected-paths | complete | merged, deployed |
+| 12 decision-records | complete | merged, deployed |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
@@ -67,7 +67,31 @@ writes for one event, and most of them would not happen.
 
 ## Next
 
-1. Deploy from `master` — the audit ran on 2026-07-31 and its written impact assessment is
+1. **Restart Claude Code.** Hooks load at startup, so `protected-guard`,
+   `decision-records-nudge` and the `PreCompact` observer are installed but inert until then.
+   After the restart, `/hooks` should show `PreToolUse` x9 and `PreCompact` x1.
+2. Install `6.2.0-up.5` — `/plugin update` and a restart, done by the user.
+3. Watch for the one acceptance check a deploy cannot settle: after the first genuine automatic
+   compaction, `~/.claude/state/autocompact.json` must hold a `models` entry whose `tokens` is
+   below its `windowSize`, with no `pending` left. The file does not exist yet.
+
+Done, kept as a line each:
+
+- **Deploy from `master` — 2026-07-31.** Ran at `ebfba7d`. 14 files created, 4 updated, nothing
+  pruned; `settings.json` merged additively with three new registrations. Two things needed a
+  second pass and are recorded because the reason generalises: `node setup.mjs` asks nothing
+  without a TTY, and Claude Code's `!` prefix does not provide one — so the curated `CLAUDE.md`
+  came back `kept` and the corrected rules did not land. `--replace-all` finished it after a
+  dry run proved it would touch that one file and nothing else, `settings.json` having already
+  been merged. The default model was left at `opus[1m]` deliberately: the installer calls it
+  superseded, but changing it would cost the 1M window.
+- **The deploy found a defect the tests had not.** `node ~/.claude/bin/adr.mjs lint` reported
+  all three ADRs as missing their `status` while the same code passed from the repository
+  minutes earlier — git had checked the files out with CRLF in between. Fixed and redeployed.
+
+The superseded entry below is kept because the assessment it names is still the standing record:
+
+1. ~~Deploy from `master`~~ — the audit ran on 2026-07-31 and its written impact assessment is
    `docs/2026-07-31-deploy-impact-through-phase-12.md`, so what is left is the keystroke,
    never from a feature branch. Measured against the merged tree after phase 10: 4 created,
    4 updated, nothing pruned, plus one additive `PreCompact` registration in `settings.json`
