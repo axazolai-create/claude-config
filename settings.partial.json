@@ -21,6 +21,12 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/decision-records-nudge.mjs"] }
+        ]
+      },
+      {
         "matcher": "Bash|^mcp__.*",
         "hooks": [
           { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/db-live-access-gate.mjs"] }

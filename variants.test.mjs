@@ -254,7 +254,7 @@ test("optional groups are a no-op on full (already identity)", () => {
   assert.ok([...v.excludedSet].some((r) => r.endsWith(".test.mjs")), "**.test.mjs must be excluded from full");
 });
 
-test("hook registrations: lite keeps exactly the 9 lite hooks, and its own statusLine renderer", () => {
+test("hook registrations: lite keeps exactly the 10 lite hooks, and its own statusLine renderer", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
   const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
@@ -270,9 +270,9 @@ test("hook registrations: lite keeps exactly the 9 lite hooks, and its own statu
   // deny-curated-claude-md.mjs, so protection against losing a file belongs to the same class
   // and costs nothing at runtime — it reads .protected only when one exists.
   assert.deepEqual([...scripts].sort(), [
-    "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "graphify-grep-nudge.mjs", "inject-axes.mjs",
-    "precompact-observe.mjs", "protected-guard.mjs", "secrets-gate.mjs", "session-init.mjs",
-    "token-usage-log.mjs",
+    "decision-records-nudge.mjs", "deny-curated-claude-md.mjs", "graphify-global-sync.mjs",
+    "graphify-grep-nudge.mjs", "inject-axes.mjs", "precompact-observe.mjs", "protected-guard.mjs",
+    "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
   ]);
   assert.ok(basenames.has("statusline.mjs"));
 });
