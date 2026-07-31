@@ -33,6 +33,7 @@ import { existsSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { buildSyncCommand } from "./graphify-sync-command.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const STALE_LOCK_MS = 10 * 60 * 1000; // guards against a crashed prior run
@@ -69,14 +70,8 @@ safe(() => writeFileSync(lock, String(process.pid)));
 
 // Run graphify, then remove the lock, all inside one detached background process -
 // the caller (Claude Code hook or git itself) is never delayed by this.
-const args = ["extract", root, "--global", "--as", name];
-const quoted = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
-if (IS_WIN) {
-  const inner = `graphify ${args.map(quoted).join(" ")} & del /f /q ${quoted(lock)}`;
-  spawn("cmd", ["/c", inner], { cwd: root, detached: true, stdio: "ignore", windowsHide: true }).unref();
-} else {
-  const inner = `graphify ${args.map(quoted).join(" ")}; rm -f ${quoted(lock)}`;
-  spawn("sh", ["-c", inner], { cwd: root, detached: true, stdio: "ignore" }).unref();
-}
+const cmd = buildSyncCommand({ root, name, lock, isWin: IS_WIN });
+spawn(cmd.shell, [cmd.flag, cmd.inner],
+  { cwd: root, detached: true, stdio: "ignore", windowsHide: true }).unref();
 
 process.exit(0);
