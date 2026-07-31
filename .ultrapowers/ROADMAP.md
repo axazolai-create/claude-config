@@ -17,8 +17,10 @@ phases:
 # Roadmap
 
 Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` at
-`4918208` on 2026-07-31. Eight phases are complete, one is abandoned, everything through
-phase 08 is deployed, and phase 09 is merged but not yet deployed.
+`4918208` on 2026-07-31, and the phase-09 debts followed at `8e785d6` the same day; both
+are pushed. Eight phases are complete, one is abandoned, everything through phase 08 is
+deployed, and phase 09 is merged but not yet deployed. The one thing standing between the
+tree and a clean slate is that deploy.
 
 `current` is `null` because naming a merged phase would say a false thing. The cost is
 known and accepted: with no phase named, the ultrapowers segment falls through to the
@@ -50,21 +52,24 @@ writes for one event, and most of them would not happen.
 
 ## Next
 
-1. Push `master`. Corrected 2026-07-31: it carries one commit `origin/master` does not, not
-   the 25 this list claimed — the remote is at `4918208`, the phase 09 merge itself, so a
-   machine bootstrapped from GitHub already gets phase 09 and only misses this tree's own
-   bookkeeping. The 25/`51a65d0` figures were written before the push that followed them and
-   were never corrected, which is the same stale-fact failure the entry was warning about.
-2. Deploy from `master` — gated on an audit and a written impact assessment, never from a
+1. Deploy from `master` — gated on an audit and a written impact assessment, never from a
    feature branch. Two acceptance checks can only be settled by a real deploy and a real
    session, and both are recorded as risks rather than assumed: that the context segment
    renders coloured at the current fill level, and that after one genuine automatic
    compaction `~/.claude/state/autocompact.json` holds a `models` entry whose `tokens` is
-   below its `windowSize` with no `pending` left.
+   below its `windowSize` with no `pending` left. The deploy also carries the two new
+   `rules-src/` rules, which bind nothing until it runs.
+2. Install `6.2.0-up.5` — `/plugin update` and a restart, done by the user. `enabledPlugins`
+   resolves at startup and does not hot-reload, so the three new rules bind on the next
+   session, not this one.
 
-**Done 2026-07-31 — give phase 07 its spec and plan.** Moved out of the archive into the
-phase directory. `08-SPEC.md` and `EXECUTION-ORDER.md` keep the old paths: closed records say
-where a file was.
+Done, kept as a line each:
+
+- **Push `master` — 2026-07-31.** Done. The entry that claimed 25 commits behind `51a65d0`
+  was itself stale by two pushes, which is the failure it was written to warn about.
+- **Give phase 07 its spec and plan — 2026-07-31.** Moved out of the archive into the phase
+  directory. `08-SPEC.md` and `EXECUTION-ORDER.md` keep the old paths: closed records say
+  where a file was.
 
 ## Not yet phases
 
@@ -91,17 +96,11 @@ before it has content.
   constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/` once the tree
   exists, and its normaliser should rewrite a register that already contains the statusline
   work's entries.
-- **Four process rules, agreed during phase 09. Two landed 2026-07-31.** The
-  `= {}`-does-not-catch-`null` footgun is now in `payload/rules-src/node.base.md` and the
-  clock-dated-fixture rule in `payload/rules-src/testing.md`, so `setup.mjs` carries both to
-  every machine; neither binds anywhere until the next deploy, and neither is in
-  `~/.claude/rules-src/` by hand. Two planning rules are still owed — run every command a
-  plan prescribes before writing it down, and check each stated invariant against the plan's
-  own sample code. They go to the ultrapowers fork's `writing-plans` skill, because a rule
-  compiled only into
-  `stack-rules.md` binds nothing until `/init-stack` has run. The ledger read-back check
-  goes to the fork's `subagent-driven-development` skill; it was trialled once on phase 09
-  and earned its place by finding a gap the ledger's own author could not see.
+- **Done 2026-07-31 — the four process rules, agreed during phase 09.** Two shipped in
+  `payload/rules-src/` (`node.base.md`, `testing.md`) and two in the fork's `writing-plans`
+  skill as delta 011. A fifth rule joined them on the way: the ledger read-back check, delta
+  012. Neither half binds anything yet — the `rules-src/` pair waits on the deploy, the fork
+  pair on `/plugin update`.
 
 `.ultrapowers/archive/plans/2026-07-28-EXECUTION-ORDER.md` holds the schedule the older
 items came from and the reasoning behind it. Its paths for the executed plans are
@@ -109,11 +108,11 @@ historical — those plans now live in their phase directories as `NN-PLAN.md`.
 
 ## Open, and carried by no phase
 
-- **The ordering constraint between the bundle and the plugin is satisfied.** The rule was
-  that the bundle must be deployed before the ultrapowers plugin moves past the revision
-  the deployed copy was built against. Both halves now hold: `master` was deployed at
-  `51a65d0`, and the installed plugin is already `6.2.0-up.4`. Publishing a new fork
-  revision — which the four rules above require — is unblocked.
+- **Done 2026-07-30 — the ordering constraint between the bundle and the plugin.** The rule
+  was that the bundle must be deployed before the plugin moves past the revision the
+  deployed copy was built against. Satisfied, which unblocked publishing `6.2.0-up.5` on
+  2026-07-31. That revision carries deltas 011-013 and is on GitHub but not on this
+  machine; the installed copy is still `6.2.0-up.4`.
 - **One edit still owed to the user.** `~/.claude/CLAUDE.md` is `CURATED:NOEDIT` and says
   the risk register lives in `.planning/` or the project root; this tree keeps it at
   `.ultrapowers/RISK_REGISTER.md`. Only the user can reconcile that.

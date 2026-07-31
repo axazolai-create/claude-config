@@ -8,8 +8,10 @@ status is — this file answers what is owed, what was ruled, and what must not 
 
 ## Summary
 
-Nothing is running. Everything through phase 08 is deployed; phase 09 is merged and awaits a
-deploy, and two process rules landed on 2026-07-31 that the same deploy will carry. The three
+Nothing is running. Both repositories are on their production branches and pushed: this tree
+at `8e785d6`, the fork published as `6.2.0-up.5`. Two things are owed that are only
+keystrokes — the deploy from `master`, and `/plugin update` plus a restart — and until both
+happen the five process rules added on 2026-07-31 bind nothing on this machine. The three
 open items that need a decision rather than a keystroke are the phase-03 status correction,
 the status/delivery vocabulary migration, and the risk-register location that only the user
 can reconcile. Three phase-sized pieces of work are queued and unstarted: the statusline's
@@ -20,8 +22,11 @@ ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
 - **Deploy from `master`.** Gated on an audit and a written impact assessment, from `master`
   and never from a feature branch — `setup.mjs` prunes against the previous manifest, so two
   branch deploys make each prune the other's files. **Read the deploy warning below first.**
-  The deploy carries phase 09 and the two rules added on 2026-07-31; until it runs, neither
-  rule binds anything on this machine.
+  The deploy carries phase 09 and the two `rules-src/` rules added on 2026-07-31; until it
+  runs, neither rule binds anything on this machine.
+- **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
+  fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
+  not hot-reload, so deltas 011-013 bind on the next session, not the current one.
 - **Phase 03's `status: abandoned` is false.** Its own summary's first line says "abandoned
   mid-flight **and superseded by the fork design**". Nothing was given up — the
   patch-in-place approach was replaced by the fork that shipped, after a scan found 1504
@@ -99,11 +104,20 @@ Two of them are hard, because both failures already exist in this tree:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
+- **Both repositories on their production branches** — this tree merged at `8e785d6` and
+  pushed; the fork's `patch` and `main` pushed. 2026-07-31.
+- **The fork published at `6.2.0-up.5`** — revision 4 → 5, deltas 011-013, 73/73 tests green,
+  `drift` confirms `main` is exactly what original + patch produce. Not installed anywhere
+  yet. 2026-07-31.
 - **Every phase directory is complete** — phase 07's spec and plan moved out of the archive.
   2026-07-31.
-- **Two of the four phase-09 process rules landed** — the `null`-past-an-`undefined`-guard
-  footgun and the clock-dated-fixture rule, both in `payload/rules-src/`. Neither binds until
-  the next deploy. 2026-07-31.
+- **All four phase-09 process rules landed, plus a fifth** — the
+  `null`-past-an-`undefined`-guard footgun and the clock-dated-fixture rule in
+  `payload/rules-src/`; the two planning rules as delta 011; the ledger read-back check as
+  delta 012. 2026-07-31.
+- **Status files keep their history** — ruled by the user mid-session and shipped as delta
+  013, which replaced the "rewrite, never append" instruction that caused the failure.
+  2026-07-31.
 - **`master`'s red suite is green again** — two lite assertions had not learned about phase
   09's PreCompact observer; 577/2 became 579/0. 2026-07-31.
 - **Phases 08 and 09 ran and merged** — the unified statusline, then the context segment's
