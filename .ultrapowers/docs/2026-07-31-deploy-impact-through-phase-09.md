@@ -25,10 +25,18 @@ non-TTY stdin.
 Variant resolves to `base`, 155 files. Against the installed manifest: **149 unchanged, 3
 created, 4 updated, 0 pruned.**
 
-**Created (3)**
+**Amended again after phase 10 merged (2026-07-31).** The merge adds one shipped file,
+`hooks/lib/phase-segment.mjs`, and rewrites `hooks/statusline.mjs`; `phase-segment.test.mjs`
+is not deployed, since tests are excluded from every profile. The delta is now **4 created, 4
+updated, still nothing pruned**. Everything else below stands, including the curated
+`CLAUDE.md` prompt, which now also carries phase 10's README-level changes to the segment
+description.
+
+**Created (4)**
 
 - `hooks/lib/autocompact.mjs`
 - `hooks/lib/context-severity.mjs`
+- `hooks/lib/phase-segment.mjs`
 - `hooks/precompact-observe.mjs`
 
 **Updated (4)**

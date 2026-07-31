@@ -9,14 +9,13 @@ status is — this file answers what is owed, what was ruled, and what must not 
 ## Summary
 
 Nothing is running. Both repositories are on their production branches and pushed: this tree
-at `8e785d6`, the fork published as `6.2.0-up.5`. Two things are owed that are only
+with phase 10 merged, the fork published as `6.2.0-up.5`. Two things are owed that are only
 keystrokes — the deploy from `master`, and `/plugin update` plus a restart — and until both
-happen the five process rules added on 2026-07-31 bind nothing on this machine. Two of the
-three items that needed a decision rather than a keystroke were settled by the user on
-2026-07-31 — phase 03's status is corrected and the risk register's location is reconciled —
-leaving the status/delivery vocabulary migration, which belongs inside the statusline
-segment's phase. Three phase-sized pieces of work are queued and unstarted: the statusline's
-ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
+happen the five process rules added on 2026-07-31 bind nothing on this machine. All three
+items that needed a decision rather than a keystroke were settled on 2026-07-31: phase 03's
+status is corrected, the risk register's location is reconciled, and the status/delivery
+vocabulary migration shipped as phase 10's first task. Two phase-sized pieces of work remain
+queued and unstarted: the `.protected` mechanism and the decision-records CLI.
 
 ## Open
 
@@ -32,10 +31,6 @@ ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
 - **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
-- **Merge `feat/phase-progress-segment`.** Phase 10 is implemented and complete, both suites
-  green (572 from the root plus 23 in the hidden `.test/unit/`), and unmerged. The deploy
-  should carry it, so the order is merge, then audit the merged result, then deploy — the
-  written assessment of 2026-07-31 describes `master` without this branch.
 - **Two phase-sized items still queued.** The `.protected` mechanism and the decision-records
   CLI remain unstarted; `ROADMAP.md` carries what each one is and what constrains its order.
   The third, the statusline's ultrapowers segment, became phase 10 and shipped on 2026-07-31.
@@ -106,11 +101,11 @@ fixed on 2026-07-31, the second still stands:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
-- **Phase 10 shipped the statusline segment** — three display modes, five colour states across
-  four count positions, and the status/delivery migration owed since 2026-07-29, applied to
-  every state file. The live SDD ledger is read structurally, by counting briefs against
-  reports, so no prose is parsed and a foreign ledger can no longer take the segment. On
-  `feat/phase-progress-segment`, complete, unmerged. 2026-07-31.
+- **Phase 10 shipped the statusline segment, merged and pushed** — three display modes, five
+  colour states across four count positions, and the status/delivery migration owed since
+  2026-07-29, applied to every state file. The live SDD ledger is read structurally, by
+  counting briefs against reports, so no prose is parsed and a foreign ledger can no longer
+  take the segment. Both suites green on the merged result. 2026-07-31.
 - **Three shipped rules corrected, and the class filed** — the register's location, a `graphify`
   skill that exists nowhere and that nothing in the bundle installs, and `/ctx-doctor` where the
   plugin's trigger is `/context-mode:ctx-doctor`. `rules-src/` swept the same way and clean. The

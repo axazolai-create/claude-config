@@ -12,7 +12,7 @@ phases:
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, delivery: merged }
   - { phase: "08", slug: unified-statusline, status: complete, delivery: merged }
   - { phase: "09", slug: context-meter-severity, status: complete, delivery: merged }
-  - { phase: "10", slug: phase-progress-segment, status: complete, delivery: branch }
+  - { phase: "10", slug: phase-progress-segment, status: complete, delivery: merged }
 ---
 
 # Roadmap
@@ -21,9 +21,9 @@ Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` 
 `4918208` on 2026-07-31, and the phase-09 debts followed at `8e785d6` the same day; both
 are pushed. Eight phases are complete, one is superseded by phase 04, everything through phase 08 is
 deployed, and phase 09 is merged but not yet deployed. Phase 10 was specified on 2026-07-31
-and implemented the same day; it sits on `feat/phase-progress-segment`, complete and awaiting
-a merge decision. Two things now stand between the tree and a clean slate: that merge and the
-deploy.
+, implemented and merged the same day. Nine phases are complete, one is superseded, everything
+through phase 08 is deployed, and phases 09 and 10 are merged but not deployed. The one thing
+standing between the tree and a clean slate is that deploy.
 
 Every row carries `delivery`; `integration` is gone. Phase 10 migrated the vocabulary as its
 first step, because the segment it builds reads these fields. `delivery` records branch and
@@ -48,7 +48,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 07 gsd-core-detector-and-statusline | complete | merged, deployed |
 | 08 unified-statusline | complete | merged at `82deacb`, deployed |
 | 09 context-meter-severity | complete | merged at `4918208`, not deployed |
-| 10 phase-progress-segment | complete | on `feat/phase-progress-segment`, awaiting merge |
+| 10 phase-progress-segment | complete | merged, not deployed |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
@@ -66,8 +66,9 @@ writes for one event, and most of them would not happen.
 
 1. Deploy from `master` — the audit ran on 2026-07-31 and its written impact assessment is
    `docs/2026-07-31-deploy-impact-through-phase-09.md`, so what is left is the keystroke,
-   never from a feature branch. Measured delta: 3 created, 4 updated, 149 unchanged, nothing
-   pruned, plus one additive `PreCompact` registration in `settings.json`. Two acceptance
+   never from a feature branch. Measured against the merged tree after phase 10: 4 created,
+   4 updated, nothing pruned, plus one additive `PreCompact` registration in `settings.json`
+   and a curated `CLAUDE.md` conflict that needs an explicit `replace` to land. Two acceptance
    checks can only be settled by a real deploy and a real session, and both are recorded as
    risks rather than assumed: that the context segment renders coloured at the current fill
    level, and that after one genuine automatic compaction
@@ -77,12 +78,11 @@ writes for one event, and most of them would not happen.
 2. Install `6.2.0-up.5` — `/plugin update` and a restart, done by the user. `enabledPlugins`
    resolves at startup and does not hot-reload, so the three new rules bind on the next
    session, not this one.
-3. Merge phase 10 — `feat/phase-progress-segment` is complete with both suites green (572 + 23)
-   and has not been merged. The deploy above should carry it, so the order is merge, then audit
-   the merged result, then deploy.
-
 Done, kept as a line each:
 
+- **Merge phase 10 — 2026-07-31.** Merged with `--no-ff` and pushed; both suites green on the
+  merged result, 572 from the root plus 23 in the hidden `.test/unit/`. The deploy assessment
+  was re-measured against the merged tree and now reads 4 created, 4 updated, nothing pruned.
 - **Phase 03's status corrected — 2026-07-31.** `abandoned` → `superseded` with
   `superseded_by: "04"`, in this file's frontmatter, its table row and `03-STATE.md`. The
   first application of the status model ruled on 2026-07-29; the rest of that vocabulary
