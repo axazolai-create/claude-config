@@ -64,3 +64,80 @@ export function nextId({ entries }, prefix) {
   const next = used.length ? Math.max(...used) + 1 : 1;
   return `RISK-${prefix}-${String(next).padStart(3, "0")}`;
 }
+
+const DEFERRED_HINT = /\b(until|pending|awaiting|blocked on)\b/i;
+
+export function migrateStatus(raw, fallbackDate) {
+  const s = String(raw ?? "").trim();
+  if (VALID_STATUS.some((re) => re.test(s))) return { status: s, nuance: null };
+
+  let m = /^Resolved\s*\((\d{4}-\d{2}-\d{2})\)\s*—\s*(.+)$/.exec(s);
+  if (m) return { status: `Closed (${m[1]}) — ${m[2]}`, nuance: null };
+  m = /^Resolved\s*\((.+)\)\s*$/.exec(s);
+  if (m) return { status: `Closed (${fallbackDate}) — ${m[1]}`, nuance: null };
+
+  m = /^(Open|Mitigated|Active|Closed)\s*\((.+?)\)\s*(?:—\s*(.+))?$/.exec(s);
+  if (m) {
+    const inner = m[2];
+    const tail = m[3] ? ` — ${m[3]}` : "";
+    if (m[1] === "Closed") return { status: `Closed (${fallbackDate}) — ${inner}${tail}`, nuance: null };
+    if (/mitigated by design/i.test(inner) || m[1] === "Mitigated")
+      return { status: "Mitigated", nuance: `${inner}${tail}` };
+    if (DEFERRED_HINT.test(inner)) return { status: `Deferred (${inner})`, nuance: tail ? m[3] : null };
+    return { status: "Active", nuance: `${inner}${tail}` };
+  }
+  return { status: "Active", nuance: s || null };
+}
+
+function anchor(heading) {
+  return heading.toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/\s+/g, "-");
+}
+
+// The nuance is appended to Mitigation rather than dropped: "not fixable from this repository"
+// was the single most useful thing several old status lines said.
+function applyNuance(lines, nuance, fallbackDate) {
+  if (!nuance) return lines;
+  const sentence = `Status nuance (migrated ${fallbackDate}): ${nuance}`;
+  if (lines.some((l) => l.includes(sentence))) return lines;
+  const i = lines.findIndex((l) => /^-\s+\*\*Mitigation:\*\*/.test(l));
+  if (i === -1) return [...lines, `- **Mitigation:** ${sentence}`];
+  return lines.map((l, n) => (n === i ? `${l.replace(/\s*$/, "")} ${sentence}` : l));
+}
+
+export function normalizeRegister({ entries }, { fallbackDate }) {
+  const migrated = entries.map((e) => {
+    const { status, nuance } = migrateStatus(e.status, fallbackDate);
+    const lines = applyNuance(
+      e.lines.map((l) => (STATUS.test(l) ? `- **Status:** ${status}` : l)).filter((l, i, a) => !(l === "" && a[i - 1] === "")),
+      nuance,
+      fallbackDate,
+    );
+    return { ...e, status, lines };
+  });
+
+  const bySection = new Map(SECTIONS.map((s) => [s, []]));
+  for (const e of migrated) bySection.get(sectionFor(e.status)).push(e);
+  for (const list of bySection.values())
+    list.sort((a, b) => a.prefix.localeCompare(b.prefix) || a.num - b.num);
+
+  const toc = ["## Contents", ""];
+  for (const s of SECTIONS) {
+    toc.push(`### ${s}`);
+    const list = bySection.get(s);
+    if (!list.length) toc.push("- _none_");
+    for (const e of list) toc.push(`- [${e.id} — ${e.title}](#${anchor(`${e.id} — ${e.title}`)})`);
+    toc.push("");
+  }
+
+  const body = [];
+  for (const s of SECTIONS) {
+    body.push(`## ${s}`);
+    for (const e of bySection.get(s)) {
+      body.push(`### ${e.id} — ${e.title}`);
+      body.push(...e.lines.join("\n").replace(/\n+$/, "").split("\n"));
+      body.push("");
+    }
+  }
+
+  return ["# Risk Register", "", ...toc, ...body].join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n");
+}
