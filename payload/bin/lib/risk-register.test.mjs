@@ -139,6 +139,25 @@ test("normalize groups into sections and is idempotent", () => {
   assert.equal(normalizeRegister(parseRegister(once), { fallbackDate: "2026-07-28" }), once);
 });
 
+// A field is a bullet plus its wrapped continuation lines. Appending to the first line splices
+// the sentence into the middle of what the field was saying - it did exactly that to 45 of the
+// 57 live entries before this was fixed.
+test("the nuance lands after the whole Mitigation field, not inside its first line", () => {
+  const flat = [
+    "# Risk Register",
+    "",
+    "## RISK-A-001 — x",
+    "- **Status:** Open (accepted)",
+    "- **Mitigation:** the first line of a sentence that",
+    "  continues onto a second line and ends here.",
+    "- **Residual:** none",
+    "",
+  ].join("\n");
+  const out = normalizeRegister(parseRegister(flat), { fallbackDate: "2026-07-31" });
+  assert.match(out, /continues onto a second line and ends here\. Status nuance \(migrated 2026-07-31\): accepted/);
+  assert.doesNotMatch(out, /sentence that Status nuance/);
+});
+
 test("an entry with no Mitigation field gains one to hold the nuance", () => {
   const flat = "# Risk Register\n\n## RISK-A-001 — x\n- **Status:** Open (accepted / low)\n";
   const out = normalizeRegister(parseRegister(flat), { fallbackDate: "2026-07-28" });

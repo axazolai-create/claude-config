@@ -74,11 +74,10 @@
 - **Context:** `bootstrap.sh`/`bootstrap.ps1` are executed straight from the network, and they
   download+run `setup.mjs` from a GitHub tarball. A compromised repo, MITM, or wrong ref runs
   arbitrary code on the new machine.
-- **Mitigation:** HTTPS-only endpoints; pin to a signed release tag via `--ref v1.0.0` for Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** HTTPS-only endpoints; pin to a signed release tag via `--ref v1.0.0` for
   reproducibility; documented safe alternative (download → inspect → run) in README; secrets
-  never embedded in bootstrap scripts.
+  never embedded in bootstrap scripts. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** Standard installer trust model — user must trust the repo owner. Accepted.
-
 
 ### RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
 
@@ -95,12 +94,12 @@
   these shapes therefore classifies as `unrecognised`, so the drain's `unrecognised` counter reports
   the skill's own version-bump commits under the heading "commits with no recognised Conventional
   Commits type" — pointing the user at a commit that is not theirs to fix.
-- **Mitigation:** `lint-versions.mjs` (2026-07-29) tests a dedicated `BUMP` pattern Status nuance (migrated 2026-07-31): Open (partially mitigated 2026-07-29 — `lint` names the single-project shape; the
+- **Mitigation:** `lint-versions.mjs` (2026-07-29) tests a dedicated `BUMP` pattern
   (`/^(релиз:|патч:|v\d+\.\d+\.\d+$)/`) **ahead of** the unrecognised check and reports those
   entries separately as "a version moved outside a drain" — the accurate statement, and an
   actionable one. Verified against all four shapes: `v0.4.0`, `патч: …` and `релиз: …` are named
   correctly. Drain mode is unaffected either way — it has two independent guards (the subject skip
-  and the drain lock the hook also tests), so this only ever reaches manual runs.
+  and the drain lock the hook also tests), so this only ever reaches manual runs. Status nuance (migrated 2026-07-31): Open (partially mitigated 2026-07-29 — `lint` names the single-project shape; the
 - **Residual:** two, neither a data-loss risk. (1) `BUMP` does **not** match the monorepo manual
   shape — `^v\d+\.\d+\.\d+$` requires the whole subject to be exactly `vX.Y.Z`, and a per-part list
   is not — so `web: v0.4.7, backend: v1.9.2` still surfaces as "no recognised type" (verified, not
@@ -111,7 +110,6 @@
   version arithmetic is unaffected throughout — `unrecognised` contributes `none`. Fixing the cause
   means either widening the hook's skip pattern or making the manual flow's message match it; both
   edit SKILL.md text reviewed on 2026-07-28 and belong in a deliberate follow-up, not a drive-by.
-
 
 ### RISK-CHANGELOG-002 — `lint` costs two `git log` subprocesses per queued entry, on every commit once the nudge lands
 
@@ -147,11 +145,10 @@
   `@.claude/CLAUDE.md` to a project's root `CLAUDE.md`. Claude Code auto-loads
   `<project>/.claude/CLAUDE.md` by itself (doc-verified + live-tested 2026-07-12), so any
   project still carrying that line loads the generated file twice per session.
-- **Mitigation:** no hook can fix it (root `CLAUDE.md` is usually `CURATED:NOEDIT`, and the Status nuance (migrated 2026-07-31): accepted, manual cleanup
+- **Mitigation:** no hook can fix it (root `CLAUDE.md` is usually `CURATED:NOEDIT`, and the
   deny hook rightly blocks writes). Remove the `@.claude/CLAUDE.md` line by hand when
-  touching an affected project's root `CLAUDE.md`.
+  touching an affected project's root `CLAUDE.md`. Status nuance (migrated 2026-07-31): accepted, manual cleanup
 - **Residual:** duplicated context in affected projects until manually cleaned. Accepted.
-
 
 ### RISK-CLAUDEMD-002 — the shipped rules name commands, skills and paths that nothing verifies
 
@@ -168,17 +165,25 @@
   no skill. (3) `14-context-mode.md` gave the diagnostics command as `/ctx-doctor` where the
   plugin's own declared trigger is `/context-mode:ctx-doctor`. `rules-src/` was swept the same way
   and is clean: its only unshipped commands are gsd-core's, which are external by construction.
-- **Mitigation:** the three were corrected on 2026-07-31. Nothing prevents the fourth. Prose is the Status nuance (migrated 2026-07-31): 2026-07-31 — three instances found and fixed, the class is unfixed
+- **Mitigation:** the three were corrected on 2026-07-31. Nothing prevents the fourth. Prose is the
   wrong layer to fix this in — a rule saying "keep the rules accurate" is itself unverified prose,
   and the drift here was not carelessness but the ordinary lag between changing code and
-  remembering which paragraph described it.
-- **Residual:** the check that would hold is mechanical: a test over `payload/claude-md/**` (and
-  `rules-src/**`) asserting that every `` `/command` `` resolves to `payload/commands/`, every named
-  skill to `payload/skills/`, and every bundle-relative path to a shipped file — with an explicit
-  allowlist for artefacts that come from elsewhere, each entry naming its source. The allowlist is
-  the part that earns its keep: writing "graphify skill — installed by nothing" is exactly the
-  admission that was missing. Not built; it needs the user's go-ahead, since it adds a test whose
-  failures would gate commits.
+  remembering which paragraph described it. Status nuance (migrated 2026-07-31): 2026-07-31 — three instances found and fixed, the class is unfixed
+- **Update 2026-07-31 — the check is built.** `docs-claims.test.mjs` asserts that every
+  `` `/command` ``, every named skill and every bundle-relative path in `payload/claude-md/**` and
+  `payload/rules-src/**` either ships or appears in an allowlist naming its source, and a fourth
+  test asserts the allowlists cannot be padded with a bare name. It caught four things on its
+  first run: one genuinely external path (`hooks/gsd-graphify-update.sh`, gsd-core's) and three
+  mentions the check cannot distinguish from instructions — `/graphify` and `/ctx-doctor`, which
+  the corrected prose names precisely to say they do not exist, and `/zod`, a package subpath.
+  All four are allowlisted with their source.
+- **Residual:** one of the three original defects is out of this check's reach and stays so. The
+  register's location was prose about a path — `.planning/` or the project root — not a
+  bundle-relative reference, and no mechanical check can tell a wrong location from a right one
+  without encoding the answer. That half remains `RISK-PLANTREE-001`'s. The check also cannot
+  read a denial: a fragment naming a command to say it does not exist looks identical to one
+  telling the reader to run it, which is why the allowlist has entries that exist only to record
+  "named in order to be denied".
 - **Aggravating factor:** these rules bind only after a deploy, and `~/.claude/CLAUDE.md` is
   curated — the installer's default answer leaves it byte-for-byte unchanged. A correction can sit
   in `master`, pass every test, be deployed, and still not reach the file it corrects.
@@ -193,12 +198,11 @@
 - **Context:** `ui-ux-pro-max`'s `scripts/search.py` (local BM25 over the style/palette/font CSVs)
   needs a Python 3 interpreter (stdlib only, no network). On a machine without python3 the search
   step cannot run.
-- **Mitigation:** soft-degrade — the orchestrator warns at install time if python3 is absent, and Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** soft-degrade — the orchestrator warns at install time if python3 is absent, and
   the grafted prose explicitly instructs "query search.py **if available**, else fall back to the
-  reference tables below" (the same CSV data is also readable as prose tables the agent can consult).
+  reference tables below" (the same CSV data is also readable as prose tables the agent can consult). Status nuance (migrated 2026-07-31): accepted
 - **Residual:** on a python-less machine the agent uses the static reference tables rather than
   ranked search — reduced quality, not a failure. Accepted.
-
 
 ### RISK-DESIGNSTACK-006 — Pinned npm package ids can drift or rename
 
@@ -206,12 +210,11 @@
 - **Context:** the updater's project probe reads latest versions via `npm view impeccable version`
   and `npm view ui-ux-pro-max-cli version`; the orchestrator installs by those ids. A rename or
   unpublish upstream would break the probe/install.
-- **Mitigation:** `check()` is best-effort and fully fail-soft (wrapped in `safe()`, `main().catch` Status nuance (migrated 2026-07-31): accepted / low
+- **Mitigation:** `check()` is best-effort and fully fail-soft (wrapped in `safe()`, `main().catch`
   backstop) — a bad id yields no version signal and no crash; the install step warns and continues
-  without aborting `/init-stack`.
+  without aborting `/init-stack`. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a silent rename leaves the components un-updated until the ids are corrected;
   detection is manual. Accepted / low.
-
 
 ### RISK-GSDEXEC-001 — `gsd-executor-decomposing.md` is a full fork with no inheritance, will drift
 
@@ -223,19 +226,18 @@
   shared reference docs, which `gsd-executor.md` doesn't itself use for these sections. Every
   future upstream `gsd-core` fix to `gsd-executor.md` (numbered fixes like #2924/#3097/#3542/
   #3678 already baked into the copy as of 2026-07-17) will NOT automatically reach the fork.
-- **Mitigation:** `gsd-executor-decomposing.md`'s frontmatter `description` points at Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** `gsd-executor-decomposing.md`'s frontmatter `description` points at
   `.ultrapowers/archive/specs/2026-07-17-executor-task-decomposition-design.md`'s sync procedure —
   when `apply-gsd-agent-patches.mjs`/`gsd-agent-patches.mjs`'s `PATCHES` registry gains a new or
   upgraded entry for `gsd-executor.md`, the same patch must be manually re-applied (or the
   equivalent prose change hand-ported) to `gsd-executor-decomposing.md`, skipping only the two
   delta sections (`tools:`/`description` frontmatter and the `<task_stage_decomposition>` block
-  that replaces `<no_recursive_agent_spawn>`). No automated drift check exists yet.
+  that replaces `<no_recursive_agent_spawn>`). No automated drift check exists yet. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** silent drift between the two files is possible until a human notices (e.g. a
   `verify_isolated="true"` plan hits a bug already fixed in plain `gsd-executor`). Accepted as
   the cost of the only mechanism that gives a genuinely structural (tools-grant-based, not
   prose-based) depth-3 cap — see `rules-src/gsd.md`'s "The one sanctioned depth-3 exception"
   section for why the alternative (a prose-conditional single file) was rejected.
-
 
 ### RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
 
@@ -292,23 +294,21 @@
   same idiom, inherited the same defect, and had it caught in review; the guard added there is
   `d = (d && typeof d === "object") ? d : {};` immediately after the parse. This hook is already
   deployed on this machine.
-- **Mitigation:** none yet. The one-line guard above is known to work and is already proven in a Status nuance (migrated 2026-07-31): 2026-07-30 — found by phase 09, not caused by it, and deliberately not fixed there
-  sibling hook.
-
+- **Mitigation:** none yet. The one-line guard above is known to work and is already proven in a
+  sibling hook. Status nuance (migrated 2026-07-31): 2026-07-30 — found by phase 09, not caused by it, and deliberately not fixed there
 
 ### RISK-NEO4J-003 — Neo4j credentials leaking into the repo or argv
 
 - **Status:** Active
 - **Context:** the write path and the MCP both need a Neo4j password. Committing it, or passing it
   as `--password` on argv (visible in `ps`/shell history), would leak it.
-- **Mitigation:** password lives only in `~/.graphify/neo4j.env` (user home, chmod 600, outside every Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** password lives only in `~/.graphify/neo4j.env` (user home, chmod 600, outside every
   repo) for the write path and in the user's private `~/.claude` MCP config for the read path. The
   wrapper loads that env file and relies on graphify's `NEO4J_PASSWORD` env support (never `--password`
   on argv). No connection string or password is ever written into this repo; the secrets-gate hook
-  remains the backstop.
+  remains the backstop. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a user could still hand-paste creds into a committed file; the gate catches common
   shapes but not all. Accepted.
-
 
 ### RISK-NEO4J-004 — graphify upgrade breaks the write path or the agent patch
 
@@ -316,14 +316,13 @@
 - **Context:** the integration depends on graphify's `export neo4j` CLI and on the `repo`/id-prefix
   node schema, and the Cypher agent guidance is injected as a prose patch into gsd-* agent files.
   An upstream graphify change could move any of these (the 0.9.13 refactor already relocated modules).
-- **Mitigation:** the write path uses only the public, stable `graphify export neo4j` CLI and the Status nuance (migrated 2026-07-31): accepted / low
+- **Mitigation:** the write path uses only the public, stable `graphify export neo4j` CLI and the
   documented `NEO4J_PASSWORD` env, not internals (verified intact through 0.9.22). The agent patch
   uses the existing versioned, anchor-based patch infra (`gsd-agent-patches.mjs`), which skips
   cleanly (`skippedNoAnchor`) if an anchor moves rather than corrupting a file, and re-applies
-  idempotently on upgrade.
+  idempotently on upgrade. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a CLI-level breaking change in graphify would need a wrapper update; surfaced by the
   quality-check queries failing. Accepted.
-
 
 ### RISK-NEO4J-005 — Same repo cloned on two PCs flip-flops in Neo4j
 
@@ -331,13 +330,12 @@
 - **Context:** if the identical repo is present on two PCs at different states and both sync+push
   frequently, the per-repo refresh (RISK-NEO4J-001) makes them alternately overwrite that repo's
   nodes — last push wins, so the graph oscillates.
-- **Mitigation:** default is last-writer-wins, which yields the latest-pushed state and is usually Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** default is last-writer-wins, which yields the latest-pushed state and is usually
   fine (same repo → same code). Optional hardening if it becomes a problem: designate one PC as
   authoritative for the shared repo, or namespace repo_tag with the hostname so the two clones are
-  distinct nodes.
+  distinct nodes. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** transient oscillation for a genuinely divergent shared repo under frequent dual
   sync. Accepted; revisit only if observed.
-
 
 ### RISK-PHASEDIR-001 — `phase-dir` caps a kind at 99, and a leaked lock is never collected
 
@@ -357,18 +355,17 @@
   abort, INT and TERM — but not SIGKILL, not a power cut, and not SIGHUP, which is untrapped and
   tears the shell down before EXIT runs. The window is narrow, but nothing anywhere collects a
   leaked lock, and one leaked lock blocks allocation for that kind on that machine permanently.
-- **Mitigation:** neither failure is silent. When the 300-poll wait is exhausted the script prints Status nuance (migrated 2026-07-31): accepted, 2026-07-29
+- **Mitigation:** neither failure is silent. When the 300-poll wait is exhausted the script prints
   the lock's path and, from its mtime, how long it has been held, so an operator can tell a live
   queue from a corpse; deletion stays manual by design, because the script itself cannot
   distinguish the two and guessing wrong would break a running allocation. The ceiling sits far
   above realistic use — the largest kind in this tree holds three directories — and both limits
-  fail loudly rather than corrupting anything.
+  fail loudly rather than corrupting anything. Status nuance (migrated 2026-07-31): accepted, 2026-07-29
 - **Residual:** no data-loss exposure in either case. The ceiling yields colliding prefixes plus a
   visible EEXIST; the leaked lock yields a refusal with an age in the message. Both are recoverable
   by hand (`rmdir` the lock; rename by hand past 99). Widening the prefix is deferred until a tree
   approaches the ceiling, since it would rename every existing directory and every document inside
   it.
-
 
 ### RISK-PLANTREE-001 — The risk register no longer lives where the rules say to look for it
 
@@ -391,7 +388,7 @@
   ships in the payload to every install. In this repository the effect was latent rather than
   active: the step is gated on `.planning/` existing and this repository has none, so its own
   register was never being appended to either way.
-- **Mitigation:** both probes now include `.ultrapowers/RISK_REGISTER.md`, pinned end-to-end by Status nuance (migrated 2026-07-31): Open (code half fixed 2026-07-29; prose half answered for this tree 2026-07-31,
+- **Mitigation:** both probes now include `.ultrapowers/RISK_REGISTER.md`, pinned end-to-end by
   `payload/hooks/session-init.test.mjs`. The pair must move together — session-init decides whether
   anything is pending and `add-risk.mjs` does the writing, so patching one alone leaves the hook
   spawning a subprocess every session that then finds nothing. Depth ordering is untouched: a root
@@ -399,7 +396,7 @@
   maintained. Both READMEs' statement of the search locations was corrected with the code. Standing
   decision on the duplication: the two `listRegisters()` copies stay separate — six lines each, one
   a standalone CLI and one a hook entrypoint, with cross-referencing keep-in-sync comments — and are
-  worth extracting into a shared module only when a third consumer appears.
+  worth extracting into a shared module only when a third consumer appears. Status nuance (migrated 2026-07-31): Open (code half fixed 2026-07-29; prose half answered for this tree 2026-07-31,
 - **Residual:** the prose half is not fixed, and what exists now disagrees about the answer in both
   directions. The user-scope `~/.claude/CLAUDE.md` still instructs that the register goes in
   `.planning/` if a GSD project exists and the project root otherwise; that file is hook-protected
@@ -422,14 +419,13 @@
   `import()`) and flags any undeclared specifier whose package is installed somewhere in the
   workspace. A conditionally- or dynamically-imported package that the consumer never actually
   reaches at runtime could still be flagged.
-- **Mitigation:** three layers make a false positive harmless. (1) The **installed-in-workspace Status nuance (migrated 2026-07-31): accepted / low
+- **Mitigation:** three layers make a false positive harmless. (1) The **installed-in-workspace
   gate** — a specifier is only flagged when its package is genuinely resolvable, so a genuinely
   absent optional adapter is never touched. (2) The fix is an **optional peer**
   (`peerDependenciesMeta.optional: true`) — declaring one that goes unused has no effect on
   resolution or install. (3) **Additive-only** writes — nothing existing is removed or rewritten,
-  so an over-declaration is trivially reversible by hand.
+  so an over-declaration is trivially reversible by hand. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** at worst a harmless, unused optional-peer line in `pnpm-workspace.yaml`. Accepted.
-
 
 ### RISK-PNPM-002 — Native-trigger coverage gap for sub-package installs
 
@@ -438,12 +434,11 @@
   `pnpm install`/`add`) plus a root `postinstall` (fires on the user's own top-level installs). An
   install run *inside a nested workspace package* in the user's own terminal may not fire the root
   `postinstall`, leaving a newly-introduced phantom undetected until the next top-level install.
-- **Mitigation:** the Claude-side hook covers agent-driven installs regardless of directory, and the Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** the Claude-side hook covers agent-driven installs regardless of directory, and the
   `/pnpm-phantom-fix` command is a manual backstop the user can run at any time. The failure mode is
-  detection latency, not a wrong write.
+  detection latency, not a wrong write. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a phantom introduced by a manual sub-package install stays latent until the next
   top-level install or manual scan. Accepted; documented as a caveat in the command.
-
 
 ### RISK-PNPM-003 — Auto-writing pnpm-workspace.yaml
 
@@ -451,14 +446,13 @@
 - **Context:** the scan writes `packageExtensions` entries into `pnpm-workspace.yaml` automatically.
   Node has no stdlib YAML parser and npm deps are forbidden, so a minimal line-oriented handler
   edits the file — a full parser is not available to guarantee round-tripping arbitrary shapes.
-- **Mitigation:** the handler is **additive-only** (only inserts new lines, never rewrites existing Status nuance (migrated 2026-07-31): accepted / low
+- **Mitigation:** the handler is **additive-only** (only inserts new lines, never rewrites existing
   ones) and **fail-safe**: on any shape it can't safely edit (flow/JSON-style block, tabs, or a `P`
   key already present where a fresh block would risk a duplicate mapping key) it makes **no write**
   and prints the entries for manual addition. Idempotency and the fail-safe paths are locked by
-  unit tests.
+  unit tests. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** an unusual hand-authored `pnpm-workspace.yaml` shape falls back to manual entry
   rather than an automated fix. Accepted — safety over convenience.
-
 
 ### RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported
 
@@ -473,14 +467,13 @@
   writing `{ not json` over `settings.partial.json` in a copied repository root aborts the install
   at that line. A *missing* file takes the `null` branch and is handled correctly; only a corrupt
   one is affected.
-- **Mitigation:** none in code. What limits it is reach: `settings.partial.json` is repository Status nuance (migrated 2026-07-31): 2026-07-29, found while verifying `RISK-VARIANT-005`'s neighbourhood — unfixed
+- **Mitigation:** none in code. What limits it is reach: `settings.partial.json` is repository
   content, not user state, so it is only corrupt after a bad merge, a truncated download, or a hand
-  edit — and the crash happens before anything is written, so the config dir is left as it was.
+  edit — and the crash happens before anything is written, so the config dir is left as it was. Status nuance (migrated 2026-07-31): 2026-07-29, found while verifying `RISK-VARIANT-005`'s neighbourhood — unfixed
 - **Residual:** an unhandled stack trace where a one-line summary note was intended, on an input the
   code already knew could be bad. One-word fix (`?? null`, or comparing against `undefined`) plus a
   test that the note is actually emitted; left out of the gsd-core detector's fix wave because it is
   neither that feature's code nor on its recovery path.
-
 
 ### RISK-STACKRULES-001 — Model-driven rules compilation can lose requirements
 
@@ -489,12 +482,11 @@
   (deduplicated rewrite, not a mechanical concatenation — per user decision 2026-07-12). A
   careless build could drop or distort a rule requirement, and the loss would persist until
   the next rebuild.
-- **Mitigation:** compiler instructions (`rules-src/README.md` § "Building stack-rules") Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** compiler instructions (`rules-src/README.md` § "Building stack-rules")
   require every "Avoid:" list and every version pin to be carried over verbatim; the snapshot
   frontmatter marks it machine-owned so fixes go into `rules-src/` (source of truth) and a
-  rebuild is idempotent; the snapshot is a reviewable file, not hidden state.
+  rebuild is idempotent; the snapshot is a reviewable file, not hidden state. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** prose-level nuance can still be lossy between rebuilds. Accepted.
-
 
 ### RISK-STACKRULES-002 — Snapshot desync / stale auto-loading copies
 
@@ -508,7 +500,7 @@
   framework added, etc.). (2) A machine that updates the bundle but never re-runs `setup.mjs` keeps
   the old auto-loaded `~/.claude/rules/` copies alongside the snapshot — every rule then loads
   twice.
-- **Mitigation:** (1) `/init-stack` owns building the snapshot (rules-src/README.md § "Building Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** (1) `/init-stack` owns building the snapshot (rules-src/README.md § "Building
   stack-rules") and, since 2026-07-28, detects real drift when it runs: `stack-rules-check.mjs`
   compares the `markers` map the snapshot recorded — the root and every workspace — against the
   tree, and names the `{ workspace, marker }` pairs that appeared and vanished, so the rebuild is
@@ -516,7 +508,7 @@
   decide nothing, which is what keeps the comparison from crying wolf the way the removed one did.
   (2) `setup.mjs` `migrateRulesDir()` deletes bundle-owned files from `~/.claude/rules/` and
   removes the directory when empty; user-authored files are kept and reported with a move-by-hand
-  note.
+  note. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** (1) drift is found only when `/init-stack` runs, never at session start — a
   project's rules can still sit stale indefinitely if nobody runs it. (2) Every snapshot stamped
   before the `markers:` line reads `legacy`: reported, never flagged as drift, and nothing prompts
@@ -526,7 +518,6 @@
   `/init-stack` re-check confirms the frontmatter parses, not that the body survived — it compares
   `markers` and never reads the rule sections. (4) Machines that skip `setup.mjs` after upgrading
   stay on the old (working) mechanism until they run it. All accepted.
-
 
 ### RISK-STATUSLINE-002 — the autocompact point is assumed until a compaction is observed
 
@@ -539,18 +530,17 @@
   `source: "assumed"` and the point is the full window (or the capacity set by
   `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, capped at the window). The icon ladder therefore collapses
   onto the colour ladder, and `💀` cannot appear before a compaction that has never happened.
-- **Mitigation:** deliberate, and chosen over the alternative. The obvious seed is gsd-core's 16.5% Status nuance (migrated 2026-07-31): accepted, 2026-07-30
+- **Mitigation:** deliberate, and chosen over the alternative. The obvious seed is gsd-core's 16.5%
   reserve, and that is exactly the class of constant `RISK-STATUSLINE-001` was filed about — a
   number that looks like knowledge and is not. Being late and honest beats being early and invented.
   The warnings that matter still arrive: `💡` at 45% of the way and `⚠️` at 70%. The state file
-  records `source`, so assumed and observed are distinguishable rather than silently equivalent.
+  records `source`, so assumed and observed are distinguishable rather than silently equivalent. Status nuance (migrated 2026-07-31): accepted, 2026-07-30
 - **Residual:** the first session on a new model warns later than it eventually will. One automatic
   compaction per model calibrates it permanently.
 - **Acceptance check, at the deploy gate:** after one automatic compaction,
   `~/.claude/state/autocompact.json` holds a `models` entry for that model whose `tokens` is below
   its `windowSize`, and no `pending` key remains. If `pending` survives, promotion is not
   happening; if `tokens` equals `windowSize`, nothing was learned.
-
 
 ### RISK-SUP-001 — Hang supervision depends on the model wrapping the job
 
@@ -559,24 +549,22 @@
   (or a self-bounded watcher like `gh run watch --exit-status`). A raw `run_in_background` job that
   hangs still emits no event. Hooks cannot force the wrapper or arm a timer, so the launch-time
   nudge is advisory, not enforced.
-- **Mitigation:** the PreToolUse `bg-supervision-nudge` fires deterministically at every Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** the PreToolUse `bg-supervision-nudge` fires deterministically at every
   unsupervised bounded background launch, making the reminder reliable even if memory/prose is
-  ignored. The wrapper itself is the guarantee once used.
+  ignored. The wrapper itself is the guarantee once used. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a model that ignores the nudge and launches a raw job can still hang invisibly.
   Accepted — this is the ceiling of what hooks can enforce.
-
 
 ### RISK-SUP-003 — supervise-bg could kill a legitimately long or quiet job
 
 - **Status:** Active
 - **Context:** the wrapper's wall-clock timeout and output-staleness watchdog could terminate a
   job that is genuinely long-running or intentionally quiet (a slow build, a silent long task).
-- **Mitigation:** defaults are generous (30 min wall / 5 min staleness) and both are tunable per Status nuance (migrated 2026-07-31): accepted / low
+- **Mitigation:** defaults are generous (30 min wall / 5 min staleness) and both are tunable per
   launch (`--timeout`, `--stale`); `--timeout 0` / `--stale 0` disable a check. The launch nudge
-  skips obvious long-lived servers entirely, so those are not wrapped in the first place.
+  skips obvious long-lived servers entirely, so those are not wrapped in the first place. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a mis-tuned bound on an atypical job could kill it early; the `HANG` marker and
   exit code 124 make that diagnosable. Accepted.
-
 
 ### RISK-TESTUNIT-001 — `.test/unit/` is gitignored, so tests there rot unnoticed
 
@@ -589,8 +577,8 @@
   reached only tracked files. Second and more pointed: the phase's final review raised a merge
   gate in `ensureStatuslineOverride`, the fix landed, and its entire regression coverage lives in
   that untracked directory — so the branch ships a merge-gate fix with no test inside it.
-- **Mitigation:** none in place. The three files were repaired on disk during phase 08 and cannot Status nuance (migrated 2026-07-31): 2026-07-30 — needs a decision, not a mitigation
-  be committed without `git add -f`, which would silently reverse `496eb1b`.
+- **Mitigation:** none in place. The three files were repaired on disk during phase 08 and cannot
+  be committed without `git add -f`, which would silently reverse `496eb1b`. Status nuance (migrated 2026-07-31): 2026-07-30 — needs a decision, not a mitigation
 - **Residual:** either `.test/unit/` returns to git, or it is formally accepted as a local sandbox
   and removed from the definition of "the suite passes". The present middle state is what hid the
   breakage: the files look like part of the suite, run like part of the suite, and are absent from
@@ -605,7 +593,6 @@
   sharpens the risk rather than changing its status, because whichever way the user settles it,
   "run the full suite" needs an invocation that actually collects these files.
 
-
 ### RISK-TOKENLOG-001 — Scraped model pricing can silently break
 
 - **Status:** Active
@@ -614,15 +601,14 @@
   table. There is no official Anthropic pricing API — this is regex-based HTML parsing against a
   page Anthropic doesn't version or contract to keep stable. If the page's markup structure
   changes, parsing can silently return zero or partial rows.
-- **Mitigation:** a `MIN_EXPECTED_MODELS` guard (currently 8) rejects a suspiciously small parse Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** a `MIN_EXPECTED_MODELS` guard (currently 8) rejects a suspiciously small parse
   result and leaves the existing `~/.claude/state/model-pricing.json` untouched rather than
   overwriting it with bad data; `token-usage-log.mjs` surfaces a `systemMessage` warning when the
   pricing file is more than 48h stale. Refresh is throttled to once/24h and fully optional
   (`CLAUDE_TOKEN_USAGE_COST=0` disables cost estimation and the refresh job entirely, leaving raw
-  token counts only).
+  token counts only). Status nuance (migrated 2026-07-31): accepted
 - **Residual:** `cost_usd` is always a **best-effort local estimate**, never billing-grade — same
   disclaimer Claude Code's own `/usage` command carries for its dollar figure. Accepted.
-
 
 ### RISK-ULTRAPOWERS-001 — Owning a fork carries merge burden on every upstream release
 
@@ -634,15 +620,14 @@
   still holds and is accepted knowingly. What changed is the measured cost of the alternative:
   1504 occurrences across 111 files in 382 distinct spellings, and two classifier designs that
   failed review.
-- **Mitigation:** the update is one command runnable from any project (`/up-update`), which either Status nuance (migrated 2026-07-31): accepted, 2026-07-27; rewritten the same day, when the fork replaced the patcher
+- **Mitigation:** the update is one command runnable from any project (`/up-update`), which either
   completes or refuses. The refusal thresholds are the actual bound — a delta from `patch` that
   fails to apply, an inventory scan still finding the upstream name outside the keep-list, an
   upstream diff over the size threshold, or a `main` carrying changes not derivable from
   `original` + `patch`. Deltas stay discrete rather than smeared into the rename, so one that
-  upstream has since implemented is reported as obsolete instead of carried forever.
+  upstream has since implemented is reported as obsolete instead of carried forever. Status nuance (migrated 2026-07-31): accepted, 2026-07-27; rewritten the same day, when the fork replaced the patcher
 - **Residual:** a release that restructures the tree wholesale still needs a human read. That is
   what the size threshold exists to surface rather than hide.
-
 
 ### RISK-ULTRAPOWERS-004 — Keep-list rot devalues the completeness check
 
@@ -678,14 +663,13 @@
   average description 206 chars, spread 72-599. The Ultrapowers registry adds 39 more. For
   comparison, the resident weight this project criticized in Buildomator (приложение Б) was
   5 290 tokens — so an unbudgeted registry reaches ~40 % of the thing we called unacceptable.
-- **Mitigation:** the registry does not ship to the `full` profile at all, where GSD's ~33 agents Status nuance (migrated 2026-07-31): accepted with a budget
+- **Mitigation:** the registry does not ship to the `full` profile at all, where GSD's ~33 agents
   already occupy that slot (both together would be ~4 530 tokens); a description-length budget
   with a failing test guards `base`/`lite`; a lazy-description mode for rare heavy agents is an
   open question for layer 3 (the platform does this for tools via `ToolSearch`; no documented
-  agent equivalent).
+  agent equivalent). Status nuance (migrated 2026-07-31): accepted with a budget
 - **Residual:** ~1 300-2 200 tokens resident in `base`/`lite`, deliberately spent to buy per-agent
   tier selection. Accepted.
-
 
 ### RISK-ULTRAPOWERS-008 — Upstream may change its licence or its direction
 
@@ -693,13 +677,12 @@
 - **Context:** the fork rests on upstream being MIT (© Jesse Vincent, `obra/superpowers`). A
   licence change, a move to a closed model, or a direction we do not want to follow would all
   affect what we can take from future releases.
-- **Mitigation:** none needed for what we already hold — MIT is irrevocable for the versions Status nuance (migrated 2026-07-31): accepted, 2026-07-27
+- **Mitigation:** none needed for what we already hold — MIT is irrevocable for the versions
   already published, so the exposure is strictly forward-looking. `LICENSE` is carried verbatim
   into the fork and never touched by the transform, and upstream authorship stays attributed in
-  the fork's README and `plugin.json` description, stated as a fork rather than implied.
+  the fork's README and `plugin.json` description, stated as a fork rather than implied. Status nuance (migrated 2026-07-31): accepted, 2026-07-27
 - **Residual:** future releases could become unusable to us. The fork keeps working at whatever
   version we last merged, which is the whole point of holding the objects ourselves.
-
 
 ### RISK-ULTRAPOWERS-010 — `/gsd-update` reinstalls gsd-core at any time
 
@@ -708,14 +691,13 @@
   is a separate tool the user can run whenever they like, and it will happily reinstall gsd-core
   into a `base`/`lite` machine minutes after the detector removed it. Between two `setup.mjs` runs
   the machine simply drifts, and nothing reports it.
-- **Mitigation:** none beyond re-running `node setup.mjs`, which reports the divergence again and Status nuance (migrated 2026-07-31): accepted, 2026-07-28
+- **Mitigation:** none beyond re-running `node setup.mjs`, which reports the divergence again and
   re-offers the removal. The removal is cheap to repeat because it is a move into a dated trash
-  batch, not a destructive uninstall.
+  batch, not a destructive uninstall. Status nuance (migrated 2026-07-31): accepted, 2026-07-28
 - **Residual:** deliberately not fixed. Enforcing gsd-core's absence at session start would mean a
   hook that polices another product's installation on every session — a standing background
   behaviour to remove software the user may have just deliberately installed. That is a worse
   trade than periodic drift, and it is out of scope for this feature.
-
 
 ### RISK-VARIANT-001 — Variant switch could delete a file the user hand-edited under `~/.claude`
 
@@ -724,20 +706,19 @@
   new variant's `include`/`exclude` set in `variants.json` no longer covers. If prune ran
   blindly, a file the user edited in place after install (a hand-patched hook, a customized
   skill) could be silently deleted along with the genuinely stale ones.
-- **Mitigation:** the same `pruneStale()` hash gate used for ordinary version-to-version prune Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** the same `pruneStale()` hash gate used for ordinary version-to-version prune
   applies to variant-surplus files too — a file is only deleted if its on-disk SHA still matches
   what the last `setup.mjs` run recorded in the manifest; anything modified since is kept and
   reported (`kept: modified since install`), never auto-removed. Curated (`CURATED:NOEDIT`)
   files are excluded from prune candidates outright. `--dry-run` previews the full surplus list
   with no writes, and the interactive path always asks `remove these stale files? (y/N)` before
   deleting anything. This path is exercised end-to-end by `setup-variants.e2e.test.mjs`
-  (full→lite→full switch, asserting a hand-modified file survives prune).
+  (full→lite→full switch, asserting a hand-modified file survives prune). Status nuance (migrated 2026-07-31): accepted
 - **Residual:** the real residual is a user who runs a bulk auto-confirm flag
   (`--replace-all`/`--merge-all`, which imply prune-confirm) without reading the printed surplus
   list first — the hash gate still protects modified files even then, but curated/unmodified
   surplus is removed without a per-file prompt. Accepted — same trust model as every other
   bulk-flag use in this installer.
-
 
 ### RISK-VARIANT-002 — `managedPlugins` marketplace ids can drift from the live marketplace
 
@@ -752,7 +733,7 @@
   `variants.json` was written, so its id was filled in by convention (matching the two confirmed
   `...@claude-plugins-official` ids) rather than read from a live `claude plugin list`; the
   documented fallback if it turns out wrong is the same shape, `gsd@claude-plugins-official`.
-- **Mitigation:** reconciliation never applies silently — `buildPluginPlan()`'s full plan Status nuance (migrated 2026-07-31): accepted
+- **Mitigation:** reconciliation never applies silently — `buildPluginPlan()`'s full plan
   (install/uninstall/enable/disable per plugin) is always printed before anything runs. The two
   execution paths differ deliberately (spec § 4): **interactive** run asks one aggregate y/N
   (`apply N plugin action(s)? (y/N)`) and, on yes, executes everything, including `claude plugin
@@ -763,7 +744,7 @@
   recorded in the summary as `plugin-<type>-manual <id>`. **Dry-run / hermetic**
   (`--dry-run`, or `CLAUDE_SETUP_SKIP_PLUGINS=1`) executes nothing at all. A wrong id surfaces
   immediately as a failed `claude plugin install` (`plugin-install-FAILED`) on the interactive
-  path rather than a silent no-op.
+  path rather than a silent no-op. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** until someone re-verifies `gsd`'s id against a live marketplace listing (`claude
   plugin list`/`claude plugin search` on a machine with `gsd` actually installed), a full-variant
   install/switch that needs to newly *install* `gsd` could fail at that one step on the
@@ -771,7 +752,6 @@
   completes. On the bulk path the same wrong id would instead surface as a printed manual command
   the user runs by hand, catching the failure before it executes. Accepted; revisit by
   confirming the id on a machine that has `gsd` installed via the marketplace.
-
 
 ### RISK-VARIANT-003 — The gsd-core detector edits hook entries this bundle does not own
 
@@ -782,15 +762,14 @@
   foreign entries are left alone by construction. The detector is the first place that
   deliberately matches something this bundle never installed, and gsd-core owns 12 live
   registrations there.
-- **Mitigation:** the edit fires only under both gates — profile is `base`/`lite` **and** Status nuance (migrated 2026-07-31): accepted at design time, 2026-07-28
+- **Mitigation:** the edit fires only under both gates — profile is `base`/`lite` **and**
   `~/.claude/gsd-core/VERSION` exists — and only after explicit consent (`--replace-all` /
   `--merge-all` deliberately do **not** grant it; `--uninstall-gsd` is the scripted path). A copy
   of `settings.json` is written into the same `.cleanup-trash/<ts>/` batch before the edit, so
-  `restoreBatch()` restores registrations and files together inside the 7-day window.
+  `restoreBatch()` restores registrations and files together inside the 7-day window. Status nuance (migrated 2026-07-31): accepted at design time, 2026-07-28
 - **Residual:** a hand-added hook entry that happens to reference a `gsd-*` script would be
   removed with the rest. It is restorable from the batch, but the user is not asked about it
   separately. Accepted: the alternative is leaving dead registrations pointing at deleted files.
-
 
 ### RISK-VARIANT-004 — `/gsd-update` reinstalls gsd-core behind the detector's back
 
@@ -799,13 +778,12 @@
   `base`/`lite` machine where the detector already removed it, a later `/gsd-update` — or any
   fresh gsd-core install — puts all 71 skills, 34 agents and 23 hooks back, plus their
   `settings.json` registrations.
-- **Mitigation:** none beyond re-detection. The detector observes the divergence at the next Status nuance (migrated 2026-07-31): accepted, 2026-07-28
-  `setup.mjs` run and offers removal again; nothing enforces the absence continuously.
+- **Mitigation:** none beyond re-detection. The detector observes the divergence at the next
+  `setup.mjs` run and offers removal again; nothing enforces the absence continuously. Status nuance (migrated 2026-07-31): accepted, 2026-07-28
 - **Residual:** between two `setup.mjs` runs the machine can sit in a state the chosen profile
   says it should not be in, with no signal. A session-start guard was considered and left out of
   scope — it would put a foreign-product check on every session start for a condition the user
   creates deliberately.
-
 
 ### RISK-VARIANT-005 — A declined prune of `gsd-defaults.partial.json` is re-offered on every non-`full` run
 
@@ -821,15 +799,14 @@
   honoured and the file survives, which is exactly what makes the next run list it again.
   Pre-existing since `a58bfe9` (2026-07-22); not introduced by the gsd-core detector, which only
   reads `pruneStale()`'s result.
-- **Mitigation:** none, and none is needed for safety. The file is offered, never removed without a Status nuance (migrated 2026-07-31): accepted, 2026-07-29
+- **Mitigation:** none, and none is needed for safety. The file is offered, never removed without a
   `y` or a bulk flag, and `existsSync` drops it from the candidate set the moment it does go —
-  accepting the prune once ends the offer permanently, as does deleting the mirror by hand.
+  accepting the prune once ends the offer permanently, as does deleting the mirror by hand. Status nuance (migrated 2026-07-31): accepted, 2026-07-29
 - **Residual:** noise, not data loss — one extra line under "stale files no longer in the bundle" on
   every `base`/`lite` run, for a user who keeps declining. The real fix is to record the mirror in
   the manifest when `full` writes it, so its staleness is derived like every other file's instead of
   hardcoded; that changes what `manifestNow` means (files this bundle *ships*, not files it writes)
   and was too broad to make inside the gsd-core detector's branch.
-
 
 ### RISK-VERBOSITY-001 — "Terse" verbosity axis slides into minification or drops load-bearing intent
 
@@ -838,13 +815,12 @@
   interpreted, the model could shorten identifiers, collapse required structure, remove a comment
   that carried a non-obvious *why*, or delete a docstring that is a real public API contract.
   See design § 3.
-- **Mitigation:** every tier text ends with a verbatim hard carve-out — preserve names, casing, Status nuance (migrated 2026-07-31): accepted, behavioral
+- **Mitigation:** every tier text ends with a verbatim hard carve-out — preserve names, casing,
   mandatory syntax/indentation, error handling, validation, security; explicitly "NOT
   minification"; ultra is opt-in only. Correctness/security are out of the axis's scope by
-  construction (same carve-out leanmode makes).
+  construction (same carve-out leanmode makes). Status nuance (migrated 2026-07-31): accepted, behavioral
 - **Residual:** prose-guided behavior can still misfire on an edge case; caught in review, not
   hook-enforced. Accepted.
-
 
 ## Deferred
 ### RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
@@ -861,7 +837,6 @@
 - **Residual:** none accepted yet — this risk is not closed until Stage 2 ships with the guard
   test green, or is deferred to its own spec.
 
-
 ### RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
 
 - **Status:** Deferred (until tests green)
@@ -876,7 +851,6 @@
 - **Residual:** the injector composition layer is new code; regression risk retired once the
   leanmode suite + new tests are green.
 
-
 ### RISK-SUP-002 — Task* hook events unverified in this harness build
 
 - **Status:** Deferred (verification pending)
@@ -887,7 +861,6 @@
   the probe log confirms they fire and reveals their schema (post-restart).
 - **Residual:** the cleaner TaskCreated launch surface stays unused until verified. Accepted.
 
-
 ## Mitigated
 ### RISK-CLEANUP-001 — `/claude-cleanup` could cause irreversible loss of user data
 
@@ -896,7 +869,7 @@
   temp dirs, orphaned plugin state, prunable caches, etc.). A bug in scope, timing, or move
   logic could destroy live config, active session state, or per-project data with no way to
   get it back.
-- **Mitigation:** five independent layers, all implemented in Tasks 1-6. (1) **Allowlist- Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** five independent layers, all implemented in Tasks 1-6. (1) **Allowlist-
   only scan** — `buildPlan` never considers anything outside enumerated category roots, so
   active config, `state/`, venvs (`security/`, `context-mode/`), and per-project `memory/`
   are structurally out of scope, not merely filtered out after the fact. (2) **Dry-run-
@@ -911,7 +884,7 @@
   its exact UUID via an explicit `--exclude-session <uuid>` flag; and a TOCTOU
   mtime-changed skip re-checked at apply time. (5) **Plugin-prune fail-safe** — an
   unreadable or mis-shaped `installed_plugins.json` causes the pruner to prune nothing
-  rather than guess.
+  rather than guess. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** one known gap, accepted. A cross-device **directory** move interrupted
   mid-recursion can leave stray copies in the batch slot that are not recorded in
   `manifest.json` — the bytes physically survive under `.cleanup-trash` but are not
@@ -921,7 +894,6 @@
   never wired into `buildPlan`; the running session stays protected by
   `--exclude-session <uuid>` plus the age-based KEEP window.)
 
-
 ### RISK-DESIGNSTACK-001 — Impeccable installer footgun writes into all harnesses + settings.local.json
 
 - **Status:** Mitigated
@@ -930,15 +902,14 @@
   skill into every detected harness (`~/.claude`, `~/.agents`, `~/.gemini`) AND appends a
   PostToolUse/Stop hook block to `settings.local.json`. `install --help` does not print flags — it
   re-runs the installer. A naive call from `/init-stack` could pollute the user's global config.
-- **Mitigation:** the orchestrator (`bin/install-design-stack.mjs`) always invokes via Status nuance (migrated 2026-07-31): mitigated by design — Phase 3, spec
+- **Mitigation:** the orchestrator (`bin/install-design-stack.mjs`) always invokes via
   `runInstaller` with a **scratch `HOME`/`USERPROFILE`** (fresh temp dir), `cwd=<project root>`, and
   explicit `--providers=claude --scope=project --no-hooks`, so nothing touches the real global
   harnesses and Impeccable's own settings writer is disabled; our settings-injector registers the
   design hook into the project's `.claude/settings.json` instead. An end-state test asserts the
-  scratch HOME ≠ real HOME and that only `<root>/.claude` is written.
+  scratch HOME ≠ real HOME and that only `<root>/.claude` is written. Status nuance (migrated 2026-07-31): mitigated by design — Phase 3, spec
 - **Residual:** relies on the installer honouring `--scope=project`/`--no-hooks`; a future
   Impeccable that ignores them would need the orchestrator pinned/updated. Accepted.
-
 
 ### RISK-DESIGNSTACK-002 — `impeccable update` clobbers the Pro Max content-graft
 
@@ -946,14 +917,13 @@
 - **Context:** Pro Max is integrated by grafting "query search.py first" prose into Impeccable's
   `reference/*.md` (no first-class external-DB plug exists). `npx impeccable update` overwrites those
   files, silently removing the graft and the Pro Max enrichment with it.
-- **Mitigation:** the updater's `afterUpdate` (`component-registry.mjs` `impeccable` entry) re-runs Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** the updater's `afterUpdate` (`component-registry.mjs` `impeccable` entry) re-runs
   `applyPromaxGraft()` after every auto-update; the graft is anchored + sentinel-guarded
   (`<!-- promax-graft:v1 -->`) so re-apply is idempotent — same infra shape as
-  `gsd-agent-patches.mjs`.
+  `gsd-agent-patches.mjs`. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** if an Impeccable release renames/removes the target reference files the anchor is
   not found and the graft is **skipped** (reported as `skippedNoAnchor`), not mis-inserted — the
   detector still works, just without Pro Max enrichment until the anchors are refreshed. Accepted.
-
 
 ### RISK-DESIGNSTACK-004 — Registered hook path couples to the installed skill's script location
 
@@ -961,13 +931,12 @@
 - **Context:** the design hook we register into the project's `.claude/settings.json` points at
   `.claude/skills/impeccable/scripts/hook.mjs`. If an Impeccable upgrade relocates or renames that
   script, the hook silently stops firing.
-- **Mitigation:** idempotent re-registration — re-running `/init-stack` (and the updater's Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** idempotent re-registration — re-running `/init-stack` (and the updater's
   post-update path) re-verifies the hook entry and the script path, re-registering if it moved;
   the registration step short-circuits only when a valid entry pointing at an existing script is
-  present.
+  present. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** between an upstream rename and the next `/init-stack`/update cycle the hook could be
   stale. Low (Impeccable's script layout has been stable at v3.3.1); accepted.
-
 
 ### RISK-NEO4J-001 — Multi-source staleness when several PCs push the global graph to one Neo4j
 
@@ -976,14 +945,13 @@
   Multiple PCs push into one shared Neo4j on the NAS. graphify's `MERGE` never deletes, so nodes
   for files deleted in a repo persist. A naive "rebuild = wipe the whole graph then re-push" would
   destroy the repos contributed by *other* PCs (they are not in the wiping PC's global graph).
-- **Mitigation:** per-repo scoped refresh, never a global wipe. Every global-graph node carries a Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** per-repo scoped refresh, never a global wipe. Every global-graph node carries a
   `repo` property (= repo_tag; `prefix_graph_for_global` in graphify `build.py`). Before the MERGE
   push, the wrapper deletes only the repos present in *this* PC's global graph:
-  `MATCH (n {repo: $tag}) DETACH DELETE n`. Repos known only to other PCs are never matched.
+  `MATCH (n {repo: $tag}) DETACH DELETE n`. Repos known only to other PCs are never matched. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** shared external-library nodes (deduped by label) are owned by whichever repo added
   them first and can be briefly orphaned on that repo's refresh; MERGE re-adds them on next push.
   See RISK-NEO4J-005 for the same-repo-two-PCs case. Accepted.
-
 
 ### RISK-NEO4J-002 — NAS/Neo4j unavailable at push time
 
@@ -991,12 +959,11 @@
 - **Context:** the push runs after a graph rebuild and may be chained onto `graphify-sync-all` or a
   commit-time flow. If the NAS is down/asleep or the bolt port is unreachable, a hard failure would
   block the sync (or a commit, if ever wired there).
-- **Mitigation:** the wrapper does a short TCP reachability probe on the bolt host:port first and is Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** the wrapper does a short TCP reachability probe on the bolt host:port first and is
   **fail-soft** — on unreachable it warns and exits 0, leaving the JSON source of truth intact. The
-  push is never a prerequisite for any commit/sync step.
+  push is never a prerequisite for any commit/sync step. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** Neo4j can lag the JSON until the next successful push. Acceptable — JSON is the
   source of truth graphify reads; Neo4j is an eventually-consistent mirror. Accepted.
-
 
 ### RISK-NEO4J-006 — Connection test at setup time depends on the neo4j driver being present
 
@@ -1005,15 +972,14 @@
   makes `setup.mjs` **test** the Neo4j connection before writing `~/.graphify/neo4j.env`. The
   authoritative test (`RETURN 1` via the python driver) needs `neo4j` installed in graphify's
   interpreter. On a fresh PC where graphify/driver is absent, the test cannot run.
-- **Mitigation:** the C4 flow calls `ensureNeo4jDriver` (uv `--with neo4j` / pipx inject / pip) Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** the C4 flow calls `ensureNeo4jDriver` (uv `--with neo4j` / pipx inject / pip)
   right before the test, so the driver is installed exactly when Neo4j is configured — full
   always, lite only when the ecosystem is opted in (kept out of graphify's blanket extras so lite
   stays clean by default). If it still can't be made present, C4 does not save a false "enabled" —
   it leaves `GRAPHIFY_NEO4J` unset so the offer re-asks next run (same idiom as a filesystem-write
-  failure). Governed by decision D1 in the plan.
+  failure). Governed by decision D1 in the plan. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** on a PC with no way to install the driver, Neo4j config is deferred, not saved
   broken. Accepted — deferral is the correct outcome there.
-
 
 ### RISK-PNPM-004 — enableGlobalVirtualStore structurally incompatible with Turbopack
 
@@ -1025,12 +991,12 @@
   requests freshly-resolved chunk URLs that map outside root → `404 / ChunkLoadError`. This is a
   DIFFERENT failure class than phantom deps — `packageExtensions` (RISK-PNPM-001..003) cannot fix
   it because it does not move files inside root.
-- **Mitigation:** for Turbopack/Next projects, either (A) disable gVS project-scoped Status nuance (migrated 2026-07-31): detector built; auto-apply intentionally not done
+- **Mitigation:** for Turbopack/Next projects, either (A) disable gVS project-scoped
   (`.npmrc: enable-global-virtual-store=false`, then `rm -rf node_modules && pnpm install`) — the
   virtual store returns in-tree; guaranteed to work, loses cross-worktree dedup; or (B) place the
   virtual store in a sibling folder under a common parent (`virtual-store-dir=<abs adjacent path>`)
   and widen Turbopack's boundary (`turbopack.root` + `outputFileTracingRoot`) to that parent —
-  preserves dedup, less-trodden, may hit Turbopack edge cases.
+  preserves dedup, less-trodden, may hit Turbopack edge cases. Status nuance (migrated 2026-07-31): detector built; auto-apply intentionally not done
 - **Detection:** `payload/bin/turbopack-gvs-check.mjs` (wired into init-stack, Next+pnpm only)
   flags Turbopack/Next + effective out-of-tree store (gVS flag OR a junctioned `.pnpm` OR an
   external `virtual-store-dir`) and prints the tailored Strategy-B recipe with a format-aware
@@ -1041,7 +1007,6 @@
   consent-gated manual step. Strategy B is the less-trodden path and may hit Turbopack edge cases;
   the fallback (disable gVS, store in-tree) is noted in the recipe. Accepted.
 
-
 ### RISK-ULTRAPOWERS-005 — Migration can mis-pair spec and plan documents
 
 - **Status:** Mitigated
@@ -1049,13 +1014,12 @@
   in `.ultrapowers/archive/`. Pairing is guessed from date and slug, not derived; some files pair with
   nothing (`2026-07-26-phase2-design-skills-HANDOFF.md`). A silent wrong pairing buries a design
   document under an unrelated phase.
-- **Mitigation:** migration proposes and does not act — it prints the full mapping plus the Status nuance (migrated 2026-07-31): mitigated by design
+- **Mitigation:** migration proposes and does not act — it prints the full mapping plus the
   unpaired list and waits for confirmation, the same rule Т.4 sets for the resume hook. `git mv`
   preserves history. Unpaired files go to `.ultrapowers/archive/` intact rather than being guessed
-  at. Acceptance counts files in and out.
+  at. Acceptance counts files in and out. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** a confirmed-but-wrong pairing. Recoverable — `git mv` keeps history, so the move
   is reversible.
-
 
 ### RISK-ULTRAPOWERS-007 — A fork left un-updated drifts until merging stops being mechanical
 
@@ -1065,14 +1029,13 @@
   where the transform replays cleanly, at which case each delta has to be re-derived by hand. This
   is the failure mode that makes people abandon forks, and it arrives through inaction rather than
   through any decision.
-- **Mitigation:** `/up-update` runs from any project, so checking never requires switching Status nuance (migrated 2026-07-31): mitigated by design, 2026-07-27
+- **Mitigation:** `/up-update` runs from any project, so checking never requires switching
   repositories — the cost of staying current is one command rather than a context switch. Release
   detection queries GitHub directly (no Claude Code command reports available plugin updates in
   machine-readable form; this was checked), so drift is surfaced rather than waiting to be asked
-  about.
+  about. Status nuance (migrated 2026-07-31): mitigated by design, 2026-07-27
 - **Residual:** the command still has to be run. Whether a periodic nudge is warranted should be
   decided after the first few real updates, not guessed now.
-
 
 ### RISK-ULTRAPOWERS-009 — Removing foreign hook registrations weakens "only ever touch our own entries"
 
@@ -1083,7 +1046,7 @@
   one. `filterGsdHooks` deliberately breaks that property: it matches `hooks/gsd-*` by pattern and
   removes registrations belonging to another product. It is the first code path in the installer
   that can delete a settings entry it did not author.
-- **Mitigation:** containment around the match, not a narrower match — the match had to get *wider*, Status nuance (migrated 2026-07-31): 2026-07-28, with the foreign gsd-core detector in `setup.mjs`
+- **Mitigation:** containment around the match, not a narrower match — the match had to get *wider*,
   not tighter, to work at all. Every hook of a real gsd-core install is registered as one quoted
   command line with no `args` array (`"…/node.exe" "…/hooks/gsd-check-update.js"`), so a matcher
   reading only `args` — the shape this bundle uses — de-registered nothing while the inventory moved
@@ -1095,14 +1058,13 @@
   `--uninstall-gsd`, a bulk or non-TTY run reports and stops, and the interactive default is no.
   A copy of `settings.json` goes into the cleanup-trash batch *before* the edit and the exact `cp`
   that restores it is printed. `hooks/lib/gsd-*` stays deliberately unmatched: nothing registers a
-  lib file as a hook, so matching it would widen the reach for no behaviour.
+  lib file as a hook, so matching it would widen the reach for no behaviour. Status nuance (migrated 2026-07-31): 2026-07-28, with the foreign gsd-core detector in `setup.mjs`
 - **Residual:** any registration whose command line *mentions* a `hooks/gsd-*` path is dropped, so a
   third-party hook living at that path, or an unrelated command that merely passes one as an
   argument, goes with it — on a machine that has gsd-core installed and a user who consented.
   Reversible from the printed `cp`, and the file itself is only moved, never deleted. Accepted: the
   alternative is reading gsd-core's own manifest, which would couple this bundle to a foreign
   product's internal layout.
-
 
 ## Closed
 ### RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill
@@ -1124,7 +1086,6 @@
 - **Residual:** if `uipro` is run OUTSIDE the orchestrator first (extras pre-exist the orchestrator's
   snapshot) they are treated as user content and left in place — acceptable (the orchestrator only
   prunes what it installs). Accepted.
-
 
 ### RISK-FALLOW-001 — `fallow.enabled` is set optimistically, not gated on binary presence
 
@@ -1186,7 +1147,6 @@
   The inline fallow install command assumes pnpm (consistent with the rest of this repo's Node
   tooling conventions) — a project on npm/yarn only would need to adapt the command by hand.
 
-
 ### RISK-INITSTACK-001 — `/init-stack` GSD-free rewrite deleted steps 6-11; ~24 stale references + 2 dropped capabilities
 
 - **Status:** Closed (2026-07-27) — the stale references were fixed first; the two
@@ -1238,7 +1198,6 @@
   unreinstated by design — if the orchestration-pilot idea is revisited later, it starts fresh
   from the dormant reference doc rather than resuming this risk.
 
-
 ### RISK-STATUSLINE-001 — the context-window size field name is documented, not observed
 
 - **Status:** Closed (2026-07-31) — observed, 2026-07-30
@@ -1273,7 +1232,6 @@
   statusline, which is what makes the outstanding task non-blocking in practice as well as in
   principle.
 
-
 ### RISK-ULTRAPOWERS-002 — Rebrand is machine-wide and cannot be gated per project
 
 - **Status:** Closed (2026-07-27) — the fork removed the premise, not just the symptom.
@@ -1286,7 +1244,6 @@
 - **Resolution:** a fork is a plugin, enabled and disabled per project like any other, so the
   existing gate reaches it. Nothing needed to be built for this; the limitation was an artefact
   of patching a machine-wide cache.
-
 
 ### RISK-ULTRAPOWERS-003 — Blind replacement would break `superpowers:` skill resolution
 
