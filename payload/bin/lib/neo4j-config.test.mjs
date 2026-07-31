@@ -94,3 +94,41 @@ test("testNeo4jConnection: auth failure surfaces the driver error, does not clai
   assert.equal(r.ok, false);
   assert.match(r.error, /Unauthorized/);
 });
+
+import { resolveDriverPython } from "./neo4j-config.mjs";
+
+test("an interpreter that already has the driver is used as is", () => {
+  const r = resolveDriverPython({
+    find: () => "py", installed: () => true,
+    ensure: () => { throw new Error("must not install"); },
+  });
+  assert.deepEqual(r, { ok: true, python: "py" });
+});
+
+// The driver vanishes whenever graphify is upgraded without --with neo4j, and until now
+// nothing could put it back without a human answering setup.mjs again.
+test("a missing driver is installed once, then the interpreter is used", () => {
+  let installs = 0;
+  const r = resolveDriverPython({
+    find: () => "py",
+    installed: () => installs > 0,
+    ensure: () => { installs += 1; return { ok: true }; },
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.recovered, true);
+  assert.equal(installs, 1);
+});
+
+test("recovery that fails is an error carrying the command to run, not a throw", () => {
+  const r = resolveDriverPython({
+    find: () => "py", installed: () => false, ensure: () => ({ ok: false, error: "no uv" }),
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /uv tool install graphifyy --with neo4j/);
+});
+
+test("no interpreter at all is an error naming graphify-setup", () => {
+  const r = resolveDriverPython({ find: () => null, installed: () => false, ensure: () => ({ ok: false }) });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /graphify-setup\.mjs/);
+});

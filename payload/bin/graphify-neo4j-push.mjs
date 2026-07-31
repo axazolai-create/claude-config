@@ -8,7 +8,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadNeo4jConfig, parseBoltHostPort, repoTagsFromGlobalGraph, probeReachable,
-  GLOBAL_GRAPH_PATH,
+  GLOBAL_GRAPH_PATH, resolveDriverPython,
 } from "./lib/neo4j-config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -40,7 +40,10 @@ try {
 // Kept on one line (with the ...process.env spread) so the secrets-gate pre-commit hook's
 // env-context allowlist recognizes this as env passthrough, not a hardcoded credential.
 const env = { ...process.env, NEO4J_URI: cfg.config.uri, NEO4J_USER: cfg.config.user, NEO4J_PASSWORD: cfg.config.password };
-const py = process.env.GRAPHIFY_PYTHON || "python";
+const driver = resolveDriverPython();
+if (!driver.ok) { log(`[neo4j-push] skipped: ${driver.error}`); process.exit(0); }
+if (driver.recovered) log("[neo4j-push] neo4j driver was missing and has been reinstalled");
+const py = driver.python;
 
 // 1. per-repo prune (staleness hygiene, no global wipe)
 log(`[neo4j-push] pruning ${tags.length} repo(s) before push...`);
