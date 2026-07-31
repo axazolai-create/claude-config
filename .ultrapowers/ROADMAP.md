@@ -19,13 +19,12 @@ phases:
 
 # Roadmap
 
-Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` at
-`4918208` on 2026-07-31, and the phase-09 debts followed at `8e785d6` the same day; both
-are pushed. Eight phases are complete, one is superseded by phase 04, everything through phase 08 is
-deployed, and phase 09 is merged but not yet deployed. Phase 10 was specified on 2026-07-31
-, implemented and merged the same day. Nine phases are complete, one is superseded, everything
-through phase 08 is deployed, and phases 09 and 10 are merged but not deployed. The one thing
-standing between the tree and a clean slate is that deploy.
+Nothing is running. Eleven phases are complete and one is superseded by phase 04. Everything
+through phase 08 is deployed; phases 09, 10 and 11 are merged and undeployed, and phase 12 sits
+on `feat/decision-records` awaiting its merge. Phases 10, 11 and 12 were all specified and
+implemented on 2026-07-31 — the statusline segment, the `.protected` mechanism and the decision
+records — which is why the queue below is finally empty. The one thing standing between the
+tree and a clean slate is the deploy.
 
 Every row carries `delivery`; `integration` is gone. Phase 10 migrated the vocabulary as its
 first step, because the segment it builds reads these fields. `delivery` records branch and
@@ -107,15 +106,11 @@ Done, kept as a line each:
 Work that exists without a phase directory, because nothing in this tree is scaffolded
 before it has content.
 
-- **The `.protected` mechanism.** Specified by the user during phase 09; requirements are
-  recorded in that phase's ledger. A `.protected` file in `.gitignore` format marks paths
-  that may not be edited, deleted or moved — copying stays allowed — binding at its own
-  level and every level below, with nested files able to extend or override what they
-  inherit. It must be a hook, not prose: the user's own global `CLAUDE.md` reserves
-  enforcement for hooks and managed policy. Two rulings are already taken: `.protected`
-  itself may be edited but never deleted, and that rule is intrinsic rather than a list
-  entry; and Bash interception denies anything suspicious rather than matching exactly,
-  because a false positive costs a rephrase and a missed deletion costs a file.
+- **Became phase 11 on 2026-07-31 — the `.protected` mechanism.** Specified during phase 09,
+  designed and shipped the same day as `phases/11-protected-paths/`. The two questions that
+  phase left open are answered in its spec: `cp` is judged by direction with an unparseable
+  command denied, and one denial text serves every case. The mechanism ships unarmed — no
+  `.protected` file exists in this repository, and creating one is what turns it on.
 - **Became phase 10 on 2026-07-31 — the statusline's ultrapowers segment.** Specified during
   phase 09, designed on 2026-07-31 as `phases/10-phase-progress-segment/10-SPEC.md`. Its
   blocker is answered there: a separate `action` field beside `status`, with the live SDD
@@ -123,11 +118,11 @@ before it has content.
   taking over mode selection and the counters whenever tasks are actually executing, so a
   stale `action` can only mislead in the quieter modes. The status/delivery migration is the
   phase's first step rather than a debt owed to it.
-- **The decision-records CLI.** Never started. Plan:
-  `.ultrapowers/archive/plans/2026-07-28-decision-records.md`. It runs last by its own
-  constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/` once the tree
-  exists, and its normaliser should rewrite a register that already contains the statusline
-  work's entries.
+- **Became phase 12 on 2026-07-31 — the decision-records CLI.** Its 2026-07-28 plan moved out
+  of `archive/plans/` into `phases/12-decision-records/12-PLAN.md`, as the tree's rule requires.
+  It did run last, and its own constraint is why: the normaliser rewrote a register that by then
+  carried the statusline and `.protected` work's entries. The plan's measurements were three
+  phases stale and were re-taken before any parser was written.
 - **Done 2026-07-31 — the four process rules, agreed during phase 09.** Two shipped in
   `payload/rules-src/` (`node.base.md`, `testing.md`) and two in the fork's `writing-plans`
   skill as delta 011. A fifth rule joined them on the way: the ledger read-back check, delta
