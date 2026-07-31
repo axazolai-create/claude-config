@@ -14,6 +14,14 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const log = (s = "") => process.stdout.write(s + "\n");
 
+import { homedir } from "node:os";
+import { isHeld, take, release } from "../hooks/lib/state-lock.mjs";
+
+const PUSH_LOCK = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "state", "graphify-neo4j-push.lock");
+if (isHeld(PUSH_LOCK)) { log("[neo4j-push] skipped: another push is already running"); process.exit(0); }
+take(PUSH_LOCK);
+process.on("exit", () => release(PUSH_LOCK));
+
 const cfg = loadNeo4jConfig();
 if (!cfg.ok) { log(`[neo4j-push] skipped: ${cfg.error}`); process.exit(0); }
 if (!existsSync(GLOBAL_GRAPH_PATH)) {
