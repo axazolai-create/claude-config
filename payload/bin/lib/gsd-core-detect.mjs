@@ -12,6 +12,23 @@ const CATEGORIES = [
 
 export const gsdCorePresent = (dir) => existsSync(join(dir, "gsd-core", "VERSION"));
 
+// gsd-core is an npx tool, not a marketplace plugin, so "is it installed" is a question about the
+// filesystem and nothing else. `--global` puts it in the config directory, which is where
+// gsdCorePresent looks; `--local` would land it in the current project and read as absent.
+const INSTALL_COMMAND = "npx -y @opengsd/gsd-core@latest --global --claude";
+
+export function gsdCoreInstallPlan({
+  variant, present, interactive, configDir, defaultConfigDir,
+} = {}) {
+  // base and lite exclude the GSD machinery outright, and detectForeignGsdCore offers to REMOVE
+  // the tool there. Offering to install it in the same run would be the bundle arguing with itself.
+  if (variant !== "full" || present) return { action: "none", command: null };
+  const command = configDir && defaultConfigDir && configDir !== defaultConfigDir
+    ? `${INSTALL_COMMAND} --config-dir "${configDir}"`
+    : INSTALL_COMMAND;
+  return { action: interactive ? "ask" : "print", command };
+}
+
 const safeReaddir = (p) => { try { return readdirSync(p); } catch { return []; } };
 const statOr = (p) => { try { return statSync(p); } catch { return null; } };
 

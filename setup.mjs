@@ -44,7 +44,7 @@ import { validateConfigDir } from "./payload/bin/lib/config-dir-validate.mjs";
 import { testNeo4jConnection, findGraphifyPython, ensureNeo4jDriver } from "./payload/bin/lib/neo4j-config.mjs";
 import { assembleClaudeMd } from "./payload/bin/lib/assemble-claude-md.mjs";
 import { migrateSettingsModel } from "./payload/bin/lib/model-migration.mjs";
-import { gsdCorePresent, buildGsdInventory, filterGsdHooks } from "./payload/bin/lib/gsd-core-detect.mjs";
+import { gsdCorePresent, buildGsdInventory, filterGsdHooks, gsdCoreInstallPlan } from "./payload/bin/lib/gsd-core-detect.mjs";
 import { applyPlan, purgeRetention, trashRoot } from "./payload/bin/lib/claude-cleanup-lib.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
@@ -589,7 +589,8 @@ function warnStatuslineNamesMissingFile() {
 }
 
 /* ---------- foreign gsd-core: report it, and offer a reversible removal (base/lite only) ----------
- * gsd-core is a separate product installed by /gsd-update, not by this bundle. On base/lite it has
+ * gsd-core is a separate product installed by `npx @opengsd/gsd-core`, not from a marketplace and
+ * not by this bundle beyond the offer below. On base/lite it has
  * no place here, but nothing about that justifies deleting it: every removal is a MOVE into the
  * same .cleanup-trash batch /claude-cleanup already restores and expires after 7 days, and the
  * decision is always the user's (default no; a bulk flag or a non-TTY run reports and stops).
@@ -601,6 +602,32 @@ function warnStatuslineNamesMissingFile() {
  * took responsibility for. Without the second and third, a full -> base downgrade whose stale
  * prune was declined would move ~12 of this bundle's own paths under a banner reading "not part of
  * this bundle" - consent obtained under a false description. */
+/* ---------- full without gsd-core: offer the npx install ----------
+ * The mirror image of detectForeignGsdCore. full ships the GSD machinery - agents, hooks, rules -
+ * and all of it is inert without the tool those files talk to. gsd-core is an npx package, never a
+ * marketplace plugin, so presence is a filesystem question (gsd-core/VERSION), never an
+ * enabledPlugins entry. Consent is explicit and per-run: the command is printed either way, and
+ * only a TTY plus a "y" runs it. */
+async function offerGsdCoreInstall() {
+  const plan = gsdCoreInstallPlan({
+    variant: VARIANT, present: gsdCorePresent(CDIR), interactive: INTERACTIVE,
+    configDir: CDIR, defaultConfigDir: join(HOME, ".claude"),
+  });
+  if (plan.action === "none" || DRY) return;
+  log(`\ngsd-core is not installed, and the full profile ships its agents, hooks and rules:`);
+  log(`  ${plan.command}`);
+  if (plan.action === "print") { log("  Non-interactive run - nothing was installed. Run it yourself."); return; }
+  if ((await ask("  Install it now? (y/N) > "))[0] !== "y") { log("  Skipped."); return; }
+  const r = spawnSync(plan.command, { shell: true, stdio: "inherit" });
+  if (r.status === 0 && gsdCorePresent(CDIR)) {
+    const v = safe(() => readFileSync(join(CDIR, "gsd-core", "VERSION"), "utf8").trim()) || "unknown";
+    summary.push(`installed gsd-core ${v} (npx)`);
+    log(`  gsd-core ${v} installed.`);
+  } else {
+    log(`  Install did not complete (exit ${r.status}). Nothing else changed.`);
+  }
+}
+
 async function detectForeignGsdCore(prunedRels = []) {
   if (VARIANT === "full" || !gsdCorePresent(CDIR)) return;
   const everOurs = safe(() => Object.keys(profilesOf(loadVariants(REPO_ROOT)))
@@ -865,7 +892,8 @@ async function main() {
 
   /* ---------- gsd-core hand-patches (backports of confirmed upstream fixes) ----------
    * gsd-core (~/.claude/gsd-core) is a separate tool, not owned by this bundle - it updates
-   * via /gsd-update, not setup.mjs. gsd-core-patches/<name>/ holds hand-applied backports of
+   * via `npx @opengsd/gsd-core@latest` or its own /gsd-update skill, not setup.mjs.
+   * gsd-core-patches/<name>/ holds hand-applied backports of
    * a real, confirmed upstream fix that hasn't reached a tagged release yet - see
    * gsd-core-patches/README.md for the manifest.json schema and how to add a new one. Generic
    * over every subdirectory found there - adding a new backport needs no change here, just a
@@ -1266,6 +1294,7 @@ async function main() {
   // a file this bundle installed under `full` and no longer ships under base/lite is pruneStale's
   // to remove, under pruneStale's own gates, so the detector is handed what it already claimed.
   await detectForeignGsdCore(await pruneStale());
+  await offerGsdCoreInstall();
   // After the prune, which is what can delete the file the command names.
   warnStatuslineNamesMissingFile();
   if (!DRY) {
