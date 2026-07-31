@@ -26,6 +26,8 @@
 // signal of their own (no tag, no distinct command) - that case is covered incidentally by
 // the commit/push triggers, since finishing an Ultrapowers branch always ends in one of those.
 // Usage: node graphify-global-sync-run.mjs [repoPath]  (defaults to cwd)
+// Also pushes the refreshed global graph to Neo4j when bin/graphify-neo4j-push.mjs is
+// installed - same detached process, inside the same lock. Toggle: CLAUDE_GRAPHIFY_NEO4J_PUSH=0.
 // Never throws, never blocks: no-ops (exit 0) if this isn't a git repo, HEAD has no
 // commits yet, or `graphify` isn't installed - this must never surface as an error
 // to whichever caller ran it (a Claude Code hook or git itself).
@@ -66,7 +68,16 @@ take(lock);
 
 // Run graphify, then remove the lock, all inside one detached background process -
 // the caller (Claude Code hook or git itself) is never delayed by this.
-const cmd = buildSyncCommand({ root, name, lock, isWin: IS_WIN });
+// The push is opt-in twice over: the script only exists in installs that took the neo4j
+// option, and CLAUDE_GRAPHIFY_NEO4J_PUSH=0 turns it off without touching the sync.
+const pushScript = join(CLAUDE_DIR, "bin", "graphify-neo4j-push.mjs");
+const pushWanted = process.env.CLAUDE_GRAPHIFY_NEO4J_PUSH !== "0" && existsSync(pushScript);
+const cmd = buildSyncCommand({
+  root, name, lock, isWin: IS_WIN,
+  pushScript: pushWanted ? pushScript : null,
+  node: process.execPath,
+  logPath: join(stateDir, "graphify-neo4j-push.log"),
+});
 spawn(cmd.shell, [cmd.flag, cmd.inner],
   { cwd: root, detached: true, stdio: "ignore", windowsHide: true }).unref();
 

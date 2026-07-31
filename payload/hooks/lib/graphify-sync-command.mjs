@@ -2,8 +2,9 @@
 // the worker's own effects are untestable, this is not.
 const quote = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
 
-export function buildSyncCommand({ root, name, lock, isWin }) {
+export function buildSyncCommand({ root, name, lock, isWin, pushScript = null, node = "node", logPath }) {
   const steps = [`graphify ${["extract", root, "--code-only", "--global", "--as", name].map(quote).join(" ")}`];
+  if (pushScript) steps.push(`${quote(node)} ${quote(pushScript)} > ${quote(logPath)} 2>&1`);
   steps.push(isWin ? `del /f /q ${quote(lock)}` : `rm -f ${quote(lock)}`);
   return {
     shell: isWin ? "cmd" : "sh",

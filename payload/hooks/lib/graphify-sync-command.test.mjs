@@ -32,3 +32,32 @@ test("extraction is code-only, so no API key is ever needed", () => {
     assert.match(buildSyncCommand({ ...args, isWin }).inner, /"--code-only"/);
   }
 });
+
+const withPush = {
+  ...args, pushScript: "C:/claude/bin/push.mjs", node: "C:/node.exe",
+  logPath: "C:/state/push.log",
+};
+
+test("the push runs after the extract and before the lock is released", () => {
+  for (const isWin of [true, false]) {
+    const inner = buildSyncCommand({ ...withPush, isWin }).inner;
+    const iExtract = inner.indexOf("extract");
+    const iPush = inner.indexOf("push.mjs");
+    const iUnlock = inner.search(isWin ? /del \/f \/q/ : /rm -f/);
+    assert.ok(iExtract < iPush && iPush < iUnlock, `order wrong on ${isWin ? "win" : "posix"}: ${inner}`);
+  }
+});
+
+// Nothing watches the console of a detached process, so a failed push is invisible
+// without a file to read afterwards.
+test("the push writes stdout and stderr to the log", () => {
+  const inner = buildSyncCommand({ ...withPush, isWin: false }).inner;
+  assert.match(inner, /> "C:\/state\/push\.log" 2>&1/);
+});
+
+// Profile `base` excludes bin/graphify-neo4j-*, so most installs have no push script at all.
+test("no push script means the command is the plain sync", () => {
+  const plain = buildSyncCommand({ ...args, isWin: true });
+  const withNull = buildSyncCommand({ ...withPush, pushScript: null, isWin: true });
+  assert.equal(withNull.inner, plain.inner);
+});
