@@ -3,16 +3,16 @@ updated: 2026-07-31
 current: null
 deployed_through: "08"
 phases:
-  - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
-  - { phase: "02", slug: ai-development-mode, status: complete, integration: merged }
-  - { phase: "03", slug: ultrapowers-layer0-patcher, status: superseded, superseded_by: "04", integration: merged }
-  - { phase: "04", slug: ultrapowers-planning-tree, status: complete, integration: merged }
-  - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
-  - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
-  - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
-  - { phase: "08", slug: unified-statusline, status: complete, integration: merged }
-  - { phase: "09", slug: context-meter-severity, status: complete, integration: merged }
-  - { phase: "10", slug: phase-progress-segment, status: planned, delivery: null }
+  - { phase: "01", slug: graphify-neo4j, status: complete, delivery: merged }
+  - { phase: "02", slug: ai-development-mode, status: complete, delivery: merged }
+  - { phase: "03", slug: ultrapowers-layer0-patcher, status: superseded, superseded_by: "04", delivery: merged }
+  - { phase: "04", slug: ultrapowers-planning-tree, status: complete, delivery: merged }
+  - { phase: "05", slug: versioning-and-changelog, status: complete, delivery: merged }
+  - { phase: "06", slug: design-records-and-stack-rules, status: complete, delivery: merged }
+  - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, delivery: merged }
+  - { phase: "08", slug: unified-statusline, status: complete, delivery: merged }
+  - { phase: "09", slug: context-meter-severity, status: complete, delivery: merged }
+  - { phase: "10", slug: phase-progress-segment, status: complete, delivery: branch }
 ---
 
 # Roadmap
@@ -21,14 +21,14 @@ Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` 
 `4918208` on 2026-07-31, and the phase-09 debts followed at `8e785d6` the same day; both
 are pushed. Eight phases are complete, one is superseded by phase 04, everything through phase 08 is
 deployed, and phase 09 is merged but not yet deployed. Phase 10 was specified on 2026-07-31
-and has a spec but no plan. The one thing standing between the tree and a clean slate is that
+and implemented the same day; it sits on `feat/phase-progress-segment`, complete and awaiting
+a merge decision. Two things now stand between the tree and a clean slate: that merge and the
 deploy.
 
-The frontmatter above is deliberately mixed: phase 10's row carries `delivery`, every earlier
-row still carries `integration`. Migrating the rest is phase 10's own first step — the segment
-it builds reads these fields, so renaming them from outside the phase would mean touching every
-state file twice. A reader should expect `integration` to disappear when phase 10 runs, not
-before.
+Every row carries `delivery`; `integration` is gone. Phase 10 migrated the vocabulary as its
+first step, because the segment it builds reads these fields. `delivery` records branch and
+merge state only — deployment stays the `deployed_through` waterline above, since one deploy
+carries every merged phase at once.
 
 `current` is `null` because naming a merged phase would say a false thing. The cost is
 known and accepted: with no phase named, the ultrapowers segment falls through to the
@@ -48,7 +48,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 07 gsd-core-detector-and-statusline | complete | merged, deployed |
 | 08 unified-statusline | complete | merged at `82deacb`, deployed |
 | 09 context-meter-severity | complete | merged at `4918208`, not deployed |
-| 10 phase-progress-segment | planned | specified 2026-07-31, not yet planned |
+| 10 phase-progress-segment | complete | on `feat/phase-progress-segment`, awaiting merge |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
@@ -77,8 +77,9 @@ writes for one event, and most of them would not happen.
 2. Install `6.2.0-up.5` — `/plugin update` and a restart, done by the user. `enabledPlugins`
    resolves at startup and does not hot-reload, so the three new rules bind on the next
    session, not this one.
-3. Plan phase 10 — the spec is approved; the implementation plan does not exist yet. Its first
-   step is the status/delivery migration, because the segment reads the fields it renames.
+3. Merge phase 10 — `feat/phase-progress-segment` is complete with both suites green (572 + 23)
+   and has not been merged. The deploy above should carry it, so the order is merge, then audit
+   the merged result, then deploy.
 
 Done, kept as a line each:
 

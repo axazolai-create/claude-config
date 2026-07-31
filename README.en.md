@@ -879,14 +879,31 @@ from this bundle, driving your Claude Code" principle — here for findability:
      `~/.claude/state/bundle-manifest.json`; an absent or unreadable manifest fails **open** (the
      segment shows) — only `lite` suppresses it.
 
-  Segment 6 selects what to name deterministically, in this order: `.ultrapowers/ROADMAP.md`'s
-  frontmatter `current`; else the single phase whose `status: running` (zero or several matches —
-  the segment says nothing rather than guess); else the newest SDD ledger under
-  `.ultrapowers/sdd/`. It used to pick by file mtime, and a checkout would change what the bar
-  claimed; now mtime is only a tie-breaker among ledgers and can never outrank a declared phase.
-  A phase prints a tally and **never** a percentage — `08 (2/6) running`, or `08 planned` when the
-  phase has no plan yet: a phase that retires a task (`tasks_dropped`) states its tally in fields
-  and its reason in prose, and a derived percentage would under-report an already-finished phase.
+  Segment 6 selects a phase deterministically: `.ultrapowers/ROADMAP.md`'s frontmatter `current`,
+  else the single phase whose `status: running`. Zero or several matches means the tree does not
+  know which phase is in flight, and the segment renders the tally rather than guessing.
+
+  It has **three modes**, switched wholesale rather than by substituting parts:
+
+  - **executing** — `09 2/1/3 — phase-progress-segment`: done, in work, queued. A fourth number
+    is appended only when something is blocked, `09 2/1/3/1`. Done is green, the in-work position
+    is cyan — or **yellow** when any task is in a fix round — the queue is uncoloured and blocked
+    is red. Only the numbers are painted, never the separators.
+  - **named action** — `09 (planning) phase-progress-segment`, cyan, or red when the phase is
+    `blocked`. A phase with no `action` prints its id and name alone; the bar never invents a word
+    for what is happening.
+  - **tally** — `8/10 phase-progress-segment` between phases: every phase except `abandoned` ones,
+    named after the highest-numbered one.
+
+  The counters come from the **live SDD ledger** for the resolved phase, read structurally by
+  counting `task-N-brief.md` against `task-N-report.md` — no line of its prose is parsed, so its
+  wording can change freely. `NN-STATE.md` supplies `action`, `tasks_fixing` and `tasks_blocked`;
+  with no ledger present it answers alone. A ledger belonging to any other phase is never
+  consulted, which is what the bar used to get wrong: it picked by mtime, so a checkout could
+  change what it claimed and a finished plan's tally could be presented as live work.
+
+  Still **never a percentage**: a phase that retires a task states its tally in fields and its
+  reason in prose, and a derived percentage would under-report an already-finished phase.
 
   Same key property throughout: any single source's error costs only its own segment, never the
   whole line — empty output and exit 0, the statusline never breaks.

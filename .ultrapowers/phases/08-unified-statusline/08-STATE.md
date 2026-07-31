@@ -1,7 +1,7 @@
 ---
 phase: "08"
 status: complete
-delivery: branch
+delivery: merged
 branch: feat/unified-statusline
 depends_on: []
 tasks_done: 8
@@ -10,6 +10,13 @@ updated: 2026-07-30
 ---
 
 # Phase 08 — unified-statusline — state
+
+`delivery` read `branch` until 2026-07-31, when this phase's branch had been merged at
+`82deacb` for a day. Stale rather than wrong when written: the field was set while the branch
+was open and nobody revisited it at the merge. It reads `merged`, not `deployed`, because
+deployment is a waterline on the roadmap (`deployed_through`) and never a per-phase flag —
+one deploy carries every merged phase, so recording it per phase would mean many writes for
+one event, and most of them would not happen.
 
 Complete, merged to `master` (`82deacb`) and deployed. Executed
 subagent-driven: one implementer per task, a task-scoped review after each, a

@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderUpdates, renderGsd, renderSdd, renderPhase, roadmapPhases, render, installedProfile, paintContext } from "./statusline.mjs";
+import { renderUpdates, renderGsd, render, installedProfile, paintContext } from "./statusline.mjs";
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -26,58 +26,8 @@ test("the gsd segment mirrors gsd-core's own vocabulary", () => {
     "v2.0 [██░] 40% · Phase 4.5 executing");
 });
 
-test("the sdd segment names the plan and where to resume", () => {
-  assert.equal(renderSdd({ plan: "planning-tree", complete: 3, next: 4 }), "planning-tree (3) next 4");
-});
-
-test("renderPhase prints a tally and never a percentage", () => {
-  assert.equal(renderPhase({ id: "08", done: 2, total: 6, status: "running" }), "08 (2/6) running");
-  assert.doesNotMatch(renderPhase({ id: "08", done: 6, total: 7, status: "complete" }), /%/);
-});
-
-test("renderPhase subtracts dropped tasks from the denominator", () => {
-  assert.equal(renderPhase({ id: "07", done: 6, total: 7, dropped: 1, status: "complete" }),
-    "07 (6/6) complete");
-});
-
-// null is the shape phaseSegment really supplies, because fmField returns null for an absent key.
-test("renderPhase omits the tally when the phase has no plan yet", () => {
-  assert.equal(renderPhase({ id: "08", status: "planned" }), "08 planned");
-  assert.equal(renderPhase({ id: "08", done: null, total: null, dropped: null, status: "planned" }),
-    "08 planned");
-  assert.equal(renderPhase({ id: "08", done: 5, total: null, dropped: null, status: "planned" }),
-    "08 planned");
-});
-
-test("renderPhase never interpolates undefined", () => {
-  assert.equal(renderPhase(), "");
-  assert.doesNotMatch(renderPhase({ id: "08" }), /undefined/);
-  assert.doesNotMatch(renderPhase({ id: "08", done: null, total: null }), /undefined|NaN/);
-});
-
-test("roadmapPhases parses the inline maps", () => {
-  const rows = roadmapPhases([
-    "---",
-    'current: "08"',
-    "phases:",
-    '  - { phase: "07", slug: a, status: complete, integration: merged }',
-    '  - { phase: "08", slug: b, status: running, delivery: branch }',
-    "---",
-  ].join("\n"));
-  assert.deepEqual(rows.map((r) => [r.phase, r.status]), [["07", "complete"], ["08", "running"]]);
-});
-
-test("roadmapPhases parses CRLF frontmatter", () => {
-  const rows = roadmapPhases([
-    "---",
-    'current: "08"',
-    "phases:",
-    '  - { phase: "07", slug: a, status: complete }',
-    '  - { phase: "08", slug: b, status: running }',
-    "---",
-  ].join("\r\n"));
-  assert.deepEqual(rows.map((r) => [r.phase, r.status]), [["07", "complete"], ["08", "running"]]);
-});
+// renderSdd, renderPhase and roadmapPhases moved to lib/phase-segment.mjs and are tested there.
+// What stays here is the entry point's behaviour, which is what this file is for.
 
 test("render joins the floor in order", () => {
   const line = strip(render({ updates: [], model: "Opus 5 (1M)", context: "45.0K/200K 22%",
@@ -124,14 +74,11 @@ test("the pure renderers never throw on absent or malformed input", () => {
   assert.equal(renderUpdates("context-mode"), "");
   assert.equal(renderUpdates({}), "");
   assert.doesNotThrow(() => renderGsd());
-  assert.doesNotThrow(() => renderSdd());
   assert.doesNotThrow(() => render());
 });
 
 test("the pure renderers never interpolate undefined", () => {
   assert.equal(renderGsd(), "");
-  assert.equal(renderSdd(), "");
-  assert.doesNotMatch(renderSdd({ plan: "p" }), /undefined/);
   assert.doesNotMatch(renderGsd({ milestone: "v1" }), /undefined/);
   // field()/fmField() return null (not undefined) for an absent key, the shape production
   // actually passes; a guard tested only against omitted arguments can miss this.
@@ -139,7 +86,6 @@ test("the pure renderers never interpolate undefined", () => {
   // milestone with no phase, guard or not - phase+status is what makes the guard's absence visible.
   assert.equal(renderGsd({ milestone: null }), "");
   assert.equal(renderGsd({ milestone: null, phase: "3", status: "x" }), "");
-  assert.equal(renderSdd({ plan: null }), "");
 });
 
 const ENTRY = join(dirname(fileURLToPath(import.meta.url)), "statusline.mjs");
@@ -360,52 +306,35 @@ test("entry point: a .planning with no STATE.md at all falls through", () => {
   assert.ok(strip(out.stdout).startsWith("gsd-nostate"));
 });
 
-const LEDGER = `# SDD ledger — plan: docs/plans/2026-07-28-planning-tree.md
-
-## Progress
-Task 1: complete (commits aaa..bbb)
-Task 1: review NEEDS FIXES
-Task 2: complete
-Task 3: complete
-Task 4: in progress
-`;
-
-test("entry point: an SDD plan in flight renders the sdd segment", () => {
-  const root = dir("sdd-proj");
-  write(join(root, ".ultrapowers", "sdd", "2026-01-01-old", "progress.md"), "# SDD ledger — plan: docs/plans/old.md\nTask 1: complete\n");
-  write(join(root, ".ultrapowers", "sdd", "2026-07-28-current", "progress.md"), LEDGER);
-  const out = runEntry(payload(root));
-  assert.equal(out.status, 0);
-  assert.equal(strip(out.stdout), "sdd-proj │ 2026-07-28-planning-tree (3) next 4");
-});
-
-test("entry point: the most recently written ledger wins, not the last name", () => {
-  const root = dir("sdd-mtime");
-  const stale = write(join(root, ".ultrapowers", "sdd", "2026-07-28-zzz-last-by-name", "progress.md"),
-    "# SDD ledger — plan: docs/plans/stale.md\nTask 1: complete\n");
-  const live = write(join(root, ".ultrapowers", "sdd", "2026-07-28-aaa-first-by-name", "progress.md"), LEDGER);
-  utimesSync(stale, 1_000_000, 1_000_000);
-  utimesSync(live, 2_000_000, 2_000_000);
-  assert.equal(strip(runEntry(payload(root)).stdout), "sdd-mtime │ 2026-07-28-planning-tree (3) next 4");
-});
-
-test("entry point: an .ultrapowers/sdd with no ledger falls through", () => {
+test("entry point: an .ultrapowers without a ROADMAP renders no work segment", () => {
   const root = dir("sdd-empty");
-  mkdirSync(join(root, ".ultrapowers", "sdd", "2026-01-01-x"), { recursive: true });
+  mkdirSync(join(root, ".ultrapowers", "sdd", "phases-01-x"), { recursive: true });
   const out = runEntry(payload(root));
   assert.equal(out.status, 0);
   assert.equal(out.stderr, "");
-  assert.ok(strip(out.stdout).startsWith("sdd-empty"));
+  assert.equal(strip(out.stdout), "sdd-empty");
+});
+
+test("entry point: a ledger belonging to another phase never becomes the segment", () => {
+  const root = phaseTree("ledger-other", {
+    current: "09",
+    rows: [{ phase: "09", slug: "ctx-severity", status: "running" }],
+    phases: { "09-ctx-severity": '---\nphase: "09"\nstatus: running\naction: review\n---\n' },
+  });
+  write(join(root, ".ultrapowers", "sdd", "phases-08-unified", "task-1-brief.md"), "b");
+  const out = strip(runEntry(payload(root)).stdout);
+  assert.match(out, /09 \(review\) ctx-severity$/);
 });
 
 test("entry point: gsd and up both render when a project has both", () => {
   const root = dir("both-proj");
   write(join(root, ".planning", "config.json"), "{}");
   write(join(root, ".planning", "STATE.md"), GSD_STATE);
-  write(join(root, ".ultrapowers", "sdd", "2026-07-28-x", "progress.md"), LEDGER);
+  write(join(root, ".ultrapowers", "ROADMAP.md"), ["---", "current: null", "phases:",
+    '  - { phase: "01", slug: only-one, status: complete }', "---", "", "# Roadmap"].join("\n"));
   const out = runEntry(payload(root), { claudeDir: GSD_CLAUDE_DIR });
   assert.equal(strip(out.stdout),
-    "both-proj │ v1.0 [██░] 83% · Phase 05.1 verifying │ 2026-07-28-planning-tree (3) next 4");
+    "both-proj │ v1.0 [██░] 83% · Phase 05.1 verifying │ 1/1 only-one");
 });
 
 const phaseTree = (name, { current, rows = [], phases = {}, eol = "\n" }) => {
@@ -425,7 +354,7 @@ const STATE_07_DONE = '---\nphase: "07"\nstatus: complete\ntasks_done: 6\ntasks_
 
 test("entry point: ROADMAP current names the phase in flight", () => {
   const root = phaseTree("sel-current", { current: "08", phases: { "08-unified": STATE_08 } });
-  assert.match(strip(runEntry(payload(root)).stdout), /08 \(2\/6\) running/);
+  assert.match(strip(runEntry(payload(root)).stdout), /08 unified$/);
 });
 
 test("entry point: current null falls back to exactly one running phase", () => {
@@ -434,73 +363,93 @@ test("entry point: current null falls back to exactly one running phase", () => 
     rows: [{ phase: "07", slug: "a", status: "complete" }, { phase: "08", slug: "b", status: "running" }],
     phases: { "08-unified": STATE_08 },
   });
-  assert.match(strip(runEntry(payload(one)).stdout), /08 \(2\/6\) running/);
+  assert.match(strip(runEntry(payload(one)).stdout), /08 b$/);
 });
 
-// Both fixtures give every listed phase a readable STATE.md, so a gate that picked a phase it
-// should not have would render a tally here instead of silently finding no directory.
-test("entry point: zero or several running phases render no phase segment", () => {
+// Zero or several running phases means the tree does not know which phase is in flight. The bar
+// says so by rendering the tally rather than picking one.
+test("entry point: zero or several running phases render the tally, never a guess", () => {
   const none = phaseTree("sel-none", {
     current: null,
     rows: [{ phase: "07", slug: "a", status: "complete" }],
     phases: { "07-earlier": STATE_07_DONE },
   });
-  assert.doesNotMatch(strip(runEntry(payload(none)).stdout), /\(\d+\/\d+\)/);
+  assert.match(strip(runEntry(payload(none)).stdout), /1\/1 a$/);
 
   const many = phaseTree("sel-many", {
     current: null,
     rows: [{ phase: "07", slug: "a", status: "running" }, { phase: "08", slug: "b", status: "running" }],
     phases: { "07-earlier": STATE_07_RUNNING, "08-unified": STATE_08 },
   });
-  assert.doesNotMatch(strip(runEntry(payload(many)).stdout), /\(\d+\/\d+\)/);
+  assert.match(strip(runEntry(payload(many)).stdout), /0\/2 b$/);
 });
 
-test("entry point: a phase whose STATE.md predates its plan renders no tally", () => {
+test("entry point: an action names what is happening in the phase", () => {
+  const root = phaseTree("sel-action", {
+    current: "09",
+    phases: { "09-later": '---\nstatus: running\naction: planning\n---\n' },
+  });
+  assert.match(strip(runEntry(payload(root)).stdout), /09 \(planning\) later$/);
+});
+
+test("entry point: a phase with no action prints its id and name alone", () => {
   const root = phaseTree("sel-planned", { current: "09", phases: { "09-later": '---\nstatus: planned\n---\n' } });
   const out = strip(runEntry(payload(root)).stdout);
-  assert.match(out, /09 planned$/);
-  assert.doesNotMatch(out, /\(\d+\/\d+\)/);
+  assert.match(out, /09 later$/);
+  assert.doesNotMatch(out, /undefined|null|\(\)/);
 });
 
-test("entry point: tasks_done without tasks_total renders no tally", () => {
-  const root = phaseTree("sel-half-planned", {
+test("entry point: counters come from the live ledger, not from stale frontmatter", () => {
+  const root = phaseTree("sel-counters", {
     current: "09",
-    phases: { "09-later": '---\nstatus: planned\ntasks_done: 5\n---\n' },
+    rows: [{ phase: "09", slug: "later", status: "running" }],
+    phases: { "09-later": '---\nstatus: running\naction: planning\ntasks_done: 99\ntasks_total: 99\n---\n' },
   });
-  const out = strip(runEntry(payload(root)).stdout);
-  assert.match(out, /09 planned$/);
-  assert.doesNotMatch(out, /\(\d+\/\d+\)/);
+  const sdd = join(root, ".ultrapowers", "sdd", "phases-09-later");
+  for (const n of [1, 2, 3]) write(join(sdd, `task-${n}-brief.md`), "b");
+  write(join(sdd, "task-1-report.md"), "r");
+  assert.match(strip(runEntry(payload(root)).stdout), /09 1\/2\/0 — later$/);
 });
 
-test("entry point: tasks_dropped shrinks the denominator end to end", () => {
-  const root = phaseTree("sel-dropped", { current: "07", phases: { "07-earlier": STATE_07_DONE } });
-  assert.match(strip(runEntry(payload(root)).stdout), /07 \(6\/6\) complete/);
+// tasks_dropped belongs to a frontmatter tally and must not touch ledger-derived counts: a
+// retired task is either already among the unreported briefs or was never written as one.
+test("entry point: tasks_dropped does not drive the ledger's queue negative", () => {
+  const root = phaseTree("sel-dropped", {
+    current: "07",
+    rows: [{ phase: "07", slug: "earlier", status: "running" }],
+    phases: { "07-earlier": '---\nstatus: running\ntasks_dropped: 1\n---\n' },
+  });
+  const sdd = join(root, ".ultrapowers", "sdd", "phases-07-earlier");
+  for (const n of [1, 2, 3, 4]) write(join(sdd, `task-${n}-brief.md`), "b");
+  for (const n of [1, 2]) write(join(sdd, `task-${n}-report.md`), "r");
+  assert.match(strip(runEntry(payload(root)).stdout), /07 2\/2\/0 — earlier$/);
 });
 
 // .trim() in fmField: CR is a JS LineTerminator so `(.+)$` never captures it, but trailing
 // spaces are captured and would leave a quoted id closing-quote intact.
-test("entry point: trailing whitespace in frontmatter does not corrupt the id or status", () => {
+test("entry point: trailing whitespace in frontmatter does not corrupt the id or action", () => {
   const root = dir("sel-pad");
   write(join(root, ".ultrapowers", "ROADMAP.md"), '---\ncurrent: "08"   \nphases:\n---\n');
   write(join(root, ".ultrapowers", "phases", "08-unified", "08-STATE.md"),
-    '---\nstatus: running  \ntasks_done: 2\ntasks_total: 6\n---\n');
-  assert.match(strip(runEntry(payload(root)).stdout), /08 \(2\/6\) running$/);
+    '---\nstatus: running  \naction: review  \n---\n');
+  assert.match(strip(runEntry(payload(root)).stdout), /08 \(review\) unified$/);
 });
 
-test("entry point: a phase outranks an SDD ledger, and mtime cannot change that", () => {
+// mtime used to decide which ledger the bar showed. It no longer decides anything: only the
+// resolved phase's own ledger is read, so a newer unrelated one cannot take the segment.
+test("entry point: a foreign ledger cannot take the segment however new it is", () => {
   const root = phaseTree("sel-outrank", { current: "08", phases: { "08-unified": STATE_08 } });
-  const ledger = write(join(root, ".ultrapowers", "sdd", "p", "progress.md"),
-    "# SDD ledger — plan: stale-plan.md\nTask 1: complete\n");
+  const ledger = write(join(root, ".ultrapowers", "sdd", "phases-99-stale-plan", "task-1-brief.md"), "b");
   const future = Date.now() / 1000 + 3600;
   utimesSync(ledger, future, future);
   const out = strip(runEntry(payload(root)).stdout);
-  assert.match(out, /08 \(2\/6\) running/);
+  assert.match(out, /08 unified$/);
   assert.doesNotMatch(out, /stale-plan/);
 });
 
 test("entry point: CRLF frontmatter resolves the same phase", () => {
   const named = phaseTree("sel-crlf-current", { current: "08", eol: "\r\n", phases: { "08-unified": STATE_08 } });
-  assert.match(strip(runEntry(payload(named)).stdout), /08 \(2\/6\) running/);
+  assert.match(strip(runEntry(payload(named)).stdout), /08 unified$/);
 
   const running = phaseTree("sel-crlf-running", {
     current: null,
@@ -508,14 +457,19 @@ test("entry point: CRLF frontmatter resolves the same phase", () => {
     rows: [{ phase: "07", slug: "a", status: "complete" }, { phase: "08", slug: "b", status: "running" }],
     phases: { "08-unified": STATE_08 },
   });
-  assert.match(strip(runEntry(payload(running)).stdout), /08 \(2\/6\) running/);
+  assert.match(strip(runEntry(payload(running)).stdout), /08 b$/);
 });
 
-test("entry point: a ROADMAP without a resolvable phase still falls back to the ledger", () => {
-  const root = phaseTree("sel-fallback", { current: "09", phases: { "08-unified": STATE_08 } });
-  write(join(root, ".ultrapowers", "sdd", "p", "progress.md"),
-    "# SDD ledger — plan: live-plan.md\nTask 1: complete\n");
-  assert.match(strip(runEntry(payload(root)).stdout), /live-plan \(1\) next 2/);
+// This is the defect the phase was opened for: with no phase resolvable the bar used to render
+// the newest ledger's tally, which belonged to finished work.
+test("entry point: an unresolvable current renders the tally, not a ledger", () => {
+  const root = phaseTree("sel-fallback", {
+    current: "09",
+    rows: [{ phase: "07", slug: "a", status: "complete" }, { phase: "08", slug: "unified", status: "complete" }],
+    phases: { "08-unified": STATE_08 },
+  });
+  write(join(root, ".ultrapowers", "sdd", "phases-08-unified", "task-1-brief.md"), "b");
+  assert.match(strip(runEntry(payload(root)).stdout), /2\/2 unified$/);
 });
 
 test("entry point: the gsd segment needs gsd-core installed, not just .planning", () => {
@@ -566,8 +520,8 @@ test("installedProfile falls back to a pre-profile manifest's variant key", () =
 
 test("entry point: lite suppresses the ultrapowers segment, base keeps it", () => {
   const root = dir("up-gate");
-  write(join(root, ".ultrapowers", "sdd", "p", "progress.md"),
-    "# SDD ledger — plan: my-plan.md\nTask 1: complete\n");
+  write(join(root, ".ultrapowers", "ROADMAP.md"), ["---", "current: null", "phases:",
+    '  - { phase: "01", slug: my-plan, status: complete }', "---", "", "# Roadmap"].join("\n"));
 
   const onLite = runEntry(payload(root), { claudeDir: claudeDirWithProfile("cd-lite", "lite") });
   assert.doesNotMatch(strip(onLite.stdout), /my-plan/);
