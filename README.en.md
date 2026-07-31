@@ -164,9 +164,9 @@ The bundle installs in one of two variants. The choice isn't tied to the first i
 switch at any time by re-running `setup.mjs`.
 
 - **full** (default) — everything this README describes: every hook, every command, every
-  skill, plus the `gsd` plugin on top of the rest.
+  skill.
 - **lite** — a slimmed-down set with no GSD machinery:
-  - plugins — only `ultrapowers`, `context-mode`, `context7` (no `gsd`);
+  - plugins — the same `ultrapowers`, `context-mode`, `context7` as full;
   - exactly 10 hooks: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
     `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
     `precompact-observe`, `token-usage-log`, `session-init` (the last one still runs, but skips
@@ -935,7 +935,7 @@ line-ending issues.
 ## Cross-tool gsd-core patches (agents, workflow, tool-grant)
 
 The files `~/.claude/agents/gsd-*.md` and `~/.claude/gsd-core/workflows/execute-phase.md` belong
-to the **separate `gsd-core` tool** (`npx gsd-core`), not this bundle. The set still maintains
+to the **separate `gsd-core` tool** (`npx @opengsd/gsd-core@latest`), not this bundle. The set still maintains
 them — best-effort, idempotent, with versioned markers
 `<!-- gsd-patch:ID vN -->…<!-- /gsd-patch:ID -->` (content-aware, not presence-aware: on a patch
 version bump the stale text is replaced with the fresh one, not skipped). Three mechanisms with
