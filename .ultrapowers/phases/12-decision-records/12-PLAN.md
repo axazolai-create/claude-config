@@ -23,10 +23,31 @@
 
 Read before writing any parser — these are the numbers the normaliser has to survive.
 
-- `RISK_REGISTER.md`: 44 entries over 814 lines, headings of the form `## RISK-<PREFIX>-<NNN> — <title>`, fields as `- **Status:** …`, `- **Context:** …`, `- **Mitigation:** …`, `- **Residual:** …`, with free-form extra bullets.
-- 18 distinct prefixes: `BOOTSTRAP`, `CLAUDEMD`, `CLEANUP`, `DESIGNSTACK` (6), `FALLOW`, `GRAPHFRESH`, `GSDEXEC`, `HARNESS`, `INITSTACK`, `INJECT`, `NEO4J` (6), `PNPM` (4), `STACKRULES` (2), `SUP` (3), `TOKENLOG`, `ULTRAPOWERS` (8), `VARIANT` (4), `VERBOSITY`.
-- **22 distinct Status spellings**, not the 12 the design estimated. The three largest are `Open (accepted)` ×12, `Open (mitigated by design)` ×7, `Open (accepted / low)` ×5; the remaining 19 are one-offs carrying a parenthetical nuance, a date, or an em-dashed explanation.
+**Re-measured 2026-07-31**, when this plan moved into its phase directory. The 2026-07-28
+figures below it are kept because the drift is the point: three phases ran in between, and a
+parser written to the old numbers would meet forms that did not exist when they were taken.
+
+- `RISK_REGISTER.md`: **57 entries over 1178 lines**. Headings `## RISK-<PREFIX>-<NNN> — <title>`,
+  fields as `- **Status:** …`, `- **Context:** …`, `- **Mitigation:** …`, `- **Residual:** …`,
+  with free-form extra bullets (`- **Update <date>:**`, `- **Observed <date>…:**`,
+  `- **Acceptance check…:**`, `- **Aggravating factor:**`).
+- **25 distinct prefixes.** The largest are `ULTRAPOWERS` (10), `DESIGNSTACK` (6), `NEO4J` (6),
+  `VARIANT` (5), `PNPM` (4), `SUP` (3). New since the original measurement: `PHASEDIR`,
+  `PLANTREE`, `CHANGELOG` (2), `STATUSLINE` (2), `TESTUNIT`, `HOOKSTDIN`, `SETUP`, and a second
+  `CLAUDEMD`.
+  **A prefix may contain a digit** (`NEO4J`), so `[A-Z]+` is the wrong character class — a first
+  count taken with it silently lost all six of that prefix's entries and reported 51.
+- **35 distinct Status spellings**, one line per entry. The three largest are unchanged:
+  `Open (accepted)` ×12, `Open (mitigated by design)` ×7, `Open (accepted / low)` ×5. Two of the
+  newer spellings already use the target vocabulary — `Active (accepted, 2026-07-28)` and
+  `Closed (observed, 2026-07-30)` — so the normaliser must be idempotent against values that are
+  already correct.
+- The register has **no `##` headings other than entries**, so section headings can be
+  introduced without colliding with anything.
 - No ADRs and no glossary exist.
+
+*Measured 2026-07-28, retained for provenance: 44 entries over 814 lines, 18 prefixes, 22
+distinct Status spellings.*
 
 ## The status vocabulary, and the mapping onto it
 
