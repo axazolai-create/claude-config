@@ -1,16 +1,17 @@
 ---
 phase: "03"
-status: abandoned
+status: superseded
+superseded_by: "04"
 tasks_done: 1
 tasks_total: 10
 branch: feat/ultrapowers-rework
 integration: merged
-updated: 2026-07-29
+updated: 2026-07-31
 ---
 
 # Phase 03 — ultrapowers-layer0-patcher — state
 
-Abandoned, and not to be resumed. The approach — detect drift in the cached
+Superseded by phase 04, and not to be resumed. The approach — detect drift in the cached
 upstream plugin and rewrite it in place — was disproved by execution, not by
 argument. A full scan of the plugin found 1504 occurrences across 111 files in
 382 distinct spellings, against the plan's baseline of 119 (measured over three
@@ -18,7 +19,11 @@ directories only). Deciding 382 variants by hand cost more than the problem the
 patching was meant to avoid. Phase 04 onward replaced it: fork the upstream
 plugin, rename inside a copy whose identity is ours to change.
 
-`status: abandoned` and `integration: merged` are both true and not in tension.
+This file read `status: abandoned` until 2026-07-31. That was false in the one way that
+matters: nothing here was given up, the approach was replaced by one that shipped. The
+status is `superseded` and carries `superseded_by: "04"`, because a `superseded` row whose
+successor is named only in prose reads as abandoned again to every parser and most readers.
+`superseded` and `integration: merged` are both true and not in tension.
 Task 1 was a probe run with the user and its commits are in `master`
 (`e9519bd..371941b`). Task 2 was implemented (`85349ca`), reviewed "Needs fixes"
 with 2 Critical, given one fix round (`bd4eb58`), then rolled back by `e6adad9`,

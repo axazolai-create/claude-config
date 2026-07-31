@@ -1,4 +1,8 @@
-.claude/
+# .claude/* rather than .claude/, because git cannot re-include a file whose parent directory
+# is excluded. The hand-written project CLAUDE.md is tracked; the compiled stack-rules.md
+# snapshot, settings.local.json and everything else under it stay local.
+.claude/*
+!.claude/CLAUDE.md
 .vscode/
 graphify-out/
 node_modules/

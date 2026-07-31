@@ -5,7 +5,7 @@ deployed_through: "08"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
   - { phase: "02", slug: ai-development-mode, status: complete, integration: merged }
-  - { phase: "03", slug: ultrapowers-layer0-patcher, status: abandoned, integration: merged }
+  - { phase: "03", slug: ultrapowers-layer0-patcher, status: superseded, superseded_by: "04", integration: merged }
   - { phase: "04", slug: ultrapowers-planning-tree, status: complete, integration: merged }
   - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
   - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
@@ -18,7 +18,7 @@ phases:
 
 Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` at
 `4918208` on 2026-07-31, and the phase-09 debts followed at `8e785d6` the same day; both
-are pushed. Eight phases are complete, one is abandoned, everything through phase 08 is
+are pushed. Eight phases are complete, one is superseded by phase 04, everything through phase 08 is
 deployed, and phase 09 is merged but not yet deployed. The one thing standing between the
 tree and a clean slate is that deploy.
 
@@ -33,7 +33,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 |---|---|---|
 | 01 graphify-neo4j | complete | merged; branch gone |
 | 02 ai-development-mode | complete | merged; branch gone |
-| 03 ultrapowers-layer0-patcher | abandoned | branch merged, nothing shipped |
+| 03 ultrapowers-layer0-patcher | superseded by 04 | branch merged, nothing shipped |
 | 04 ultrapowers-planning-tree | complete | merged, deployed |
 | 05 versioning-and-changelog | complete | merged, deployed |
 | 06 design-records-and-stack-rules | complete | merged, deployed |
@@ -42,7 +42,10 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 09 context-meter-severity | complete | merged at `4918208`, not deployed |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
-commits and its rollback are both in `master`, and the phase still did not ship. Each
+commits and its rollback are both in `master`, and the phase still did not ship. It reads
+`superseded`, not `abandoned`, and carries `superseded_by: "04"`: the patch-in-place
+approach was replaced by the fork that shipped, and a `superseded` row without the field
+naming its successor decays back into looking like something that was given up. Each
 phase's own `NN-STATE.md` carries the detail and the task tally.
 
 `deployed_through` is a waterline, not a per-phase flag: everything in `master` through
@@ -52,19 +55,31 @@ writes for one event, and most of them would not happen.
 
 ## Next
 
-1. Deploy from `master` — gated on an audit and a written impact assessment, never from a
-   feature branch. Two acceptance checks can only be settled by a real deploy and a real
-   session, and both are recorded as risks rather than assumed: that the context segment
-   renders coloured at the current fill level, and that after one genuine automatic
-   compaction `~/.claude/state/autocompact.json` holds a `models` entry whose `tokens` is
-   below its `windowSize` with no `pending` left. The deploy also carries the two new
-   `rules-src/` rules, which bind nothing until it runs.
+1. Deploy from `master` — the audit ran on 2026-07-31 and its written impact assessment is
+   `docs/2026-07-31-deploy-impact-through-phase-09.md`, so what is left is the keystroke,
+   never from a feature branch. Measured delta: 3 created, 4 updated, 149 unchanged, nothing
+   pruned, plus one additive `PreCompact` registration in `settings.json`. Two acceptance
+   checks can only be settled by a real deploy and a real session, and both are recorded as
+   risks rather than assumed: that the context segment renders coloured at the current fill
+   level, and that after one genuine automatic compaction
+   `~/.claude/state/autocompact.json` holds a `models` entry whose `tokens` is below its
+   `windowSize` with no `pending` left. The deploy also carries the two new `rules-src/`
+   rules, which bind nothing until it runs.
 2. Install `6.2.0-up.5` — `/plugin update` and a restart, done by the user. `enabledPlugins`
    resolves at startup and does not hot-reload, so the three new rules bind on the next
    session, not this one.
 
 Done, kept as a line each:
 
+- **Phase 03's status corrected — 2026-07-31.** `abandoned` → `superseded` with
+  `superseded_by: "04"`, in this file's frontmatter, its table row and `03-STATE.md`. The
+  first application of the status model ruled on 2026-07-29; the rest of that vocabulary
+  migration still belongs to the statusline segment's phase.
+- **The risk register's location reconciled — 2026-07-31.** Recorded in `.claude/CLAUDE.md`,
+  where project scope outranks the user-scope file that names a different path and is
+  `CURATED:NOEDIT`. The register does not move. That file was gitignored, so the rule was
+  narrowed to `.claude/*` with `!.claude/CLAUDE.md` and the record now travels with a clone;
+  the generated `stack-rules.md` and the settings files stay ignored.
 - **Push `master` — 2026-07-31.** Done. The entry that claimed 25 commits behind `51a65d0`
   was itself stale by two pushes, which is the failure it was written to warn about.
 - **Give phase 07 its spec and plan — 2026-07-31.** Moved out of the archive into the phase
@@ -113,9 +128,12 @@ historical — those plans now live in their phase directories as `NN-PLAN.md`.
   deployed copy was built against. Satisfied, which unblocked publishing `6.2.0-up.5` on
   2026-07-31. That revision carries deltas 011-013 and is on GitHub but not on this
   machine; the installed copy is still `6.2.0-up.4`.
-- **One edit still owed to the user.** `~/.claude/CLAUDE.md` is `CURATED:NOEDIT` and says
-  the risk register lives in `.planning/` or the project root; this tree keeps it at
-  `.ultrapowers/RISK_REGISTER.md`. Only the user can reconcile that.
+- **Done 2026-07-31 — the risk register's location.** `~/.claude/CLAUDE.md` is
+  `CURATED:NOEDIT` and says the register lives in `.planning/` or the project root; this tree
+  keeps it at `.ultrapowers/RISK_REGISTER.md`. Settled by the user's ruling that the
+  exception belongs in project scope, which outranks user scope on conflict: it is written in
+  `.claude/CLAUDE.md`, the protected file is untouched and no file moved. The root
+  `CLAUDE.md` could not hold it — it carries the `CURATED:NOEDIT` marker too.
 - **Risks filed during execution** live in `.ultrapowers/RISK_REGISTER.md` with stable IDs.
   Phase 09 added `RISK-STATUSLINE-002` (the autocompact point is assumed until observed,
   with its acceptance check written down) and `RISK-HOOKSTDIN-001` (`token-usage-log.mjs`

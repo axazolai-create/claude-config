@@ -900,7 +900,18 @@
 
 ## RISK-PLANTREE-001 — The risk register no longer lives where the rules say to look for it
 
-- **Status:** Open (code half fixed 2026-07-29, prose half outstanding)
+- **Status:** Open (code half fixed 2026-07-29; prose half answered for this tree 2026-07-31,
+  still outstanding for fresh installs)
+- **Update 2026-07-31:** the user ruled that the exception belongs in project scope, which
+  outranks user scope on conflict, rather than moving the file or editing the protected one.
+  It is written in `.claude/CLAUDE.md` — the root `CLAUDE.md` could not take it, carrying the
+  `CURATED:NOEDIT` marker itself. `.gitignore` excluded `.claude/` outright, which would have
+  confined the record to this machine, so the rule was narrowed to `.claude/*` with
+  `!.claude/CLAUDE.md` (git cannot re-include a file under an excluded parent) and that one
+  file is now tracked; `stack-rules.md` and the settings files stay ignored. One limit stays:
+  the payload's own prose (`payload/claude-md/06-collaboration*.md`) still teaches the old
+  locations, so every fresh install starts with the same disagreement until that source is
+  changed — which is a decision about all projects, not just this one.
 - **Context:** moving the register to `.ultrapowers/RISK_REGISTER.md` put it outside the only two
   places this bundle had ever probed. `hooks/session-init.mjs` and `add-risk.mjs` each checked the
   project root and walked `.planning/`, so the every-session self-heal the session-init header
@@ -1084,6 +1095,15 @@
   and removed from the definition of "the suite passes". The present middle state is what hid the
   breakage: the files look like part of the suite, run like part of the suite, and are absent from
   every fresh clone. Only the user can settle which it is.
+- **Observed 2026-07-31, a second cause on `master` itself:** the gitignore is not the only thing
+  hiding these tests. `.test/` starts with a dot and `node --test` does not descend into hidden
+  directories, so a run from the repo root reports **556 passing** and never says that 23 tests
+  were not collected. Naming the files explicitly — `node --test .test/unit/*.test.mjs` — gives
+  23/23, and 556 + 23 = 579, the number the records carry. Passing the directory instead
+  (`node --test .test/unit/`) reports `pass 0, fail 1` with no test having run, which reads as a
+  broken suite rather than a wrong invocation. Both halves are green as of 2026-07-31; this
+  sharpens the risk rather than changing its status, because whichever way the user settles it,
+  "run the full suite" needs an invocation that actually collects these files.
 
 ## RISK-STATUSLINE-002 — the autocompact point is assumed until a compaction is observed
 

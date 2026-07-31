@@ -11,35 +11,31 @@ status is — this file answers what is owed, what was ruled, and what must not 
 Nothing is running. Both repositories are on their production branches and pushed: this tree
 at `8e785d6`, the fork published as `6.2.0-up.5`. Two things are owed that are only
 keystrokes — the deploy from `master`, and `/plugin update` plus a restart — and until both
-happen the five process rules added on 2026-07-31 bind nothing on this machine. The three
-open items that need a decision rather than a keystroke are the phase-03 status correction,
-the status/delivery vocabulary migration, and the risk-register location that only the user
-can reconcile. Three phase-sized pieces of work are queued and unstarted: the statusline's
+happen the five process rules added on 2026-07-31 bind nothing on this machine. Two of the
+three items that needed a decision rather than a keystroke were settled by the user on
+2026-07-31 — phase 03's status is corrected and the risk register's location is reconciled —
+leaving the status/delivery vocabulary migration, which belongs inside the statusline
+segment's phase. Three phase-sized pieces of work are queued and unstarted: the statusline's
 ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
 
 ## Open
 
-- **Deploy from `master`.** Gated on an audit and a written impact assessment, from `master`
-  and never from a feature branch — `setup.mjs` prunes against the previous manifest, so two
-  branch deploys make each prune the other's files. **Read the deploy warning below first.**
-  The deploy carries phase 09 and the two `rules-src/` rules added on 2026-07-31; until it
-  runs, neither rule binds anything on this machine.
+- **Deploy from `master`.** The gate is satisfied: the audit ran on 2026-07-31 and its
+  written impact assessment is `docs/2026-07-31-deploy-impact-through-phase-09.md`. What is
+  left is the keystroke, `node setup.mjs` in a terminal, from `master` and never from a
+  feature branch — `setup.mjs` prunes against the previous manifest, so two branch deploys
+  make each prune the other's files. The measured delta is small: 3 files created, 4 updated,
+  149 unchanged, **nothing pruned**, plus one additive `PreCompact` registration in
+  `settings.json`. An interactive run will also offer to replace the default model
+  `opus[1m]` with `claude-opus-5` — a separate decision, not part of the bundle. Until the
+  deploy runs, the two `rules-src/` rules bind nothing on this machine.
 - **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
-- **Phase 03's `status: abandoned` is false.** Its own summary's first line says "abandoned
-  mid-flight **and superseded by the fork design**". Nothing was given up — the
-  patch-in-place approach was replaced by the fork that shipped, after a scan found 1504
-  occurrences across 111 files and 382 distinct spellings against a baseline of 119 that had
-  been measured over only three directories. The correct status is `superseded by 04`, and
-  under the ruling below it must carry `superseded_by`.
 - **The status/delivery vocabulary migration.** Ruled on 2026-07-29, never applied; the
   ruling is recorded under Rulings below. `ROADMAP.md` and every `NN-STATE.md` still use
   `integration`. This blocks nothing today but it is the vocabulary the statusline segment
   needs, so the segment's phase should not start before it.
-- **One edit owed to the user.** `~/.claude/CLAUDE.md` is `CURATED:NOEDIT` and says the risk
-  register lives in `.planning/` or the project root; this tree keeps it at
-  `.ultrapowers/RISK_REGISTER.md`. Only the user can reconcile that.
 - **Three phase-sized items, queued and unstarted.** The statusline's ultrapowers segment,
   the `.protected` mechanism, and the decision-records CLI. `ROADMAP.md` carries what each
   one is and what constrains its order.
@@ -47,13 +43,17 @@ ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
   `archive/plans/2026-07-28-decision-records.md` moves into it as `NN-PLAN.md`, the same way
   phase 07's documents moved on 2026-07-31.
 
-### Deploy warning
+### Deploy warning — withdrawn 2026-07-31, and kept here because it was acted on
 
-This machine runs profile `base` with gsd-core 1.8.0 installed — 71 skills, 34 agents, 24
-hooks. That is exactly phase 07's detector trigger. **The next deploy will offer to move that
-installation to the reversible trash.** The offer is consent-gated, defaults to no, and is
-undoable for seven days, but it is a decision about the user's own machine and belongs to
-them at the prompt.
+This warning read: *this machine runs profile `base` with gsd-core 1.8.0 installed — 71
+skills, 34 agents, 24 hooks; the next deploy will offer to move that installation to the
+reversible trash.* The audit of 2026-07-31 measured the machine and found no gsd-core:
+`~/.claude/gsd-core` is absent, there are zero `gsd-*` entries under `skills/`, `agents/`,
+`commands/` and `hooks/`, and `~/.claude/.cleanup-trash` does not exist — so this installer
+never moved it and no restore window is open. Only `~/.gsd/defaults.json` and one
+`Bash(npx gsd-core *)` permission remain, both out of the installer's reach. The detector
+prints nothing and there is no consent prompt to answer. The evidence is in
+`docs/2026-07-31-deploy-impact-through-phase-09.md`.
 
 ## Rulings that stand, and are not to be re-decided
 
@@ -91,10 +91,12 @@ no values: a ROADMAP checkbox, a prose `**Status**: ✅ Complete`, a STATE front
 - **`depends_on` / `blocked_by`** — lists, not prose. A dependency a reader has to infer from
   a sentence is not a dependency a checker can hold you to.
 
-Two of them are hard, because both failures already exist in this tree:
+Two of them are hard, because both failures already existed in this tree; the first was
+fixed on 2026-07-31, the second still stands:
 
 - **`superseded` must carry `superseded_by`.** Without it phase 03 reads as abandoned again,
-  and the reason it was replaced lives only in a summary nobody loads.
+  and the reason it was replaced lives only in a summary nobody loads. Applied to phase 03 on
+  2026-07-31 — the rule holds for every future `superseded` row.
 - **A dropped task is a field, not a sentence.** `07-STATE.md` says `tasks_done: 6 /
   tasks_total: 7` and explains the seventh in prose, so every parser — the status bar
   included — will report 86%.
@@ -104,6 +106,17 @@ Two of them are hard, because both failures already exist in this tree:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
+- **Phase 03's status corrected** — `abandoned` → `superseded` with `superseded_by: "04"`, in
+  `ROADMAP.md`'s frontmatter and table and in `03-STATE.md`. Ruled by the user; the first
+  piece of the 2026-07-29 status model to be applied. 2026-07-31.
+- **The risk register's location reconciled** — the exception is written in
+  `.claude/CLAUDE.md`, where project scope outranks the `CURATED:NOEDIT` user-scope file that
+  names `.planning/` or the project root. Nothing moved; the root `CLAUDE.md` could not hold
+  it, being marked `CURATED:NOEDIT` itself. `.gitignore` excluded `.claude/` outright, which
+  would have left the record binding this machine and nothing else, so the user un-ignored
+  that one file: `.claude/*` plus `!.claude/CLAUDE.md`, because git cannot re-include a file
+  whose parent directory is excluded. The compiled `stack-rules.md` snapshot and both
+  settings files stay local. 2026-07-31.
 - **Both repositories on their production branches** — this tree merged at `8e785d6` and
   pushed; the fork's `patch` and `main` pushed. 2026-07-31.
 - **The fork published at `6.2.0-up.5`** — revision 4 → 5, deltas 011-013, 73/73 tests green,
