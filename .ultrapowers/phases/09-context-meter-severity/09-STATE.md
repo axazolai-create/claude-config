@@ -2,7 +2,7 @@
 phase: "09"
 status: complete
 delivery: branch
-integration: branch
+integration: merged
 branch: feat/context-meter-severity
 depends_on: ["08"]
 tasks_done: 6
@@ -12,11 +12,23 @@ updated: 2026-07-31
 
 # Phase 09 — context-meter-severity — state
 
-Complete on `feat/context-meter-severity`, unmerged and undeployed, in the worktree
-`D:/6__Work/AI_Projects/claude-config-wt-plan9`. Executed subagent-driven: one implementer
-per task, a task-scoped review after each, a whole-branch review on the most capable model,
-one fix wave, and a goal-backward verification. `09-VERIFICATION.md` reads ACHIEVED with
-every global constraint HELD and no violations. 499 tests pass.
+Complete and **merged into `master` at `4918208`** on 2026-07-31, a `--no-ff` merge commit
+matching this repository's convention. **Not deployed**, and not pushed — `origin/master` is
+still at `51a65d0`, so `master` carries 25 unpushed commits. 522 tests pass on the merged
+result; the branch itself showed 499, the difference being the two gitignored files under
+`.test/unit/` that exist only in the main checkout (`RISK-TESTUNIT-001`).
+
+Executed subagent-driven: one implementer per task, a task-scoped review after each, a
+whole-branch review on the most capable model, one fix wave, and a goal-backward
+verification. `09-VERIFICATION.md` reads ACHIEVED with every global constraint HELD and no
+violations.
+
+The branch and its worktree at `D:/6__Work/AI_Projects/claude-config-wt-plan9` both still
+exist. They were deliberately left in place: the worktree sits beside the repository rather
+than under `.worktrees/`, which by the finishing-a-development-branch rule makes it the
+host's to remove, not the tooling's. Unlike the worktrees of phases 02, 04 and 05, this one
+holds a branch that is already merged, so it is now redundant and can be removed whenever
+the user wants — `git worktree remove` then `git branch -d`.
 
 The phase gives the statusline's context segment a severity it never had: a colour
 that tracks the figure printed beside it, and an icon that tracks how close automatic

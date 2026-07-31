@@ -1,6 +1,6 @@
 ---
 updated: 2026-07-31
-current: "09"
+current: null
 deployed_through: "08"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
@@ -11,19 +11,21 @@ phases:
   - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
   - { phase: "08", slug: unified-statusline, status: complete, integration: merged }
-  - { phase: "09", slug: context-meter-severity, status: complete, integration: branch }
+  - { phase: "09", slug: context-meter-severity, status: complete, integration: merged }
 ---
 
 # Roadmap
 
-Nothing is running. Phase 09 is complete on `feat/context-meter-severity` and awaiting
-merge — `current` still names it because delivery, not the work, is what is outstanding.
-Eight phases are complete, one is abandoned, and everything through phase 08 is deployed.
+Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` at
+`4918208` on 2026-07-31. Eight phases are complete, one is abandoned, everything through
+phase 08 is deployed, and phase 09 is merged but not yet deployed.
 
-`current` is deliberately not `null` here, and phase 08's own renderer is why: with no
-phase named, the ultrapowers segment falls through to the newest SDD ledger, and a finished
-plan's ledger renders as a task tally — accurate about the outstanding task, misleading
-about the phase. Naming the phase until it merges costs nothing and says the true thing.
+`current` is `null` because naming a merged phase would say a false thing. The cost is
+known and accepted: with no phase named, the ultrapowers segment falls through to the
+newest SDD ledger and renders a finished plan's task tally, which is accurate about the
+tally and misleading about the phase. That is a display defect in the segment, and the
+queued redesign below is where it gets fixed — it is not a reason to leave a stale
+`current` in place.
 
 | Phase | Status | Where the work is |
 |---|---|---|
@@ -35,7 +37,7 @@ about the phase. Naming the phase until it merges costs nothing and says the tru
 | 06 design-records-and-stack-rules | complete | merged, deployed |
 | 07 gsd-core-detector-and-statusline | complete | merged, deployed |
 | 08 unified-statusline | complete | merged at `82deacb`, deployed |
-| 09 context-meter-severity | complete | `feat/context-meter-severity`, unmerged, local only |
+| 09 context-meter-severity | complete | merged at `4918208`, not deployed |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. Each
@@ -48,9 +50,10 @@ writes for one event, and most of them would not happen.
 
 ## Next
 
-1. Merge `feat/context-meter-severity`. Phase 09 is complete, its whole-branch review says
-   ready to merge, and `09-VERIFICATION.md` reads ACHIEVED with every global constraint
-   HELD. 499 tests pass. The branch exists only locally — nothing on it is pushed.
+1. Push `master`. It carries 25 commits that `origin/master` does not; the remote is still
+   at `51a65d0`. Until that happens, a machine bootstrapped from GitHub installs none of
+   phase 09 — which is exactly how this tree's own statusline went missing after a
+   reinstall on 2026-07-30.
 2. Deploy from `master` — gated on an audit and a written impact assessment, never from a
    feature branch. Two acceptance checks can only be settled by a real deploy and a real
    session, and both are recorded as risks rather than assumed: that the context segment
