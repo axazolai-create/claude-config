@@ -38,6 +38,17 @@ created, 4 updated, 0 pruned.**
 - `rules-src/node.base.md`
 - `rules-src/testing.md`
 
+**Amended 2026-07-31, after the prose fixes.** Four `payload/claude-md/` fragments were
+corrected the same day — `06-collaboration.md`, `06-collaboration.lite.md`, `13-graphify.md`,
+`14-context-mode.md` — so the assembled `~/.claude/CLAUDE.md` no longer matches what is
+installed. That file carries `CURATED:NOEDIT`, and curated text is never touched silently:
+the installer prints the diff and asks, where **both the default `merge` and `skip` leave the
+file byte-for-byte unchanged**. Pressing Enter therefore applies nothing. To actually land the
+corrected rules, answer **`replace`** at that prompt (no backup is written — the printed diff
+is the only copy of the old text), or apply the three hunks by hand. A non-interactive run
+reports `kept (see diff above)` and changes nothing. This does not affect the file counts
+below, which are about `payload/` content.
+
 **`settings.json` — additive merge, one registration added.** The whole diff is a new
 `PreCompact` event pointing at `hooks/precompact-observe.mjs`; existing keys are preserved
 and no hook entry is removed. Under a non-TTY run the installer resolves the conflict as

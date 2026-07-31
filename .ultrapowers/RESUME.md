@@ -106,6 +106,11 @@ fixed on 2026-07-31, the second still stands:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
+- **Three shipped rules corrected, and the class filed** — the register's location, a `graphify`
+  skill that exists nowhere and that nothing in the bundle installs, and `/ctx-doctor` where the
+  plugin's trigger is `/context-mode:ctx-doctor`. `rules-src/` swept the same way and clean. The
+  class — shipped prose naming artefacts nothing verifies — is `RISK-CLAUDEMD-002`, with a test
+  proposed and not built. 2026-07-31.
 - **Phase 03's status corrected** — `abandoned` → `superseded` with `superseded_by: "04"`, in
   `ROADMAP.md`'s frontmatter and table and in `03-STATE.md`. Ruled by the user; the first
   piece of the 2026-07-29 status model to be applied. 2026-07-31.

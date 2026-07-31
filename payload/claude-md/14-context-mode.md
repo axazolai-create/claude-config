@@ -5,4 +5,5 @@
   via `ctx_execute`/`ctx_batch_execute`; summarize large files via `ctx_execute_file` (plain
   `Read` only when you will `Edit`). If a `ctx_*` tool errors as not-found it's a deferred
   schema — `ToolSearch` `select:<tool>` once and retry, never fall back to the raw tool.
-  Diagnostics: `/ctx-doctor`.
+  Diagnostics: `/context-mode:ctx-doctor` (the plugin's own trigger; the bare `/ctx-doctor`
+  is not a command this bundle ships).

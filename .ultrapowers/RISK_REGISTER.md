@@ -1141,6 +1141,36 @@
   deployed on this machine.
 - **Mitigation:** none yet. The one-line guard above is known to work and is already proven in a
   sibling hook.
+
+## RISK-CLAUDEMD-002 — the shipped rules name commands, skills and paths that nothing verifies
+
+- **Status:** Open (2026-07-31) — three instances found and fixed, the class is unfixed
+- **Context:** `payload/claude-md/` is assembled into `~/.claude/CLAUDE.md`, the highest-authority
+  prose on the machine, and nothing checks that what it names exists. Three instances were found
+  in one sweep of 19 fragments, each shipped and each wrong in a different way. (1) The register's
+  location, `.planning/` or the project root, contradicted the probes in `add-risk.mjs` and
+  `session-init.mjs`, which have read `.ultrapowers/` since phase 04 — already filed as
+  `RISK-PLANTREE-001`. (2) `13-graphify.md` instructed the reader to invoke a `graphify` skill via
+  `/graphify`; no such skill is installed, none ships in `payload/skills/`, and nothing in the
+  bundle ever runs `graphify install --platform claude`, the command that would install one — the
+  hook runs `graphify claude install`, which writes a CLAUDE.md section and PreToolUse hooks and
+  no skill. (3) `14-context-mode.md` gave the diagnostics command as `/ctx-doctor` where the
+  plugin's own declared trigger is `/context-mode:ctx-doctor`. `rules-src/` was swept the same way
+  and is clean: its only unshipped commands are gsd-core's, which are external by construction.
+- **Mitigation:** the three were corrected on 2026-07-31. Nothing prevents the fourth. Prose is the
+  wrong layer to fix this in — a rule saying "keep the rules accurate" is itself unverified prose,
+  and the drift here was not carelessness but the ordinary lag between changing code and
+  remembering which paragraph described it.
+- **Residual:** the check that would hold is mechanical: a test over `payload/claude-md/**` (and
+  `rules-src/**`) asserting that every `` `/command` `` resolves to `payload/commands/`, every named
+  skill to `payload/skills/`, and every bundle-relative path to a shipped file — with an explicit
+  allowlist for artefacts that come from elsewhere, each entry naming its source. The allowlist is
+  the part that earns its keep: writing "graphify skill — installed by nothing" is exactly the
+  admission that was missing. Not built; it needs the user's go-ahead, since it adds a test whose
+  failures would gate commits.
+- **Aggravating factor:** these rules bind only after a deploy, and `~/.claude/CLAUDE.md` is
+  curated — the installer's default answer leaves it byte-for-byte unchanged. A correction can sit
+  in `master`, pass every test, be deployed, and still not reach the file it corrects.
 - **Residual:** a `Stop` or `SubagentStop` hook exiting non-zero on a malformed payload. The input
   comes from Claude Code rather than from a user, so the path is unlikely — but "unlikely" is what
   the same construct was assumed to be in `precompact-observe.mjs` before it was reproduced.
