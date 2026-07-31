@@ -37,6 +37,13 @@ test("a missing status field is reported", () => {
   assert.match(lintAdr(t, "0007-x.md")[0].problem, /status/);
 });
 
+// Git checks these out with CRLF on Windows. An LF-only frontmatter pattern reported all three
+// live ADRs as missing their status - found by running the deployed CLI, not by reading it.
+test("CRLF frontmatter is read the same as LF", () => {
+  const t = adrTemplate({ number: "0007", title: "x", date: "2026-07-28" }).replace(/\n/g, "\r\n");
+  assert.deepEqual(lintAdr(t, "0007-x.md"), []);
+});
+
 test("cross-references are checked in both directions", () => {
   const adrs = [{ file: "0001-a.md", id: "ADR-0001", text: "see RISK-SUP-009 and ADR-0002" }];
   const found = lintCrossRefs({ adrs, riskIds: ["RISK-SUP-001"] });

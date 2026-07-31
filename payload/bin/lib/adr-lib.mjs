@@ -26,7 +26,9 @@ export function lintAdr(text, filename) {
   const problems = [];
   const m = FILE.exec(filename);
   if (!m) return [{ file: filename, problem: "filename must be NNNN-kebab-slug.md" }];
-  if (!/^---\n(?:.*\n)*?status:\s*\S+/m.test(text)) problems.push({ file: filename, problem: "no `status:` field in the frontmatter" });
+  // \r?\n throughout: git checks these files out with CRLF on Windows, and an LF-only frontmatter
+  // pattern reports every ADR as missing its status the moment git has touched the file.
+  if (!/^---\r?\n(?:.*\r?\n)*?status:\s*\S+/m.test(text)) problems.push({ file: filename, problem: "no `status:` field in the frontmatter" });
   const head = /^# ADR-(\d{4}) (.+)$/m.exec(text);
   if (!head) problems.push({ file: filename, problem: "no `# ADR-NNNN Title` heading" });
   else if (head[1] !== m[1]) problems.push({ file: filename, problem: `heading says ADR-${head[1]}, filename says ${m[1]}` });
