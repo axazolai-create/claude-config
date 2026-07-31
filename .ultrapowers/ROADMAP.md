@@ -62,12 +62,9 @@ writes for one event, and most of them would not happen.
    compaction `~/.claude/state/autocompact.json` holds a `models` entry whose `tokens` is
    below its `windowSize` with no `pending` left.
 
-**Done 2026-07-31 — give phase 07 its spec and plan.** Both moved out of
-`.ultrapowers/archive/{specs,plans}/` into the phase directory, so every phase directory is
-complete. `08-SPEC.md` and `archive/plans/2026-07-28-EXECUTION-ORDER.md` still name the
-archive paths and keep them: they are closed records, and a closed record says where a file
-was. The entry stays here rather than being deleted — a list that drops what it finishes
-gives a reader no way to tell "done" from "never planned".
+**Done 2026-07-31 — give phase 07 its spec and plan.** Moved out of the archive into the
+phase directory. `08-SPEC.md` and `EXECUTION-ORDER.md` keep the old paths: closed records say
+where a file was.
 
 ## Not yet phases
 

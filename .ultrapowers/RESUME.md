@@ -38,6 +38,9 @@ ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
 - **Three phase-sized items, queued and unstarted.** The statusline's ultrapowers segment,
   the `.protected` mechanism, and the decision-records CLI. `ROADMAP.md` carries what each
   one is and what constrains its order.
+- **The decision-records plan still owes its phase directory.** When that phase is created,
+  `archive/plans/2026-07-28-decision-records.md` moves into it as `NN-PLAN.md`, the same way
+  phase 07's documents moved on 2026-07-31.
 
 ### Deploy warning
 
@@ -93,48 +96,29 @@ Two of them are hard, because both failures already exist in this tree:
 
 ## Done
 
-- **Every phase directory is complete — 2026-07-31.**
-  `07-gsd-core-detector-and-statusline` held only `07-STATE.md` and `07-SUMMARY.md`, because
-  the move of plans into phase directories happened before phase 07 existed. Its design and
-  plan are now `07-SPEC.md` and `07-PLAN.md` in that directory, moved from
-  `.ultrapowers/archive/{specs,plans}/` with history preserved. The documents that still name
-  the archive paths — `08-SPEC.md` and `archive/plans/2026-07-28-EXECUTION-ORDER.md` — are
-  closed records and keep them: a historical document says where a file was, and only current
-  documents are repointed. The same move is still owed to the decision-records plan when its
-  phase is created.
-- **Two of the four phase-09 process rules landed — 2026-07-31.** The
-  `= {}`-does-not-catch-`null` footgun is in `payload/rules-src/node.base.md`; the
-  clock-dated-fixture rule is in `payload/rules-src/testing.md`. Neither binds until the next
-  deploy. The two planning rules and the ledger read-back check belong to the ultrapowers
-  fork and are tracked in `ROADMAP.md`.
-- **`master`'s red suite is green again — 2026-07-31.** Phase 09 registered
-  `precompact-observe.mjs` in `settings.partial.json` and updated neither `variants.json` nor
-  the two lite assertions, so `master` carried 577 pass / 2 fail from that commit. The tests
-  were wrong, not the installer: lite installs `statusline.mjs` and `lib/autocompact.mjs`,
-  the statusline reads `state/autocompact.json`, and this hook is the only writer. 579/579.
-- **Phases 08 and 09 ran and merged — 2026-07-30 and 2026-07-31.** These are the "new phase
-  the user opened" that this file originally listed as next. Phase 08 unified the statusline;
-  phase 09 gave the context segment a severity. Both are in `master`; 09 is not yet deployed.
-- **The first audit and deploy from `master` — 2026-07-30.** Deployed at `51a65d0`, which set
-  `deployed_through: 08`. A second deploy is owed for phase 09 and is listed under Open.
-- **The bundle-before-plugin ordering constraint is satisfied — 2026-07-30.** The rule was
-  that the bundle must be deployed before the ultrapowers plugin moves past the revision the
-  deployed copy was built against. Both halves hold: `master` was deployed at `51a65d0` and
-  the installed plugin is `6.2.0-up.4`. Publishing a new fork revision is unblocked. The
-  earlier note here — "the installed plugin is still `up.1`, do not pass `6.2.0-up.2`" — was
-  true when written on 2026-07-29 and is superseded.
-- **The fork published at `6.2.0-up.4` — 2026-07-29.** `feat/workspace-coherence`
-  fast-forwarded into `patch`, `transform/config.json` revision 3 → 4, 73/73 tests green,
-  `build-cli.mjs check` clean (59 files, 10 deltas, 0 refusals), `main` rebuilt to tree
-  `2feadcf`, `drift` confirms `main` is exactly what original + patch produce, both branches
-  pushed — `patch` at `2e06627`, `main` at `0ce6bfa`. The revision carries three coherence
-  fixes (the workspace surviving `git worktree remove`, the `NN-PLAN.md` slug collision, and
-  a false `NN-REVIEW.md` claim), the `refs/` and `.ultrapowers/docs/` layout convention, the
-  `STATE.md` trigger, and the two-file state model.
-- **Four plans from 2026-07-28 executed, reviewed and merged — 2026-07-29.** The
-  `.ultrapowers` planning tree, versioning and changelog, design records and stack rules, and
-  the gsd-core detector with the `base`/`lite` statusline. `06-SUMMARY.md` and `07-SUMMARY.md`
-  were written and verified: five sections each, no diff content, 20.8 KB and 23.3 KB.
+Compressed once paid: name, one line, the date. The reasoning that got each one done is in
+its commit — these lines exist so a reader can see it happened at all.
+
+- **Every phase directory is complete** — phase 07's spec and plan moved out of the archive.
+  2026-07-31.
+- **Two of the four phase-09 process rules landed** — the `null`-past-an-`undefined`-guard
+  footgun and the clock-dated-fixture rule, both in `payload/rules-src/`. Neither binds until
+  the next deploy. 2026-07-31.
+- **`master`'s red suite is green again** — two lite assertions had not learned about phase
+  09's PreCompact observer; 577/2 became 579/0. 2026-07-31.
+- **Phases 08 and 09 ran and merged** — the unified statusline, then the context segment's
+  severity. These were the "new phase the user opened" this file first listed as next.
+  2026-07-30 and 2026-07-31.
+- **The first audit and deploy from `master`** — at `51a65d0`, setting `deployed_through: 08`.
+  2026-07-30.
+- **The bundle-before-plugin ordering constraint is satisfied** — both halves hold, so
+  publishing a new fork revision is unblocked. The earlier note here, "the installed plugin
+  is still `up.1`", was true on 2026-07-29 and is superseded. 2026-07-30.
+- **The fork published at `6.2.0-up.4`** — revision 3 → 4, both branches pushed, `main`
+  confirmed to be exactly what original + patch produce. 2026-07-29.
+- **Four plans from 2026-07-28 executed, reviewed and merged** — the `.ultrapowers` planning
+  tree, versioning and changelog, design records and stack rules, and the gsd-core detector
+  with the `base`/`lite` statusline. 2026-07-29.
 
 ## Measurements that still constrain the statusline segment
 
