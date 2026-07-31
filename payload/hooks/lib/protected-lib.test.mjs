@@ -127,6 +127,29 @@ test("editing an unprotected path is allowed", () => {
   assert.equal(decide({ root, tool: "Edit", path: join(root, "docs/other.md") }), null);
 });
 
+// The rule forbids editing, deleting and moving. Creating a record that does not exist yet is
+// none of the three, and refusing it means a phase cannot write its own spec at all.
+test("writing a protected path that does not exist yet is allowed", () => {
+  const root = tree({ ".protected": "docs/spec.md\n" });
+  assert.equal(decide({ root, tool: "Write", path: join(root, "docs/spec.md") }), null);
+});
+
+// Deletion stays denied, so "remove it, then create it again" is not a way around this.
+test("overwriting an existing protected path is denied", () => {
+  const root = tree({ ".protected": "docs/spec.md\n", "docs/spec.md": "body\n" });
+  assert.ok(decide({ root, tool: "Write", path: join(root, "docs/spec.md") }));
+});
+
+test("Edit of a protected path is denied even when the file is absent", () => {
+  const root = tree({ ".protected": "docs/spec.md\n" });
+  assert.ok(decide({ root, tool: "Edit", path: join(root, "docs/spec.md") }));
+});
+
+test("a hidden list still denies creating a new file", () => {
+  const root = tree({ ".gitignore": ".protected\n", ".protected": "docs/\n" });
+  assert.ok(decide({ root, tool: "Write", path: join(root, "docs/new.md") }));
+});
+
 test("copying FROM a protected path is allowed, copying ONTO it is not", () => {
   const root = tree({ ".protected": "docs/spec.md\n" });
   assert.equal(decide({ root, tool: "Bash", command: "cp docs/spec.md /tmp/" }), null);

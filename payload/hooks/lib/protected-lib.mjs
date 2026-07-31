@@ -2,7 +2,7 @@
 // Every decision the .protected mechanism makes lives here as a pure function; the hook that
 // calls it only reads stdin and sets an exit code. No subprocess is ever spawned - the suite
 // asserts that of every hook, which is also why `git check-ignore` is not an option.
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, relative, resolve, basename } from "node:path";
 
 const ESC = (s) => s.replace(/[.+^${}()|[\]\\]/g, "\\$&");
@@ -159,6 +159,9 @@ export function decide({ root, tool, path, command }) {
     if (isRepairFile(r)) return null;
     const { rules, hidden } = collectRules(root, r);
     if (hidden) return { message: hiddenMsg(hidden) };
+    // Creating a record is none of edit, delete or move, and a phase that may not write its own
+    // spec cannot start. Deletion stays denied, so recreating over a removed file is not a route in.
+    if (tool === "Write" && !existsSync(resolve(root, path))) return null;
     const rule = matchRules(rules, r);
     return rule ? { message: MSG(r, rule, []) } : null;
   }

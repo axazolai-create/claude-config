@@ -715,7 +715,11 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   edit, delete or move any path listed in a `.protected` file — `.gitignore` format, binding at
   its own directory and every level below. Reading is untouched and copying **from** a protected
   path is allowed; `cp` is judged by direction, and a command that cannot be parsed but mentions
-  a protected path is denied, since that is where a lost file is most likely. Two rules are
+  a protected path is denied, since that is where a lost file is most likely. Creating a file
+  that does not exist yet is allowed even under a matching rule: the prohibition reads "edit,
+  delete or move" and creation is none of them — otherwise a phase could not write its own spec.
+  Overwriting an existing file stays denied, and "delete it, then create it again" is not a way
+  around that, because the deletion is refused. Two rules are
   intrinsic rather than list entries: `.protected` may be edited but never deleted, and a
   `.protected` that `.gitignore` would hide denies every write in its scope — a protection
   living on one machine is not a project rule — with `.gitignore` and `.protected` themselves
