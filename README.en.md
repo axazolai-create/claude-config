@@ -167,9 +167,10 @@ switch at any time by re-running `setup.mjs`.
   skill, plus the `gsd` plugin on top of the rest.
 - **lite** — a slimmed-down set with no GSD machinery:
   - plugins — only `ultrapowers`, `context-mode`, `context7` (no `gsd`);
-  - exactly 6 hooks: `secrets-gate`, `deny-curated-claude-md`, `graphify-global-sync`,
-    `leanmode-subagent`, `token-usage-log`, `session-init` (the last one still runs, but skips
-    every GSD-specific step — see the callout in "Project auto-init" below);
+  - exactly 9 hooks: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
+    `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`, `precompact-observe`,
+    `token-usage-log`, `session-init` (the last one still runs, but skips every GSD-specific
+    step — see the callout in "Project auto-init" below);
   - `graphify` without the neo4j add-on; `leanmode`; three "lazy" skills
     (`model-selection-policy`, `token-usage`, `update-changelog`);
   - its own `/init-stack` — stack detection + assembling `.claude/stack-rules.md` only, no
@@ -710,6 +711,16 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   Why a hook, not a rule: `CLAUDE.md` loads as context, and a project one overrides the user's
   — prose can't hold an invariant, but a hook fires before the write and can't be talked
   around by a prompt.
+- **protected-guard.mjs** (PreToolUse: `Edit|Write|MultiEdit|NotebookEdit|Bash`). Refuses to
+  edit, delete or move any path listed in a `.protected` file — `.gitignore` format, binding at
+  its own directory and every level below. Reading is untouched and copying **from** a protected
+  path is allowed; `cp` is judged by direction, and a command that cannot be parsed but mentions
+  a protected path is denied, since that is where a lost file is most likely. Two rules are
+  intrinsic rather than list entries: `.protected` may be edited but never deleted, and a
+  `.protected` that `.gitignore` would hide denies every write in its scope — a protection
+  living on one machine is not a project rule — with `.gitignore` and `.protected` themselves
+  left writable so the repair is possible. A nested `.protected` may extend **or** override what
+  it inherits, which means it can also unprotect: that escape hatch is deliberate and known.
 - **secrets-gate.mjs** (PreToolUse: `Bash`). On `git commit`, scans `git diff --cached`: AWS
   keys, private keys, Slack/GitHub tokens, creds in connection strings, explicit secret
   assignments (env references are filtered out, for fewer false positives). If `gitleaks` is
