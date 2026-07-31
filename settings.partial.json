@@ -79,6 +79,13 @@
         ]
       }
     ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["<HOME>/.claude/hooks/precompact-observe.mjs"] }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

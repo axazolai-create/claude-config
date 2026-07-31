@@ -372,6 +372,7 @@ So this package does three things:
       leanmode-full-rule.md              # rule text: full
       leanmode-ultra-rule.md             # rule text: ultra (extends full)
       mark-initstack-done.mjs            # called from /init-stack; sets initStackRun in project-init.json
+    precompact-observe.mjs               # PreCompact — records where automatic compaction fired
   agents/
     leanmode-executor.md                 # subagent for explicit per-task lean opt-in (see below)
   commands/
@@ -863,7 +864,14 @@ from this bundle, driving your Claude Code" principle — here for findability:
   1. **pending component updates**, by **name** (`⬆ context-mode graphify`), leftmost — not a
      count, and not on the right the way the deleted wrapper appended it;
   2. **model** — `data.model.display_name` from the statusLine payload;
-  3. **context** — tokens **and** percent, e.g. `165.6K/1M 17%`;
+  3. **context** — tokens and percent, e.g. `165.6K/1M 17%`, coloured and iconed by two separate
+     ladders: **colour** — by percent of the model window (15/45/70/85/95% → grey/green/yellow/
+     orange/red/bright red), **icon** — by percent of the way to automatic compaction
+     (45/70/85/95% → 💡/⚠️/🔥/💀) within a capacity — `CLAUDE_CODE_AUTO_COMPACT_WINDOW` when set,
+     capped at the model's window, otherwise the model's window whole; within that capacity the
+     autocompact point resolves in this order: `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` → an observation
+     from `precompact-observe.mjs` for the current model (`~/.claude/state/autocompact.json`) →
+     the capacity itself. The default is never a guessed reserve;
   4. **project** — the directory name only, no git branch;
   5. **gsd work status** — only when gsd-core is installed **and** active for this project
      (`<claudeDir>/gsd-core/VERSION` exists **and** `<root>/.planning/config.json` exists);

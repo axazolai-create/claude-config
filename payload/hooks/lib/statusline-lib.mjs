@@ -15,20 +15,17 @@ export function formatContextWindow(n) {
 }
 
 /**
- * The whole context segment, e.g. "165.6K/1M 17%".
- *
  * The window size is `context_window_size`; `total_tokens` is a fallback only because this
  * bundle read that name for months and no captured payload existed to contradict it.
  *
  * The token figure is the plain sum of `current_usage`, and the percentage is the payload's
  * own `used_percentage` against the full window. Both are documented as null early in a
- * session and after /compact, so either half may be missing and the segment degrades to
- * whichever survives.
+ * session and after /compact, so either can be missing on its own.
  */
-export function computeContext(data) {
+export function contextMetrics(data) {
   const cw = data && data.context_window;
-  if (!cw) return "";
-  const total = cw.context_window_size ?? cw.total_tokens ?? 1_000_000;
+  if (!cw) return null;
+  const windowSize = cw.context_window_size ?? cw.total_tokens ?? 1_000_000;
   const u = cw.current_usage;
   let used = null;
   if (u && typeof u === "object") {
@@ -37,8 +34,14 @@ export function computeContext(data) {
     if (sum > 0) used = sum;
   }
   const pct = cw.used_percentage;
-  if (used == null && pct == null) return "";
-  const tokens = used != null ? used : (total * pct) / 100;
-  return `${formatCurrentTokens(tokens)}/${formatContextWindow(total)}` +
-    (pct == null ? "" : ` ${Math.round(pct)}%`);
+  if (used == null && pct == null) return null;
+  return { windowSize, tokens: used != null ? used : (windowSize * pct) / 100, pct };
+}
+
+/** The whole context segment, e.g. "165.6K/1M 17%" — degrades to whichever half of contextMetrics survives, "" when neither does. */
+export function computeContext(data) {
+  const m = contextMetrics(data);
+  if (!m) return "";
+  return `${formatCurrentTokens(m.tokens)}/${formatContextWindow(m.windowSize)}` +
+    (m.pct == null ? "" : ` ${Math.round(m.pct)}%`);
 }

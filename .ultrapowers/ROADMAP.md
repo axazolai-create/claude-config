@@ -1,7 +1,7 @@
 ---
-updated: 2026-07-30
-current: "08"
-deployed_through: "05"
+updated: 2026-07-31
+current: "09"
+deployed_through: "08"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
   - { phase: "02", slug: ai-development-mode, status: complete, integration: merged }
@@ -10,21 +10,20 @@ phases:
   - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
   - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
-  - { phase: "08", slug: unified-statusline, status: complete, delivery: branch }
+  - { phase: "08", slug: unified-statusline, status: complete, integration: merged }
+  - { phase: "09", slug: context-meter-severity, status: complete, integration: branch }
 ---
 
 # Roadmap
 
-Nothing is running. Phase 08 is complete and awaiting merge — `current` still
-names it because delivery, not the work, is what is outstanding. Seven phases are
-complete, one is abandoned, and everything past phase 05 — merged or not — is
-still undeployed.
+Nothing is running. Phase 09 is complete on `feat/context-meter-severity` and awaiting
+merge — `current` still names it because delivery, not the work, is what is outstanding.
+Eight phases are complete, one is abandoned, and everything through phase 08 is deployed.
 
-`current` is deliberately not `null` here, and phase 08's own renderer is why:
-with no phase named, the ultrapowers segment falls through to the newest SDD
-ledger, and a finished plan's ledger renders as `08-PLAN ✔7 →1` — accurate about
-the outstanding task, misleading about the phase. Naming the phase until it merges
-costs nothing and says the true thing.
+`current` is deliberately not `null` here, and phase 08's own renderer is why: with no
+phase named, the ultrapowers segment falls through to the newest SDD ledger, and a finished
+plan's ledger renders as a task tally — accurate about the outstanding task, misleading
+about the phase. Naming the phase until it merges costs nothing and says the true thing.
 
 | Phase | Status | Where the work is |
 |---|---|---|
@@ -33,68 +32,98 @@ costs nothing and says the true thing.
 | 03 ultrapowers-layer0-patcher | abandoned | branch merged, nothing shipped |
 | 04 ultrapowers-planning-tree | complete | merged, deployed |
 | 05 versioning-and-changelog | complete | merged, deployed |
-| 06 design-records-and-stack-rules | complete | merged |
-| 07 gsd-core-detector-and-statusline | complete | merged, not deployed |
-| 08 unified-statusline | complete | `feat/unified-statusline`, unmerged; 7/8, task 1 open |
+| 06 design-records-and-stack-rules | complete | merged, deployed |
+| 07 gsd-core-detector-and-statusline | complete | merged, deployed |
+| 08 unified-statusline | complete | merged at `82deacb`, deployed |
+| 09 context-meter-severity | complete | `feat/context-meter-severity`, unmerged, local only |
 
-Phase 03's row is the reason `status` and `integration` are separate fields: its
-probe commits and its rollback are both in `master`, and the phase still did not
-ship. Each phase's own `NN-STATE.md` carries the detail and the task tally.
+Phase 03's row is the reason `status` and `integration` are separate fields: its probe
+commits and its rollback are both in `master`, and the phase still did not ship. Each
+phase's own `NN-STATE.md` carries the detail and the task tally.
 
-`deployed_through` is a waterline, not a per-phase flag: everything in `master`
-through phase 05 is installed on this machine. One deploy of `master` carries
-every merged phase, so recording it six times would mean six writes for one
-event, and five of them would not happen.
+`deployed_through` is a waterline, not a per-phase flag: everything in `master` through
+phase 08 is installed on this machine, from the deploy of `51a65d0` on 2026-07-30. One
+deploy of `master` carries every merged phase, so recording it per phase would mean many
+writes for one event, and most of them would not happen.
 
 ## Next
 
-1. Merge `feat/unified-statusline`. Phase 08 is complete and its whole-branch
-   re-review says ready to merge; `08-VERIFICATION.md` reads ACHIEVED.
-2. Deploy from `master` — gated on an audit and a written impact assessment,
-   never from a feature branch. Phases 06 and 07 are merged and waiting on it,
-   and `master` is 48 commits ahead of the published `origin/master`, which is
-   why a machine bootstrapped from GitHub installs neither of them.
+1. Merge `feat/context-meter-severity`. Phase 09 is complete, its whole-branch review says
+   ready to merge, and `09-VERIFICATION.md` reads ACHIEVED with every global constraint
+   HELD. 499 tests pass. The branch exists only locally — nothing on it is pushed.
+2. Deploy from `master` — gated on an audit and a written impact assessment, never from a
+   feature branch. Two acceptance checks can only be settled by a real deploy and a real
+   session, and both are recorded as risks rather than assumed: that the context segment
+   renders coloured at the current fill level, and that after one genuine automatic
+   compaction `~/.claude/state/autocompact.json` holds a `models` entry whose `tokens` is
+   below its `windowSize` with no `pending` left.
 3. Give phase 07 its `07-SPEC.md` and `07-PLAN.md` by moving
    `.ultrapowers/archive/{specs,plans}/2026-07-28-gsd-core-detector-and-statusline*.md`
    into its directory, and repair the references the move breaks.
 
 ## Not yet phases
 
-One piece of work exists without a phase directory, because nothing in this tree
-is scaffolded before it has content.
+Work that exists without a phase directory, because nothing in this tree is scaffolded
+before it has content.
 
+- **The `.protected` mechanism.** Specified by the user during phase 09; requirements are
+  recorded in that phase's ledger. A `.protected` file in `.gitignore` format marks paths
+  that may not be edited, deleted or moved — copying stays allowed — binding at its own
+  level and every level below, with nested files able to extend or override what they
+  inherit. It must be a hook, not prose: the user's own global `CLAUDE.md` reserves
+  enforcement for hooks and managed policy. Two rulings are already taken: `.protected`
+  itself may be edited but never deleted, and that rule is intrinsic rather than a list
+  entry; and Bash interception denies anything suspicious rather than matching exactly,
+  because a false positive costs a rephrase and a missed deletion costs a file.
+- **The statusline's ultrapowers segment.** Also specified during phase 09. Three display
+  modes — task counters while executing, a named action otherwise, and a phase tally
+  between phases — with five colour states and a phase id kept alongside the phase name.
+  Its blocker is not rendering: `NN-STATE.md` has no vocabulary for "planning" or "review",
+  so a current-action field has to be designed and the SDD process has to maintain it, or
+  the segment will name an action that finished an hour ago.
 - **The decision-records CLI.** Never started. Plan:
-  `.ultrapowers/archive/plans/2026-07-28-decision-records.md`. It runs last by
-  its own constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/`
-  once the tree exists, and its normaliser should rewrite a register that already
-  contains the statusline work's entries.
+  `.ultrapowers/archive/plans/2026-07-28-decision-records.md`. It runs last by its own
+  constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/` once the tree
+  exists, and its normaliser should rewrite a register that already contains the statusline
+  work's entries.
+- **Four process rules, agreed during phase 09.** The `= {}`-does-not-catch-`null` footgun
+  and the clock-in-tests rule go to `payload/rules-src/`, so `setup.mjs` carries them to
+  every machine. Two planning rules — run every command a plan prescribes before writing it
+  down, and check each stated invariant against the plan's own sample code — go to the
+  ultrapowers fork's `writing-plans` skill, because a rule compiled only into
+  `stack-rules.md` binds nothing until `/init-stack` has run. The ledger read-back check
+  goes to the fork's `subagent-driven-development` skill; it was trialled once on phase 09
+  and earned its place by finding a gap the ledger's own author could not see.
 
-`.ultrapowers/archive/plans/2026-07-28-EXECUTION-ORDER.md` holds the schedule
-these two came from and the reasoning behind it. Its paths for the four executed
-plans are historical — those plans now live in their phase directories as
-`NN-PLAN.md`.
+`.ultrapowers/archive/plans/2026-07-28-EXECUTION-ORDER.md` holds the schedule the older
+items came from and the reasoning behind it. Its paths for the executed plans are
+historical — those plans now live in their phase directories as `NN-PLAN.md`.
 
 ## Open, and carried by no phase
 
-- **Deploy before the plugin moves.** The bundle must be deployed before the
-  ultrapowers plugin is updated past the revision the deployed copy was built
-  against, because the published fork tells design sessions to run a checker the
-  older deployed copy answers differently. The fork publishes `6.2.0-up.4` as of
-  2026-07-29 — the coherence fixes and this tree's own state-file convention are
-  in it — while the installed plugin is still `up.1`. Nothing is staged
-  unpublished. The gap is now three revisions wide, so this ordering constraint
-  binds harder than when it was written.
-- **One edit still owed to the user.** `~/.claude/CLAUDE.md` is `CURATED:NOEDIT`
-  and says the risk register lives in `.planning/` or the project root; this tree
-  keeps it at `.ultrapowers/RISK_REGISTER.md`. Only the user can reconcile that.
-- **Risks filed during execution** live in `.ultrapowers/RISK_REGISTER.md` with
-  stable IDs — `RISK-PHASEDIR-001`, `RISK-PLANTREE-001`, `RISK-CHANGELOG-001`
-  and `RISK-CHANGELOG-002`. They are indexed there, not here; this line exists
-  so nobody has to rediscover the file.
+- **The ordering constraint between the bundle and the plugin is satisfied.** The rule was
+  that the bundle must be deployed before the ultrapowers plugin moves past the revision
+  the deployed copy was built against. Both halves now hold: `master` was deployed at
+  `51a65d0`, and the installed plugin is already `6.2.0-up.4`. Publishing a new fork
+  revision — which the four rules above require — is unblocked.
+- **One edit still owed to the user.** `~/.claude/CLAUDE.md` is `CURATED:NOEDIT` and says
+  the risk register lives in `.planning/` or the project root; this tree keeps it at
+  `.ultrapowers/RISK_REGISTER.md`. Only the user can reconcile that.
+- **Risks filed during execution** live in `.ultrapowers/RISK_REGISTER.md` with stable IDs.
+  Phase 09 added `RISK-STATUSLINE-002` (the autocompact point is assumed until observed,
+  with its acceptance check written down) and `RISK-HOOKSTDIN-001` (`token-usage-log.mjs`
+  throws on a literal `null` on stdin — found by phase 09, not caused by it, and already
+  deployed). Earlier IDs: `RISK-PHASEDIR-001`, `RISK-PLANTREE-001`, `RISK-CHANGELOG-001`,
+  `RISK-CHANGELOG-002`, `RISK-ULTRAPOWERS-009`, `RISK-ULTRAPOWERS-010`,
+  `RISK-STATUSLINE-001` (closed by observation), `RISK-TESTUNIT-001`.
+- **`RISK-TESTUNIT-001` bit a second time in phase 09.** `.gitignore` excludes `.test/`, so
+  a fresh worktree has no `.test/unit/` and the suite silently covers less there than on
+  `master` — 499 against a fuller count. Nothing failed, and the absent files belong to
+  phase 08, but "run the full suite" means something smaller in a worktree than the phrase
+  implies. The register entry still awaits the user's decision on which way to settle it.
 - **Two IDs the old root `STATE.md` claimed were filed are not in the register.**
-  `RISK-VARIANT-005` appears only as an expected output of a verification step in
-  the decision-records plan, so it is anticipated rather than filed;
-  `RISK-SETUP-001` appears nowhere else in the tree at all. Either they were
-  never written, or they were written under other IDs. Carried across as a
-  correction rather than copied, because a state file that names records that do
-  not exist is the failure this format replaced.
+  `RISK-VARIANT-005` appears only as an expected output of a verification step in the
+  decision-records plan, so it is anticipated rather than filed; `RISK-SETUP-001` appears
+  nowhere else in the tree at all. Carried across as a correction rather than copied,
+  because a state file that names records which do not exist is the failure this format
+  replaced.

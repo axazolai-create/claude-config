@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderUpdates, renderGsd, renderSdd, renderPhase, roadmapPhases, render, installedProfile } from "./statusline.mjs";
+import { renderUpdates, renderGsd, renderSdd, renderPhase, roadmapPhases, render, installedProfile, paintContext } from "./statusline.mjs";
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -154,9 +154,11 @@ const EMPTY_CLAUDE_DIR = dir("claude-empty");
 const GSD_CLAUDE_DIR = dir("claude-gsd-core");
 write(join(GSD_CLAUDE_DIR, "gsd-core", "VERSION"), "1.8.0\n");
 
-function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR } = {}) {
+function runEntry(input, { claudeDir = EMPTY_CLAUDE_DIR, env: extraEnv = {} } = {}) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: claudeDir };
   delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+  delete env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE;
+  Object.assign(env, extraEnv);
   return spawnSync(process.execPath, [ENTRY], { input, encoding: "utf8", env, cwd: TMP });
 }
 
@@ -276,6 +278,34 @@ test("entry point: the context segment falls back to the estimate without curren
   const out = runEntry(payload(dir("plain-ctx-est"), { context_window: { total_tokens: 200000, used_percentage: 10 } }));
   assert.equal(out.status, 0);
   assert.ok(strip(out.stdout).startsWith("20.0K/200K 10% │ "), `got: ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: CLAUDE_CODE_AUTO_COMPACT_WINDOW narrows the icon ladder, not the colour ladder", () => {
+  const root = dir("plain-window-narrow");
+  const out = runEntry(payload(root, {
+    context_window: { context_window_size: 1000000, used_percentage: 32 },
+  }), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "600000" } });
+  assert.equal(out.status, 0);
+  // colour: 32% of the full 1M window is the green band - windowPct is never narrowed.
+  assert.match(out.stdout, /\x1b\[32m320\.0K\/1M 32%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
+  // icon: 320K of a 600K capacity is 53% of the way to compaction - past the 💡 floor.
+  // Asserting both, on the same render, fails if colour and icon ever collapse onto one number.
+  assert.match(strip(out.stdout), /320\.0K\/1M 32% 💡/, `icon: got ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: a disabled autocompact collapses the icon onto windowPct, not the raw ratio", () => {
+  const claudeDir = dir("claude-ac-disabled");
+  write(join(claudeDir, "settings.json"), JSON.stringify({ autoCompactEnabled: false }));
+  const root = dir("plain-ac-disabled");
+  const out = runEntry(payload(root, {
+    context_window: { context_window_size: 200000, used_percentage: 44,
+      current_usage: { input_tokens: 91000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  // 91K/200K is 45.5% raw - past the icon floor - but windowPct (the payload's own 44%) is not;
+  // disabled autocompact has nothing to warn about, so the icon must not fire ahead of the colour.
+  assert.match(out.stdout, /\x1b\[32m91\.0K\/200K 44%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
+  assert.doesNotMatch(strip(out.stdout), /💡|⚠️|🔥|💀/, `icon leaked ahead of windowPct: got ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: no context_window means no context segment, not a broken one", () => {
@@ -565,4 +595,102 @@ test("entry point: stdin that never closes still renders and exits", async () =>
   const code = await new Promise((resolve) => child.on("close", resolve));
   assert.equal(code, 0);
   assert.ok(strip(out).includes("hang-guard"), `got: ${JSON.stringify(out)}`);
+});
+
+test("paintContext: wraps in the colour and hangs the icon outside it", () => {
+  assert.equal(paintContext("12K/1M 12%", { colour: "32", icon: "" }), "\x1b[32m12K/1M 12%\x1b[0m");
+  assert.equal(paintContext("12K/1M 12%", { colour: "91", icon: "💀" }), "\x1b[91m12K/1M 12%\x1b[0m 💀");
+  assert.equal(paintContext("", { colour: "91", icon: "💀" }), "");
+});
+
+test("paintContext: a null opts argument does not throw", () => {
+  assert.equal(paintContext("12K/1M 12%", null), "12K/1M 12%");
+});
+
+test("entry point: a full window is bright red and carries the skull", () => {
+  const out = runEntry(payload(dir("proj-hot"), {
+    context_window: { context_window_size: 200000, used_percentage: 96,
+      current_usage: { input_tokens: 192000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir: dir("claude-hot") });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[91m"), `no bright red: ${JSON.stringify(out.stdout)}`);
+  assert.ok(out.stdout.includes("💀"), `no skull: ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: an empty window is grey and silent", () => {
+  const out = runEntry(payload(dir("proj-cold"), {
+    context_window: { context_window_size: 1000000, used_percentage: 3,
+      current_usage: { input_tokens: 30000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir: dir("claude-cold") });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[2m30.0K/1M 3%\x1b[0m"), `got: ${JSON.stringify(out.stdout)}`);
+  for (const icon of ["💡", "⚠️", "🔥", "💀"]) assert.equal(out.stdout.includes(icon), false);
+});
+
+test("entry point: an observed autocompact point makes the icon lead the colour", () => {
+  const claudeDir = dir("claude-lead");
+  write(join(claudeDir, "state", "autocompact.json"), JSON.stringify({
+    models: { "claude-opus-5[1m]": { tokens: 600000, windowSize: 1000000 } },
+  }));
+  const out = runEntry(payload(dir("proj-lead"), {
+    model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
+    context_window: { context_window_size: 1000000, used_percentage: 32,
+      current_usage: { input_tokens: 320000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[32m"), `expected green: ${JSON.stringify(out.stdout)}`);
+  assert.ok(out.stdout.includes("💡"), `expected the lamp: ${JSON.stringify(out.stdout)}`);
+});
+
+test("entry point: a default-configuration render never shows an icon while the colour disagrees", () => {
+  const out = runEntry(payload(dir("proj-collapse"), {
+    context_window: { context_window_size: 1000000, used_percentage: 44,
+      current_usage: { input_tokens: 452000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir: dir("claude-collapse") });
+  assert.equal(out.status, 0);
+  assert.ok(out.stdout.includes("\x1b[32m"), `expected green: ${JSON.stringify(out.stdout)}`);
+  for (const icon of ["💡", "⚠️", "🔥", "💀"]) {
+    assert.equal(out.stdout.includes(icon), false, `unexpected ${icon}: ${JSON.stringify(out.stdout)}`);
+  }
+});
+
+test("entry point: a pending observation is promoted and cleared", () => {
+  const claudeDir = dir("claude-promote");
+  const statePath = join(claudeDir, "state", "autocompact.json");
+  write(statePath, JSON.stringify({
+    pending: { tokens: 400000, model: "claude-opus-5", at: "2026-07-30T18:00:00Z" },
+  }));
+  const out = runEntry(payload(dir("proj-promote"), {
+    model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
+    context_window: { context_window_size: 1000000, used_percentage: 10,
+      current_usage: { input_tokens: 100000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  const after = JSON.parse(readFileSync(statePath, "utf8"));
+  assert.equal(after.pending, undefined);
+  assert.equal(after.models["claude-opus-5[1m]"].tokens, 400000);
+});
+
+test("entry point: a pending observation from another model does not get claimed by this render", () => {
+  const claudeDir = dir("claude-cross-model");
+  const statePath = join(claudeDir, "state", "autocompact.json");
+  write(statePath, JSON.stringify({
+    pending: { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" },
+  }));
+  const out = runEntry(payload(dir("proj-cross-model"), {
+    model: { id: "claude-opus-5[1m]", display_name: "Opus 5 (1M context)" },
+    context_window: { context_window_size: 1000000, used_percentage: 17.5,
+      current_usage: { input_tokens: 175000, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, output_tokens: 0 } },
+  }), { claudeDir });
+  assert.equal(out.status, 0);
+  const after = JSON.parse(readFileSync(statePath, "utf8"));
+  assert.deepEqual(after.pending, { tokens: 180000, model: "claude-sonnet-5", at: "2026-07-30T18:00:00Z" });
+  assert.equal(after.models, undefined);
+  assert.equal(out.stdout.includes("💀"), false, `unexpected skull: ${JSON.stringify(out.stdout)}`);
 });
