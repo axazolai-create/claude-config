@@ -8,8 +8,9 @@ status is — this file answers what is owed, what was ruled, and what must not 
 
 ## Summary
 
-Nothing is running. Both repositories are on their production branches and pushed: this tree
-with phase 10 merged, the fork published as `6.2.0-up.5`. Two things are owed that are only
+Nothing is running, and the phase queue is empty — phases 10, 11 and 12 were all specified,
+implemented and merged on 2026-07-31. `master` carries them but has **not** been pushed since
+phase 10; the fork stands at `6.2.0-up.5`. Two things are owed that are only
 keystrokes — the deploy from `master`, and `/plugin update` plus a restart — and until both
 happen the five process rules added on 2026-07-31 bind nothing on this machine. All three
 items that needed a decision rather than a keystroke were settled on 2026-07-31: phase 03's
@@ -31,9 +32,9 @@ queued and unstarted: the `.protected` mechanism and the decision-records CLI.
 - **Install `6.2.0-up.5`.** `/plugin update` and a restart, done by the user — publishing a
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
-- **Two phase-sized items still queued.** The `.protected` mechanism and the decision-records
-  CLI remain unstarted; `ROADMAP.md` carries what each one is and what constrains its order.
-  The third, the statusline's ultrapowers segment, became phase 10 and shipped on 2026-07-31.
+- **The queue is empty.** All three phase-sized items shipped on 2026-07-31: the statusline
+  segment as phase 10, `.protected` as phase 11, the decision-records CLI as phase 12. What
+  remains owed are keystrokes, not work.
 - **The decision-records plan still owes its phase directory.** When that phase is created,
   `archive/plans/2026-07-28-decision-records.md` moves into it as `NN-PLAN.md`, the same way
   phase 07's documents moved on 2026-07-31.
@@ -101,6 +102,19 @@ fixed on 2026-07-31, the second still stands:
 Compressed once paid: name, one line, the date. The reasoning that got each one done is in
 its commit — these lines exist so a reader can see it happened at all.
 
+- **Phase 12 made the decision records a practice** — `risks`, `adr` and `glossary` CLIs over
+  pure libraries, a non-blocking nudge when one is staged, the register normalised into four
+  sections with a four-value vocabulary, and three retrospective ADRs plus a glossary so the
+  directory is not empty. Merged, not pushed. 2026-07-31.
+- **Phase 11 shipped `.protected`** — a PreToolUse hook refusing to edit, delete or move any
+  listed path, with `cp` judged by direction and an unparseable command denied. It ships
+  **unarmed**: no `.protected` file exists here, and creating one is what turns it on. Merged,
+  not pushed. 2026-07-31.
+- **`RISK-CLAUDEMD-002` got its mechanical half** — `docs-claims.test.mjs` fails when the
+  shipped prose names a command, skill or bundle path that does not exist. Its allowlists must
+  name a source, and a test asserts the check still fires on the three defects that shipped.
+  Two limits are recorded: it cannot judge a *location* claim, and it cannot tell a denial from
+  an instruction. 2026-07-31.
 - **Phase 10 shipped the statusline segment, merged and pushed** — three display modes, five
   colour states across four count positions, and the status/delivery migration owed since
   2026-07-29, applied to every state file. The live SDD ledger is read structurally, by
