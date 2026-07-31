@@ -296,6 +296,11 @@ Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/
   отслеживаемой фоновой задачи ре-инвокает модель само, wakeup-поллинг — впустую).
 - **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
   выгрузка кросс-проектного графа в Neo4j (подробнее — раздел про graphify ниже).
+  Пуш выполняется автоматически: `hooks/lib/graphify-global-sync-run.mjs` запускает его в хвосте
+  того же фонового процесса, что и `extract`, внутри того же лока. Скрипт есть только в установках,
+  взявших опцию `neo4j` (в профиле `base` он исключён); выключается `CLAUDE_GRAPHIFY_NEO4J_PUSH=0`.
+  Результат пишется в `~/.claude/state/graphify-neo4j-push.log`. Ручной путь остался:
+  `graphify-sync-all.mjs --neo4j-push`.
 
 Права в `settings.partial.json` нормализуются при мёрже: `Write(x)`/`MultiEdit(x)` → `Edit(x)`
 (+ dedup), т.к. Claude Code теперь матчит все file-tools через `Edit(path)`, а `MultiEdit` —
@@ -752,10 +757,13 @@ README (источник истины — сами `rules-src/*.md` и их `REA
 - **graphify-global-sync.mjs** (PostToolUse: `Bash`) + **hooks/lib/graphify-global-sync-run.mjs**
   (общий воркер). После `git commit`, сделанного Claude через Bash-инструмент, в фоне (detached,
   не блокирует сессию) обновляет запись этого проекта в кросс-проектном
-  `~/.graphify/global-graph.json` (`graphify extract . --global --as <name>`). No-op, если
+  `~/.graphify/global-graph.json` (`graphify extract . --code-only --global --as <name>` —
+  локальный AST, без LLM-ключа и без стоимости). No-op, если
   `graphify` не установлен, если это не `git commit`, или если коммит не состоялся. PID/mtime-лок
   на `~/.claude/state/graphify-sync-<name>.lock` не даёт параллельным триггерам плодить
-  одновременные экстракции; лок считается протухшим через 10 минут.
+  одновременные экстракции; лок считается протухшим через 10 минут. В хвосте того же процесса,
+  внутри того же лока, идёт пуш в Neo4j — если `bin/graphify-neo4j-push.mjs` установлен и
+  `CLAUDE_GRAPHIFY_NEO4J_PUSH` не равен `0`.
   **Ограничение:** хуки Claude Code видят только вызовы инструментов самого Claude — ручной
   `git commit`/`--amend` из терминала или IDE этот хук не увидит в принципе. Это закрывает
   нативный git-хук ниже. Отключить оба: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.
