@@ -33,12 +33,14 @@ ultrapowers segment, the `.protected` mechanism, and the decision-records CLI.
   fork revision does not put it on any machine. `enabledPlugins` resolves at startup and does
   not hot-reload, so deltas 011-013 bind on the next session, not the current one.
 - **The status/delivery vocabulary migration.** Ruled on 2026-07-29, never applied; the
-  ruling is recorded under Rulings below. `ROADMAP.md` and every `NN-STATE.md` still use
-  `integration`. This blocks nothing today but it is the vocabulary the statusline segment
-  needs, so the segment's phase should not start before it.
-- **Three phase-sized items, queued and unstarted.** The statusline's ultrapowers segment,
-  the `.protected` mechanism, and the decision-records CLI. `ROADMAP.md` carries what each
-  one is and what constrains its order.
+  ruling is recorded under Rulings below. It now has a home: phase 10's first step, because
+  the segment that phase builds reads the fields being renamed, and renaming them from
+  outside would touch every state file twice. `ROADMAP.md`'s frontmatter is mixed until then
+  — phase 10's row carries `delivery`, the earlier rows still carry `integration`.
+- **Two phase-sized items still queued, and one now specified.** The statusline's ultrapowers
+  segment became phase 10 on 2026-07-31 and has an approved spec but no plan. The `.protected`
+  mechanism and the decision-records CLI remain unstarted. `ROADMAP.md` carries what each one
+  is and what constrains its order.
 - **The decision-records plan still owes its phase directory.** When that phase is created,
   `archive/plans/2026-07-28-decision-records.md` moves into it as `NN-PLAN.md`, the same way
   phase 07's documents moved on 2026-07-31.

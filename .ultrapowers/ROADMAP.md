@@ -12,6 +12,7 @@ phases:
   - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
   - { phase: "08", slug: unified-statusline, status: complete, integration: merged }
   - { phase: "09", slug: context-meter-severity, status: complete, integration: merged }
+  - { phase: "10", slug: phase-progress-segment, status: planned, delivery: null }
 ---
 
 # Roadmap
@@ -19,8 +20,15 @@ phases:
 Nothing is running and nothing is awaiting merge. Phase 09 merged into `master` at
 `4918208` on 2026-07-31, and the phase-09 debts followed at `8e785d6` the same day; both
 are pushed. Eight phases are complete, one is superseded by phase 04, everything through phase 08 is
-deployed, and phase 09 is merged but not yet deployed. The one thing standing between the
-tree and a clean slate is that deploy.
+deployed, and phase 09 is merged but not yet deployed. Phase 10 was specified on 2026-07-31
+and has a spec but no plan. The one thing standing between the tree and a clean slate is that
+deploy.
+
+The frontmatter above is deliberately mixed: phase 10's row carries `delivery`, every earlier
+row still carries `integration`. Migrating the rest is phase 10's own first step — the segment
+it builds reads these fields, so renaming them from outside the phase would mean touching every
+state file twice. A reader should expect `integration` to disappear when phase 10 runs, not
+before.
 
 `current` is `null` because naming a merged phase would say a false thing. The cost is
 known and accepted: with no phase named, the ultrapowers segment falls through to the
@@ -40,6 +48,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 07 gsd-core-detector-and-statusline | complete | merged, deployed |
 | 08 unified-statusline | complete | merged at `82deacb`, deployed |
 | 09 context-meter-severity | complete | merged at `4918208`, not deployed |
+| 10 phase-progress-segment | planned | specified 2026-07-31, not yet planned |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
@@ -68,6 +77,8 @@ writes for one event, and most of them would not happen.
 2. Install `6.2.0-up.5` — `/plugin update` and a restart, done by the user. `enabledPlugins`
    resolves at startup and does not hot-reload, so the three new rules bind on the next
    session, not this one.
+3. Plan phase 10 — the spec is approved; the implementation plan does not exist yet. Its first
+   step is the status/delivery migration, because the segment reads the fields it renames.
 
 Done, kept as a line each:
 
@@ -100,12 +111,13 @@ before it has content.
   itself may be edited but never deleted, and that rule is intrinsic rather than a list
   entry; and Bash interception denies anything suspicious rather than matching exactly,
   because a false positive costs a rephrase and a missed deletion costs a file.
-- **The statusline's ultrapowers segment.** Also specified during phase 09. Three display
-  modes — task counters while executing, a named action otherwise, and a phase tally
-  between phases — with five colour states and a phase id kept alongside the phase name.
-  Its blocker is not rendering: `NN-STATE.md` has no vocabulary for "planning" or "review",
-  so a current-action field has to be designed and the SDD process has to maintain it, or
-  the segment will name an action that finished an hour ago.
+- **Became phase 10 on 2026-07-31 — the statusline's ultrapowers segment.** Specified during
+  phase 09, designed on 2026-07-31 as `phases/10-phase-progress-segment/10-SPEC.md`. Its
+  blocker is answered there: a separate `action` field beside `status`, with the live SDD
+  ledger — read structurally, by counting briefs against reports, never by parsing prose —
+  taking over mode selection and the counters whenever tasks are actually executing, so a
+  stale `action` can only mislead in the quieter modes. The status/delivery migration is the
+  phase's first step rather than a debt owed to it.
 - **The decision-records CLI.** Never started. Plan:
   `.ultrapowers/archive/plans/2026-07-28-decision-records.md`. It runs last by its own
   constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/` once the tree
