@@ -11,10 +11,12 @@
  *
  * Usage:
  *   node graphify-sync-all.mjs [--root <dir>] [--max-depth N] [--install-hooks]
- *                              [--exclude a,b,c] [--dry-run] [--neo4j-push]
+ *                              [--exclude a,b,c] [--dry-run] [--neo4j-push] [--semantic]
  *   Defaults: --root = current directory, --max-depth 3.
  *   --neo4j-push: after the sync, invoke ./bin/graphify-neo4j-push.mjs to push the
  *                 refreshed global graph to Neo4j (fail-soft; skipped on --dry-run).
+ *   --semantic:   full extraction including docs (needs an LLM API key). Without it the
+ *                 sync is code-only: local AST, no key, no cost - the same as the autosync.
  * Examples:
  *   node graphify-sync-all.mjs --root /home/me/dev --install-hooks
  *   node graphify-sync-all.mjs --root C:\Dev --max-depth 4
@@ -36,6 +38,7 @@ const ROOT = optVal("--root", process.cwd());
 const MAX_DEPTH = parseInt(optVal("--max-depth", "3"), 10) || 3;
 const INSTALL_HOOKS = flag("--install-hooks");
 const NEO4J_PUSH = flag("--neo4j-push");
+const SEMANTIC = flag("--semantic");
 const DRY = flag("--dry-run");
 const EXCLUDE = new Set(
   optVal("--exclude",
@@ -91,8 +94,9 @@ for (const dir of projects) {
   const name = basename(dir);
   log(`==> ${name}  (${dir})`);
   if (DRY) { results.push([name, "DRY"]); continue; }
-  const ex = spawnSync("graphify", ["extract", dir, "--global", "--as", name, "--max-workers", "8"],
-    { cwd: dir, encoding: "utf8" });
+  const exArgs = ["extract", dir, ...(SEMANTIC ? [] : ["--code-only"]),
+                  "--global", "--as", name, "--max-workers", "8"];
+  const ex = spawnSync("graphify", exArgs, { cwd: dir, encoding: "utf8" });
   fileLog(`--- ${name} ---\n${(ex.stdout || "") + (ex.stderr || "")}`);
   const status = (!ex.error && ex.status === 0) ? "OK" : "FAILED";
   if (status === "OK" && INSTALL_HOOKS) {
