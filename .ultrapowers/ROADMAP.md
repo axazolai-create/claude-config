@@ -13,6 +13,8 @@ phases:
   - { phase: "08", slug: unified-statusline, status: complete, delivery: merged }
   - { phase: "09", slug: context-meter-severity, status: complete, delivery: merged }
   - { phase: "10", slug: phase-progress-segment, status: complete, delivery: merged }
+  - { phase: "11", slug: protected-paths, status: complete, delivery: merged }
+  - { phase: "12", slug: decision-records, status: complete, delivery: branch }
 ---
 
 # Roadmap
@@ -49,6 +51,8 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 08 unified-statusline | complete | merged at `82deacb`, deployed |
 | 09 context-meter-severity | complete | merged at `4918208`, not deployed |
 | 10 phase-progress-segment | complete | merged, not deployed |
+| 11 protected-paths | complete | merged, not deployed |
+| 12 decision-records | complete | on `feat/decision-records`, awaiting merge |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
