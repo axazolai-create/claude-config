@@ -13,9 +13,12 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 // Matches: import "specifier" or import ... from "specifier", including multiline forms.
 function staticImportRels(text) {
   const out = [];
-  // Pattern: import keyword + anything (including newlines) + quoted specifier + semicolon.
-  // The semicolon ensures we don't match quoted strings in other statements (e.g., const x = "...").
-  for (const m of text.matchAll(/^[ \t]*import\s[\s\S]*?["'](\.[^"']+)["'];/gm)) {
+  // Pattern: import keyword + anything up to the statement's own semicolon + quoted specifier.
+  // `[^;]` rather than `[\s\S]`: the old form skipped across whole files, so an import of a
+  // non-relative module ("node:path";) let the scan run on and match the next dot-prefixed
+  // string literal it found - reporting a plain constant as an import edge. Multiline import
+  // forms still match, since they contain no semicolon before their own.
+  for (const m of text.matchAll(/^[ \t]*import\s[^;]*?["'](\.[^"']+)["'];/gm)) {
     out.push(m[1]);
   }
   return out;
@@ -251,7 +254,7 @@ test("optional groups are a no-op on full (already identity)", () => {
   assert.ok([...v.excludedSet].some((r) => r.endsWith(".test.mjs")), "**.test.mjs must be excluded from full");
 });
 
-test("hook registrations: lite keeps exactly the 8 lite hooks, and its own statusLine renderer", () => {
+test("hook registrations: lite keeps exactly the 9 lite hooks, and its own statusLine renderer", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
   const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
@@ -263,9 +266,13 @@ test("hook registrations: lite keeps exactly the 8 lite hooks, and its own statu
   // precompact-observe.mjs is here because lite installs statusline.mjs, which reads
   // state/autocompact.json — this hook is the only thing that writes it. Dropping it from lite
   // would ship the reader without its writer.
+  // protected-guard.mjs is here on purpose: lite already carries secrets-gate.mjs and
+  // deny-curated-claude-md.mjs, so protection against losing a file belongs to the same class
+  // and costs nothing at runtime — it reads .protected only when one exists.
   assert.deepEqual([...scripts].sort(), [
     "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "graphify-grep-nudge.mjs", "inject-axes.mjs",
-    "precompact-observe.mjs", "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
+    "precompact-observe.mjs", "protected-guard.mjs", "secrets-gate.mjs", "session-init.mjs",
+    "token-usage-log.mjs",
   ]);
   assert.ok(basenames.has("statusline.mjs"));
 });
