@@ -251,7 +251,7 @@ test("optional groups are a no-op on full (already identity)", () => {
   assert.ok([...v.excludedSet].some((r) => r.endsWith(".test.mjs")), "**.test.mjs must be excluded from full");
 });
 
-test("hook registrations: lite keeps exactly the 7 lite hooks, and its own statusLine renderer", () => {
+test("hook registrations: lite keeps exactly the 8 lite hooks, and its own statusLine renderer", () => {
   const v = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   const partial = JSON.parse(readFileSync(join(ROOT, "settings.partial.json"), "utf8"));
   const basenames = new Set(v.rels.map((r) => r.split("/").pop()));
@@ -260,9 +260,12 @@ test("hook registrations: lite keeps exactly the 7 lite hooks, and its own statu
   for (const entries of Object.values(filtered))
     for (const e of entries) for (const h of (e.hooks || []))
       for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
+  // precompact-observe.mjs is here because lite installs statusline.mjs, which reads
+  // state/autocompact.json — this hook is the only thing that writes it. Dropping it from lite
+  // would ship the reader without its writer.
   assert.deepEqual([...scripts].sort(), [
     "deny-curated-claude-md.mjs", "graphify-global-sync.mjs", "graphify-grep-nudge.mjs", "inject-axes.mjs",
-    "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
+    "precompact-observe.mjs", "secrets-gate.mjs", "session-init.mjs", "token-usage-log.mjs",
   ]);
   assert.ok(basenames.has("statusline.mjs"));
 });
