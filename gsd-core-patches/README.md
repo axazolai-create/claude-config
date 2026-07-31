@@ -1,12 +1,19 @@
 # gsd-core hand-patches
 
-`gsd-core` (`~/.claude/gsd-core`) is a separate tool this bundle does not own — it updates via
-its own release cycle (`/gsd-update`), not via `setup.mjs`. Occasionally a real, confirmed
-upstream fix lands in `gsd-core`'s own repo before it reaches a tagged release most installs
-have picked up. This directory holds hand-applied backports of exactly that kind of fix,
-applied automatically by `setup.mjs`, safely, without waiting for the next `gsd-core` release.
+`gsd-core` (`~/.claude/gsd-core`) is a separate tool this bundle does not own — it installs and
+updates with `npx @opengsd/gsd-core@latest` (or its own `/gsd-update` skill), not via `setup.mjs`.
+Occasionally a real, confirmed upstream fix lands in `gsd-core`'s own repo before it reaches a
+tagged release most installs have picked up. This directory holds hand-applied backports of
+exactly that kind of fix, applied automatically by `setup.mjs`, safely, without waiting for the
+next `gsd-core` release.
 
-Each backport is its own subdirectory (e.g. `2285/`), independent of the others.
+Each backport is its own subdirectory named for its upstream issue (e.g. `2285/`), independent of
+the others.
+
+**The registry is empty right now, and that is the healthy state.** Its one entry, `2285/` — the
+`execute:wave:pre` orchestration wiring, captured against 1.7.0 — was retired on 2026-08-01 once
+the fix was confirmed present in gsd-core 1.9.1. A patch here is a debt against upstream, not an
+asset: it exists to be deleted.
 
 ## Layout
 

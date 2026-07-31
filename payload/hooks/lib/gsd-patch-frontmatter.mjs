@@ -27,7 +27,7 @@ function unquote(s) {
   return m ? m[2] : t;
 }
 
-export function setFrontmatterField(content, { key, from, to }) {
+export function setFrontmatterField(content, { key, from, to, insertIfMissing = false }) {
   const lines = content.split("\n");
   const bare = (l) => l.replace(/\r$/, "");
   // Frontmatter must open with `---` on the very first line.
@@ -52,5 +52,11 @@ export function setFrontmatterField(content, { key, from, to }) {
     }
     return { content, kind: "skippedForeign" };
   }
-  return { content, kind: "noKey" };
+  // A patch that only rewrites an existing value goes silent the moment upstream stops shipping
+  // the key at all - which is what gsd-core 1.9.1 did with `effort:`. insertIfMissing keeps the
+  // intent alive by writing the line rather than reporting nothing and changing nothing.
+  if (!insertIfMissing) return { content, kind: "noKey" };
+  const cr = lines[close - 1] && lines[close - 1].endsWith("\r") ? "\r" : "";
+  lines.splice(close, 0, `${key}: ${to}${cr}`);
+  return { content: lines.join("\n"), kind: "applied" };
 }

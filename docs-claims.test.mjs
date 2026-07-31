@@ -17,7 +17,9 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 
 // name -> where it actually comes from. A bare name with no source is not allowed.
 const EXTERNAL_COMMANDS = {
-  "gsd-code-review": "gsd-core, installed separately by /gsd-update",
+  // gsd-core ships these as hyphenated SKILLS (skills/gsd-*), alongside namespaced commands
+  // (commands/gsd/*.md, named `gsd:*`). Both styles come from the one npx package.
+  "gsd-code-review": "gsd-core skill, installed by npx @opengsd/gsd-core",
   "gsd-debug": "gsd-core",
   "gsd-discuss-phase": "gsd-core",
   "gsd-execute-phase": "gsd-core",
