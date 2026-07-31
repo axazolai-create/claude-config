@@ -50,19 +50,21 @@ writes for one event, and most of them would not happen.
 
 ## Next
 
-1. Push `master`. It carries 25 commits that `origin/master` does not; the remote is still
-   at `51a65d0`. Until that happens, a machine bootstrapped from GitHub installs none of
-   phase 09 — which is exactly how this tree's own statusline went missing after a
-   reinstall on 2026-07-30.
+1. Push `master`. Corrected 2026-07-31: it carries one commit `origin/master` does not, not
+   the 25 this list claimed — the remote is at `4918208`, the phase 09 merge itself, so a
+   machine bootstrapped from GitHub already gets phase 09 and only misses this tree's own
+   bookkeeping. The 25/`51a65d0` figures were written before the push that followed them and
+   were never corrected, which is the same stale-fact failure the entry was warning about.
 2. Deploy from `master` — gated on an audit and a written impact assessment, never from a
    feature branch. Two acceptance checks can only be settled by a real deploy and a real
    session, and both are recorded as risks rather than assumed: that the context segment
    renders coloured at the current fill level, and that after one genuine automatic
    compaction `~/.claude/state/autocompact.json` holds a `models` entry whose `tokens` is
    below its `windowSize` with no `pending` left.
-3. Give phase 07 its `07-SPEC.md` and `07-PLAN.md` by moving
-   `.ultrapowers/archive/{specs,plans}/2026-07-28-gsd-core-detector-and-statusline*.md`
-   into its directory, and repair the references the move breaks.
+
+**Done 2026-07-31 — give phase 07 its spec and plan.** Moved out of the archive into the
+phase directory. `08-SPEC.md` and `EXECUTION-ORDER.md` keep the old paths: closed records say
+where a file was.
 
 ## Not yet phases
 
@@ -89,11 +91,14 @@ before it has content.
   constraint: `resolveRecordPaths` only resolves to `.ultrapowers/adr/` once the tree
   exists, and its normaliser should rewrite a register that already contains the statusline
   work's entries.
-- **Four process rules, agreed during phase 09.** The `= {}`-does-not-catch-`null` footgun
-  and the clock-in-tests rule go to `payload/rules-src/`, so `setup.mjs` carries them to
-  every machine. Two planning rules — run every command a plan prescribes before writing it
-  down, and check each stated invariant against the plan's own sample code — go to the
-  ultrapowers fork's `writing-plans` skill, because a rule compiled only into
+- **Four process rules, agreed during phase 09. Two landed 2026-07-31.** The
+  `= {}`-does-not-catch-`null` footgun is now in `payload/rules-src/node.base.md` and the
+  clock-dated-fixture rule in `payload/rules-src/testing.md`, so `setup.mjs` carries both to
+  every machine; neither binds anywhere until the next deploy, and neither is in
+  `~/.claude/rules-src/` by hand. Two planning rules are still owed — run every command a
+  plan prescribes before writing it down, and check each stated invariant against the plan's
+  own sample code. They go to the ultrapowers fork's `writing-plans` skill, because a rule
+  compiled only into
   `stack-rules.md` binds nothing until `/init-stack` has run. The ledger read-back check
   goes to the fork's `subagent-driven-development` skill; it was trialled once on phase 09
   and earned its place by finding a gap the ledger's own author could not see.

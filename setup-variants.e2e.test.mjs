@@ -50,7 +50,7 @@ test("no *.test.mjs leaks into any resolved profile (alwaysExclude)", () => {
   }
 });
 
-test("lite install: exact tree, 7 hooks, its own statusLine, manifest.variant", () => {
+test("lite install: exact tree, 8 hooks, its own statusLine, manifest.variant", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-lite-"));
   plantForeign(dir);
   const r = run(dir, ["--variant=lite", "--replace-all"]);
@@ -69,7 +69,7 @@ test("lite install: exact tree, 7 hooks, its own statusLine, manifest.variant", 
   for (const entries of Object.values(settings.hooks || {}))
     for (const e of entries) for (const h of (e.hooks || []))
       for (const a of (h.args || [])) scripts.add(String(a).split(/[\\/]/).pop());
-  assert.equal(scripts.size, 7);
+  assert.equal(scripts.size, 8);
   assert.equal(settings.statusLine.type, "command");
   assert.match(settings.statusLine.command, /hooks\/statusline\.mjs"$/);
   assert.ok(existsSync(join(dir, "hooks/statusline.mjs")), "statusLine points at a file lite does not install");
