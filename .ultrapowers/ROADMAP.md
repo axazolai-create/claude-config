@@ -3,15 +3,15 @@ updated: 2026-07-31
 current: null
 deployed_through: "08"
 phases:
-  - { phase: "01", slug: graphify-neo4j, status: complete, integration: merged }
-  - { phase: "02", slug: ai-development-mode, status: complete, integration: merged }
-  - { phase: "03", slug: ultrapowers-layer0-patcher, status: superseded, superseded_by: "04", integration: merged }
-  - { phase: "04", slug: ultrapowers-planning-tree, status: complete, integration: merged }
-  - { phase: "05", slug: versioning-and-changelog, status: complete, integration: merged }
-  - { phase: "06", slug: design-records-and-stack-rules, status: complete, integration: merged }
-  - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, integration: merged }
-  - { phase: "08", slug: unified-statusline, status: complete, integration: merged }
-  - { phase: "09", slug: context-meter-severity, status: complete, integration: merged }
+  - { phase: "01", slug: graphify-neo4j, status: complete, delivery: merged }
+  - { phase: "02", slug: ai-development-mode, status: complete, delivery: merged }
+  - { phase: "03", slug: ultrapowers-layer0-patcher, status: superseded, superseded_by: "04", delivery: merged }
+  - { phase: "04", slug: ultrapowers-planning-tree, status: complete, delivery: merged }
+  - { phase: "05", slug: versioning-and-changelog, status: complete, delivery: merged }
+  - { phase: "06", slug: design-records-and-stack-rules, status: complete, delivery: merged }
+  - { phase: "07", slug: gsd-core-detector-and-statusline, status: complete, delivery: merged }
+  - { phase: "08", slug: unified-statusline, status: complete, delivery: merged }
+  - { phase: "09", slug: context-meter-severity, status: complete, delivery: merged }
   - { phase: "10", slug: phase-progress-segment, status: planned, delivery: null }
 ---
 
@@ -24,11 +24,10 @@ deployed, and phase 09 is merged but not yet deployed. Phase 10 was specified on
 and has a spec but no plan. The one thing standing between the tree and a clean slate is that
 deploy.
 
-The frontmatter above is deliberately mixed: phase 10's row carries `delivery`, every earlier
-row still carries `integration`. Migrating the rest is phase 10's own first step — the segment
-it builds reads these fields, so renaming them from outside the phase would mean touching every
-state file twice. A reader should expect `integration` to disappear when phase 10 runs, not
-before.
+Every row carries `delivery`; `integration` is gone. Phase 10 migrated the vocabulary as its
+first step, because the segment it builds reads these fields. `delivery` records branch and
+merge state only — deployment stays the `deployed_through` waterline above, since one deploy
+carries every merged phase at once.
 
 `current` is `null` because naming a merged phase would say a false thing. The cost is
 known and accepted: with no phase named, the ultrapowers segment falls through to the

@@ -4,7 +4,7 @@ status: complete
 tasks_done: 13
 tasks_total: 13
 branch: feat/ultrapowers-planning-tree
-integration: merged
+delivery: merged
 updated: 2026-07-29
 ---
 

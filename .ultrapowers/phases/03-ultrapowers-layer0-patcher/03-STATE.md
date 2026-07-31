@@ -5,7 +5,7 @@ superseded_by: "04"
 tasks_done: 1
 tasks_total: 10
 branch: feat/ultrapowers-rework
-integration: merged
+delivery: merged
 updated: 2026-07-31
 ---
 
@@ -23,7 +23,8 @@ This file read `status: abandoned` until 2026-07-31. That was false in the one w
 matters: nothing here was given up, the approach was replaced by one that shipped. The
 status is `superseded` and carries `superseded_by: "04"`, because a `superseded` row whose
 successor is named only in prose reads as abandoned again to every parser and most readers.
-`superseded` and `integration: merged` are both true and not in tension.
+`superseded` and `delivery: merged` are both true and not in tension — which is the whole
+point of separating the two fields.
 Task 1 was a probe run with the user and its commits are in `master`
 (`e9519bd..371941b`). Task 2 was implemented (`85349ca`), reviewed "Needs fixes"
 with 2 Critical, given one fix round (`bd4eb58`), then rolled back by `e6adad9`,

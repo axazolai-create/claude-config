@@ -1,8 +1,7 @@
 ---
 phase: "09"
 status: complete
-delivery: branch
-integration: merged
+delivery: merged
 branch: feat/context-meter-severity
 depends_on: ["08"]
 tasks_done: 6

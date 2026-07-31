@@ -4,7 +4,7 @@ status: complete
 tasks_done: 10
 tasks_total: 11
 branch: feat/graphify-neo4j
-integration: merged
+delivery: merged
 updated: 2026-07-29
 ---
 

@@ -4,7 +4,7 @@ status: complete
 tasks_done: 8
 tasks_total: 8
 branch: feat/ai-dev-mode-spec
-integration: merged
+delivery: merged
 updated: 2026-07-29
 ---
 

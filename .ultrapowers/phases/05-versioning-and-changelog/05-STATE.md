@@ -4,7 +4,7 @@ status: complete
 tasks_done: 6
 tasks_total: 7
 branch: feat/versioning-changelog
-integration: merged
+delivery: merged
 updated: 2026-07-29
 ---
 
