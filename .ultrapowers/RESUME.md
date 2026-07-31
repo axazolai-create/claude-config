@@ -74,15 +74,17 @@ checker whose deployed copy is older and answers differently.
 - **State.** Each phase has `NN-STATE.md`; the tree has `ROADMAP.md`. Both are
   written when a status they record changes — not on a did-it/didn't basis.
 
-## One phase directory is incomplete, and knowingly
+## Every phase directory is complete — discharged 2026-07-31
 
-`07-gsd-core-detector-and-statusline` holds only `07-STATE.md` and
-`07-SUMMARY.md`. Its plan and design are still in `.ultrapowers/archive/` —
-`2026-07-28-gsd-core-detector-and-statusline.md` and its `-design.md` — because
-the move of plans into phase directories happened before phase 07 existed. Give
-it `07-PLAN.md` and `07-SPEC.md` the same way phases 04–06 got theirs, and repair
-the references the move breaks. The same is owed to the decision-records plan
-when its phase is created.
+`07-gsd-core-detector-and-statusline` held only `07-STATE.md` and `07-SUMMARY.md`,
+because the move of plans into phase directories happened before phase 07 existed.
+Its design and plan are now `07-SPEC.md` and `07-PLAN.md` in that directory, moved
+from `.ultrapowers/archive/{specs,plans}/` with history preserved. The documents that
+still name the archive paths — `08-SPEC.md` and `archive/plans/2026-07-28-EXECUTION-ORDER.md`
+— are closed records and keep them: a historical document says where a file was, and
+only current documents are repointed.
+
+The same move is still owed to the decision-records plan when its phase is created.
 
 ## Known wrong, deliberately left for the new phase
 
