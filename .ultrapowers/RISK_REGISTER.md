@@ -926,6 +926,32 @@
 
 
 
+### RISK-GRAPHPUSH-001 — Automatic push drags a full global MERGE behind every commit
+- **Status:** Active
+- **Context:** Phase 13 runs `graphify-neo4j-push.mjs` in the tail of the autosync worker, so
+  every commit now prunes this machine's repo tags and re-`MERGE`s the entire global graph over
+  the LAN. The graph is small today (269 nodes), but it grows with every repository registered,
+  and nothing bounds that growth.
+- **Mitigation:** The work is detached and never blocks the commit; two locks (per-repo in the
+  worker, global in the push) bound concurrency; the push is fail-soft on an unreachable NAS.
+  `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` turns it off without touching the sync.
+- **Residual:** Accepted. The locks bound concurrency, not cost — a large graph makes each push
+  slower, and the first sign will be a push that outlives its ten-minute lock TTL. If that
+  happens, the answer is a throttle stamp, deliberately not built now (see 13-SPEC.md).
+
+### RISK-GRAPHPUSH-002 — Driver recovery installs a package as a side effect of a commit
+- **Status:** Active
+- **Context:** The `neo4j` driver disappeared once already, because `uv tool install graphifyy`
+  without `--with neo4j` is the ordinary way graphify is upgraded, and `ensureNeo4jDriver` has
+  only ever had one caller, inside an interactive branch of `setup.mjs` that is skipped once
+  `GRAPHIFY_NEO4J` is recorded. Phase 13 gives it a second caller in the push path, so a commit
+  can now trigger a package install.
+- **Mitigation:** Recovery is attempted once per push and only on a machine that already opted
+  into Neo4j — consent for the driver was given when `neo4j.env` was written. Failure is a
+  fail-soft skip carrying the command to run, never a throw, and never blocks the commit.
+- **Residual:** Accepted. The alternative is a chain that silently stops working after a routine
+  upgrade, which is the failure this phase exists to end.
+
 ## Deferred
 ### RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 
