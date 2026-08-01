@@ -61,3 +61,24 @@ test("no push script means the command is the plain sync", () => {
   const withNull = buildSyncCommand({ ...withPush, pushScript: null, isWin: true });
   assert.equal(withNull.inner, plain.inner);
 });
+
+// Measured 2026-08-02, and it is why the per-commit autosync had never once run on Windows:
+// node escapes the quotes inside `inner` as \" , cmd.exe has no such escape, and the mangled
+// line makes cmd exit without running a single step - silently, since stdio is ignored.
+test("the windows spawn passes its arguments verbatim, or cmd runs nothing at all", () => {
+  assert.equal(buildSyncCommand({ ...args, isWin: true }).opts.windowsVerbatimArguments, true);
+});
+
+// Harmless on POSIX, where execve takes an argv array and nothing re-parses it.
+test("verbatim is a windows-only concern", () => {
+  assert.equal(buildSyncCommand({ ...args, isWin: false }).opts.windowsVerbatimArguments, false);
+});
+
+test("the sync runs detached and silent from the repository root, so no caller ever waits", () => {
+  for (const isWin of [true, false]) {
+    const o = buildSyncCommand({ ...args, isWin }).opts;
+    assert.equal(o.cwd, args.root);
+    assert.equal(o.detached, true);
+    assert.equal(o.stdio, "ignore");
+  }
+});
