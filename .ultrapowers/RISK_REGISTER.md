@@ -952,6 +952,29 @@
 - **Residual:** Accepted. The alternative is a chain that silently stops working after a routine
   upgrade, which is the failure this phase exists to end.
 
+### RISK-GRAPHPUSH-003 — graphify export neo4j --push writes every node and then never returns
+- **Status:** Active
+- **Context:** Observed 2026-08-01/02 during phase 13's live verification. `graphify export neo4j
+  --push` wrote the complete global graph — 84,640 nodes and 77,343 edges across 99 repositories,
+  exactly the total `graphify global list` reports — and then did not exit. It sat for 23 hours
+  with no TCP connections, all 24 threads in `UserRequest`, and 47 seconds of CPU across the whole
+  period. The log's last line is `[neo4j-push] pushing global graph to bolt://…`; the success line
+  `Pushed to Neo4j: <n> nodes, <m> edges` that `graphify-neo4j-push.mjs` relies on never arrives.
+  The defect is in graphify, not in this bundle: every line of the chain this repository owns did
+  its job, and the data reached Neo4j intact.
+- **Mitigation:** The ten-minute lock TTL in `hooks/lib/state-lock.mjs` contains the blast radius.
+  A wedged push holds `~/.claude/state/graphify-neo4j-push.lock` forever because
+  `process.on("exit")` cannot fire in a process that never exits, but `isHeld` judges by mtime, so
+  after ten minutes the stale lock is ignored and the next push proceeds. Without that TTL a single
+  wedge would have disabled every future push permanently.
+- **Residual:** Two things stay broken until graphify is fixed or the push learns a timeout.
+  (1) Nothing ever reports success: `~/.claude/state/graphify-neo4j-push.log` accumulates progress
+  lines and no verdict, so "did the push work" can only be answered by querying Neo4j. (2) Each
+  commit leaves a wedged python process behind, since the detached shell never reaches the step
+  that removes the sync lock either. The obvious fix is a wall-clock timeout around the `spawnSync`
+  in `bin/graphify-neo4j-push.mjs` that treats a non-returning export as done-and-unreported rather
+  than waiting forever; it is not in phase 13's scope and is deliberately not being written blind.
+
 ## Deferred
 ### RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 

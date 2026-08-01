@@ -1,7 +1,7 @@
 ---
-updated: 2026-07-31
-current: "13"
-deployed_through: "12"
+updated: 2026-08-02
+current: null
+deployed_through: "13"
 phases:
   - { phase: "01", slug: graphify-neo4j, status: complete, delivery: merged }
   - { phase: "02", slug: ai-development-mode, status: complete, delivery: merged }
@@ -15,19 +15,21 @@ phases:
   - { phase: "10", slug: phase-progress-segment, status: complete, delivery: merged }
   - { phase: "11", slug: protected-paths, status: complete, delivery: merged }
   - { phase: "12", slug: decision-records, status: complete, delivery: branch }
-  - { phase: "13", slug: graphify-neo4j-autosync, status: running, delivery: branch }
+  - { phase: "13", slug: graphify-neo4j-autosync, status: complete, delivery: merged }
 ---
 
 # Roadmap
 
-Phase 13 is running: the graphify chain reaches Neo4j on its own, or it does not reach it at
-all — investigation found it broken in four places and frozen since 3 July. Twelve phases are
-complete and one is superseded by phase 04. Everything
-through phase 08 is deployed; phases 09, 10 and 11 are merged and undeployed, and phase 12 sits
-on `feat/decision-records` awaiting its merge. Phases 10, 11 and 12 were all specified and
-implemented on 2026-07-31 — the statusline segment, the `.protected` mechanism and the decision
-records — which is why the queue below is finally empty. The one thing standing between the
-tree and a clean slate is the deploy.
+Nothing is running. Thirteen phases are complete and one is superseded by phase 04, and for the
+first time everything merged is also deployed — the waterline moved to 13 on 2026-08-02.
+
+Phase 13 closed the graphify chain: a commit now refreshes the global graph and carries it to
+Neo4j with nobody typing a flag, 84,640 nodes and 77,343 edges across 99 repositories. Its live
+verification earned its keep by failing — step 5 proved the detached spawn had never executed on
+Windows at all, a defect older than the phase, and `fix/autosync-spawn-verbatim` is the unplanned
+task that came of it. One external defect remains and is filed rather than papered over:
+`graphify export neo4j --push` writes everything and never returns, so the chain cannot report its
+own success (`RISK-GRAPHPUSH-003`). Detail in `phases/13-graphify-neo4j-autosync/13-SUMMARY.md`.
 
 Every row carries `delivery`; `integration` is gone. Phase 10 migrated the vocabulary as its
 first step, because the segment it builds reads these fields. `delivery` records branch and
@@ -55,6 +57,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 10 phase-progress-segment | complete | merged, deployed |
 | 11 protected-paths | complete | merged, deployed |
 | 12 decision-records | complete | merged, deployed |
+| 13 graphify-neo4j-autosync | complete | merged at `50e26e4`, deployed |
 | 13 graphify-neo4j-autosync | running | specified, on `feat/graphify-neo4j-autosync` |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
