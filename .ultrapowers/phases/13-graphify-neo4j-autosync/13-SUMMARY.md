@@ -3,9 +3,20 @@
 **Goal:** every commit refreshes the global graph and carries it to Neo4j, with nobody typing a
 flag and no LLM key required.
 
-**Outcome:** met, with one external defect left standing and filed. The chain now fires from a
-commit and reaches Neo4j on its own. What it cannot do is *report* that it finished, because
-`graphify export neo4j --push` never returns — `RISK-GRAPHPUSH-003`.
+**Outcome:** the chain does what the goal says — a commit refreshes the global graph and carries it
+to Neo4j with nobody typing a flag. Two defects found by the phase's own live verification mean it
+should not be left switched on as it stands, and both are filed rather than smoothed over:
+
+- `RISK-GRAPHPUSH-003` — `graphify export neo4j --push` writes everything and never returns, so the
+  chain cannot report its own success.
+- `RISK-GRAPHPUSH-004` — every commit prunes and re-pushes the *whole* graph. Measured: 84,640 nodes
+  down to **80** within a minute of the commit, refilling at ~2.7 nodes/s, which is close to nine
+  hours. A commit takes the graph away for most of a day.
+
+**Recommendation, not applied:** run with `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` until 003 and 004 are
+settled. The extract half is cheap, correct and worth keeping on; the push half needs a design
+decision — subgraph instead of global, debounce, or a timer off the commit path — and that belongs
+in a decision record, not in a hurried edit at the end of a phase.
 
 ## The numbers
 

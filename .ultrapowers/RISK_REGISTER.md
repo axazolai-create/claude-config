@@ -975,6 +975,41 @@
   in `bin/graphify-neo4j-push.mjs` that treats a non-returning export as done-and-unreported rather
   than waiting forever; it is not in phase 13's scope and is deliberately not being written blind.
 
+### RISK-GRAPHPUSH-004 — every commit prunes and re-pushes the whole graph, leaving Neo4j gutted for the duration
+- **Status:** Active
+- **Context:** Measured 2026-08-02, immediately after phase 13 made the push automatic. A single
+  commit to one repository triggers `graphify-neo4j-push.mjs`, which prunes **every** repo tag this
+  machine owns and then re-pushes the entire 135 MB global graph. The measured curve, sampled every
+  30 s from the commit:
+
+  | t | nodes |
+  |---|---|
+  | +30 s | 19,503 (prune still running) |
+  | +60 s | **80** |
+  | +600 s | 1,739 |
+  | +1200 s | 3,077 |
+  | +1800 s | 4,536 |
+
+  The database is not degraded during a rebuild, it is **emptied** — 84,640 nodes down to 80 — and
+  refills at roughly 2.7 nodes/s, which puts a full restore near **nine hours**. Combined with
+  `RISK-GRAPHPUSH-003`, which says the process never exits, a single commit takes the graph away for
+  most of a day and never reports coming back. The earlier estimate in this entry said twenty
+  minutes; that was extrapolated from the first manual push's opening phase, which ran at ~84
+  nodes/s before degrading, and it was wrong. The rate difference is itself a clue: that push
+  pruned almost nothing (the database held 269 nodes), while this one had to `DETACH DELETE` 84,640
+  first.
+- **Mitigation:** None in place. The per-repository sync lock stops two commits in the *same*
+  repository from stacking, and `RISK-GRAPHPUSH-003`'s global push lock stops two repositories from
+  pruning against each other, so the damage is bounded to one rebuild at a time rather than
+  compounded. `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` disables the push entirely and leaves the extract
+  running, which is the only switch available today.
+- **Residual:** The design assumed a push is cheap enough to attach to every commit; at this graph
+  size it is not. Three directions worth weighing before the next change, none of them written
+  blind: push only the committed repository's subgraph instead of the global one; debounce the push
+  so a burst of commits produces a single rebuild; or move it off the commit path onto a timer.
+  Choosing among them needs a decision record, not an edit — and `RISK-GRAPHPUSH-003` should be
+  settled first, since a push that never returns makes any debounce window meaningless.
+
 ## Deferred
 ### RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
 
