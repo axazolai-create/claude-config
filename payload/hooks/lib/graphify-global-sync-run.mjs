@@ -78,7 +78,6 @@ const cmd = buildSyncCommand({
   node: process.execPath,
   logPath: join(stateDir, "graphify-neo4j-push.log"),
 });
-spawn(cmd.shell, [cmd.flag, cmd.inner],
-  { cwd: root, detached: true, stdio: "ignore", windowsHide: true }).unref();
+spawn(cmd.shell, [cmd.flag, cmd.inner], cmd.opts).unref();
 
 process.exit(0);

@@ -10,5 +10,14 @@ export function buildSyncCommand({ root, name, lock, isWin, pushScript = null, n
     shell: isWin ? "cmd" : "sh",
     flag: isWin ? "/c" : "-c",
     inner: steps.join(isWin ? " & " : "; "),
+    // windowsVerbatimArguments is load-bearing: without it node escapes the quotes in `inner`
+    // as \" , which cmd.exe does not recognise, and cmd exits having run nothing.
+    opts: {
+      cwd: root,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      windowsVerbatimArguments: Boolean(isWin),
+    },
   };
 }
