@@ -171,7 +171,7 @@ switch at any time by re-running `setup.mjs`.
     `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
     `precompact-observe`, `token-usage-log`, `session-init` (the last one still runs, but skips
     every GSD-specific step — see the callout in "Project auto-init" below);
-  - `graphify` without the neo4j add-on; `leanmode`; three "lazy" skills
+  - `graphify`; `leanmode`; three "lazy" skills
     (`model-selection-policy`, `token-usage`, `update-changelog`);
   - its own `/init-stack` — stack detection + assembling `.claude/stack-rules.md` only, no
     Python/plugin machinery (see the callout in "Initial setup" above);
@@ -302,13 +302,6 @@ tests `*.test.mjs`, run via `node --test`):
   `task-lifecycle-probe` probe (checking `TaskCreated`/`TaskCompleted`) + the PreToolUse nudge
   `schedulewakeup-loop-only-nudge` (ScheduleWakeup is for /loop pacing only; a tracked background
   task's completion re-invokes the model by itself, so polling wakeups are pure waste).
-- **graphify → Neo4j** — `bin/graphify-neo4j-push.mjs` / `-prune.py` + `graphify-neo4j.cypher`:
-  exports the cross-project graph into Neo4j (details — the graphify section below).
-  The push is automatic: `hooks/lib/graphify-global-sync-run.mjs` runs it in the tail of the same
-  background process as the `extract`, inside the same lock. The script exists only in installs
-  that took the `neo4j` option (profile `base` excludes it); `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` turns
-  it off. The result lands in `~/.claude/state/graphify-neo4j-push.log`. The manual path remains:
-  `graphify-sync-all.mjs --neo4j-push`.
 
 Permissions in `settings.partial.json` are normalized on merge: `Write(x)`/`MultiEdit(x)` →
 `Edit(x)` (+ dedup), since Claude Code now matches all file tools via `Edit(path)`, and
@@ -766,9 +759,7 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   AST, no LLM key and no cost). No-op if
   `graphify` isn't installed, if it's not a `git commit`, or if the commit didn't succeed. A
   PID/mtime lock at `~/.claude/state/graphify-sync-<name>.lock` keeps concurrent triggers from
-  spawning parallel extractions; the lock is considered stale after 10 minutes. In the tail of the
-  same process, inside the same lock, the Neo4j push runs — if `bin/graphify-neo4j-push.mjs` is
-  installed and `CLAUDE_GRAPHIFY_NEO4J_PUSH` is not `0`.
+  spawning parallel extractions; the lock is considered stale after 10 minutes.
   **Limitation:** Claude Code hooks only see tool calls Claude itself makes — a manual
   `git commit`/`--amend` from a terminal or IDE is invisible to this hook in principle. That's
   what the native git hook below closes. Disable both: `CLAUDE_GRAPHIFY_AUTOSYNC=0`.

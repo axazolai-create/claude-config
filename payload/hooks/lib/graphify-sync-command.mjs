@@ -1,10 +1,8 @@
-// The one shell string the autosync worker spawns, as data rather than inline concatenation:
-// the worker's own effects are untestable, this is not.
+// The one shell string the autosync worker spawns, as data rather than inline concatenation.
 const quote = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
 
-export function buildSyncCommand({ root, name, lock, isWin, pushScript = null, node = "node", logPath }) {
+export function buildSyncCommand({ root, name, lock, isWin }) {
   const steps = [`graphify ${["extract", root, "--code-only", "--global", "--as", name].map(quote).join(" ")}`];
-  if (pushScript) steps.push(`${quote(node)} ${quote(pushScript)} > ${quote(logPath)} 2>&1`);
   steps.push(isWin ? `del /f /q ${quote(lock)}` : `rm -f ${quote(lock)}`);
   return {
     shell: isWin ? "cmd" : "sh",

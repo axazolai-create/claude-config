@@ -85,9 +85,6 @@ test("base drops all GSD, keeps neo4j opt-in and design/infra keep-set", () => {
     assert.ok(!/^(agents\/gsd-|hooks\/gsd-|hooks\/lib\/gsd-)/.test(r), `GSD leaked into base: ${r}`);
     assert.notEqual(r, "rules-src/gsd.md");
   }
-  const baseWithNeo = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
-  assert.ok(baseWithNeo.rels.includes("bin/lib/neo4j-config.mjs"), "base neo4j promotable");
-  assert.ok(!base.rels.includes("bin/lib/neo4j-config.mjs"), "base neo4j excluded by default");
   // OI-4 keep-set present in base:
   for (const f of ["hooks/bg-supervision-nudge.mjs", "commands/init-mcp.md",
                    "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs"])
@@ -97,15 +94,11 @@ test("base drops all GSD, keeps neo4j opt-in and design/infra keep-set", () => {
     assert.ok(!base.rels.includes(f), `full-only infra leaked into base: ${f}`);
 });
 
-test("lite drops base's universal infra + neo4j", () => {
+test("lite drops base's universal infra", () => {
   const lite = resolveVariant({ repoRoot: ROOT, variant: "lite" });
   for (const f of ["hooks/bg-supervision-nudge.mjs", "commands/init-mcp.md",
-                   "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs",
-                   "bin/lib/neo4j-config.mjs"])
+                   "hooks/schedulewakeup-loop-only-nudge.mjs", "hooks/pnpm-phantom-fix-hook.mjs"])
     assert.ok(!lite.rels.includes(f), `lite must drop ${f}`);
-  // lite offers no neo4j opt-in at all (moved to base): opting in on lite yields nothing.
-  const liteWithNeo = resolveVariant({ repoRoot: ROOT, variant: "lite", activeOptional: ["neo4j"] });
-  assert.ok(!liteWithNeo.rels.includes("bin/lib/neo4j-config.mjs"), "lite has no neo4j opt-in");
 });
 
 test("full variant is identity over payload/ (minus alwaysExclude)", () => {
@@ -209,18 +202,10 @@ test("import graph: no static import in the lite set resolves to an excluded fil
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
-test("optional neo4j: opted in, ecosystem files are included and no longer excluded", () => {
-  const off = resolveVariant({ repoRoot: ROOT, variant: "base" });
-  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
-  const neo = "bin/lib/neo4j-config.mjs";
-  assert.ok(!off.rels.includes(neo) && off.excludedSet.has(neo), "default: excluded");
-  assert.ok(on.rels.includes(neo) && !on.excludedSet.has(neo), "opted-in: included, not excluded");
-  assert.ok(on.rels.includes("bin/graphify-neo4j-push.mjs"), "push wrapper included");
-  assert.ok(on.rels.includes("graphify-neo4j.cypher"), "cypher cookbook included");
-});
-
-test("optional neo4j: opted-in set is import-closed (no dangling static import)", () => {
-  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["neo4j"] });
+// No profile declares an `optional` group today. These pin the machinery's behaviour when a
+// group name arrives anyway, so reintroducing a group starts from a known-good baseline.
+test("base is import-closed (no dangling static import)", () => {
+  const on = resolveVariant({ repoRoot: ROOT, variant: "base" });
   const relSet = new Set(on.rels);
   const bad = [];
   for (const rel of on.rels) {
@@ -234,14 +219,14 @@ test("optional neo4j: opted-in set is import-closed (no dangling static import)"
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
-test("optional neo4j: unknown group name is a no-op, not a throw", () => {
+test("an unknown optional group name is a no-op, not a throw", () => {
+  const off = resolveVariant({ repoRoot: ROOT, variant: "base" });
   const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["does-not-exist"] });
-  assert.ok(!on.rels.includes("bin/lib/neo4j-config.mjs"));
+  assert.deepEqual(on.rels, off.rels);
 });
 
 test("optional groups are a no-op on full (already identity)", () => {
-  const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["neo4j"] });
-  assert.ok(v.rels.includes("bin/lib/neo4j-config.mjs"));
+  const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["anything"] });
   // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
   // .test.mjs), every **.test.mjs, and the claude-md/ fragments (build input, see the test
   // above), nothing else leaks in. Non-vacuous: also assert the excluded set is non-empty and

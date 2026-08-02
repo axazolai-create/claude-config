@@ -214,20 +214,15 @@ test("a hand-set statusLine survives a base install", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("augment toggle: base + --configure-neo4j=on adds files; =off prunes them, no manual chain", () => {
+// No profile declares an `optional` group today. A --configure-<group> flag for a group that
+// does not exist must install normally and record an empty activeOptional, never fail.
+test("a --configure flag for an unknown group is a no-op, and the install still succeeds", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-augment-"));
-  const neo4jFile = join(dir, "bin/lib/neo4j-config.mjs");
 
   assert.equal(run(dir, ["--variant=base", "--skip-all"]).status, 0);
-  assert.ok(!existsSync(neo4jFile), "neo4j should be off by default on base");
   assert.deepEqual(readManifest(dir).activeOptional, []);
 
-  assert.equal(run(dir, ["--variant=base", "--configure-neo4j=on", "--skip-all"]).status, 0);
-  assert.ok(existsSync(neo4jFile), "--configure-neo4j=on should add the file in-process");
-  assert.deepEqual(readManifest(dir).activeOptional, ["neo4j"]);
-
-  assert.equal(run(dir, ["--variant=base", "--configure-neo4j=off", "--skip-all"]).status, 0);
-  assert.ok(!existsSync(neo4jFile), "--configure-neo4j=off should prune the file in-process");
+  assert.equal(run(dir, ["--variant=base", "--configure-nosuchgroup=on", "--skip-all"]).status, 0);
   assert.deepEqual(readManifest(dir).activeOptional, []);
 
   rmSync(dir, { recursive: true, force: true });

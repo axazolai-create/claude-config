@@ -12,6 +12,8 @@
 - [RISK-DESIGNSTACK-006 — Pinned npm package ids can drift or rename](#risk-designstack-006-pinned-npm-package-ids-can-drift-or-rename)
 - [RISK-GRAPHPUSH-001 — Automatic push drags a full global MERGE behind every commit](#risk-graphpush-001-automatic-push-drags-a-full-global-merge-behind-every-commit)
 - [RISK-GRAPHPUSH-002 — Driver recovery installs a package as a side effect of a commit](#risk-graphpush-002-driver-recovery-installs-a-package-as-a-side-effect-of-a-commit)
+- [RISK-GRAPHPUSH-003 — graphify export neo4j --push writes every node and then never returns](#risk-graphpush-003-graphify-export-neo4j---push-writes-every-node-and-then-never-returns)
+- [RISK-GRAPHPUSH-004 — every commit prunes and re-pushes the whole graph, leaving Neo4j gutted for the duration](#risk-graphpush-004-every-commit-prunes-and-re-pushes-the-whole-graph-leaving-neo4j-gutted-for-the-duration)
 - [RISK-GSDEXEC-001 — `gsd-executor-decomposing.md` is a full fork with no inheritance, will drift](#risk-gsdexec-001-gsd-executor-decomposingmd-is-a-full-fork-with-no-inheritance-will-drift)
 - [RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it](#risk-harness-001-connection-closed-mid-response-truncates-a-turn-and-the-bundle-cannot-retry-it)
 - [RISK-HOOKSTDIN-001 — `token-usage-log.mjs` throws on a literal `null` on stdin](#risk-hookstdin-001-token-usage-logmjs-throws-on-a-literal-null-on-stdin)
@@ -65,8 +67,6 @@
 ### Closed
 - [RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill](#risk-designstack-005-pro-max-design-sub-skill-hardcodes-global-paths-prune-could-delete-a-user-skill)
 - [RISK-FALLOW-001 — `fallow.enabled` is set optimistically, not gated on binary presence](#risk-fallow-001-fallowenabled-is-set-optimistically-not-gated-on-binary-presence)
-- [RISK-GRAPHPUSH-003 — graphify export neo4j --push writes every node and then never returns](#risk-graphpush-003-graphify-export-neo4j---push-writes-every-node-and-then-never-returns)
-- [RISK-GRAPHPUSH-004 — every commit prunes and re-pushes the whole graph, leaving Neo4j gutted for the duration](#risk-graphpush-004-every-commit-prunes-and-re-pushes-the-whole-graph-leaving-neo4j-gutted-for-the-duration)
 - [RISK-INITSTACK-001 — `/init-stack` GSD-free rewrite deleted steps 6-11; ~24 stale references + 2 dropped capabilities](#risk-initstack-001-init-stack-gsd-free-rewrite-deleted-steps-6-11-24-stale-references-2-dropped-capabilities)
 - [RISK-STATUSLINE-001 — the context-window size field name is documented, not observed](#risk-statusline-001-the-context-window-size-field-name-is-documented-not-observed)
 - [RISK-ULTRAPOWERS-002 — Rebrand is machine-wide and cannot be gated per project](#risk-ultrapowers-002-rebrand-is-machine-wide-and-cannot-be-gated-per-project)
@@ -83,6 +83,9 @@
   reproducibility; documented safe alternative (download → inspect → run) in README; secrets
   never embedded in bootstrap scripts. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** Standard installer trust model — user must trust the repo owner. Accepted.
+
+
+
 
 ### RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
 
@@ -116,6 +119,9 @@
   means either widening the hook's skip pattern or making the manual flow's message match it; both
   edit SKILL.md text reviewed on 2026-07-28 and belong in a deliberate follow-up, not a drive-by.
 
+
+
+
 ### RISK-CHANGELOG-002 — `lint` costs two `git log` subprocesses per queued entry, on every commit once the nudge lands
 
 - **Status:** Active
@@ -143,6 +149,9 @@
   `try/catch` plus a `main().catch`, so a *failing* lint stays fail-open and never blocks a commit.
   A *slow* one still delays it, which try/catch cannot help with.
 
+
+
+
 ### RISK-CLAUDEMD-001 — Legacy `@.claude/CLAUDE.md` imports double-load project context
 
 - **Status:** Active
@@ -154,6 +163,9 @@
   deny hook rightly blocks writes). Remove the `@.claude/CLAUDE.md` line by hand when
   touching an affected project's root `CLAUDE.md`. Status nuance (migrated 2026-07-31): accepted, manual cleanup
 - **Residual:** duplicated context in affected projects until manually cleaned. Accepted.
+
+
+
 
 ### RISK-CLAUDEMD-002 — the shipped rules name commands, skills and paths that nothing verifies
 
@@ -197,6 +209,9 @@
   the same construct was assumed to be in `precompact-observe.mjs` before it was reproduced.
   Fixing it is a few minutes and belongs to whoever next touches that hook family.
 
+
+
+
 ### RISK-DESIGNSTACK-003 — Pro Max search requires Python 3
 
 - **Status:** Active
@@ -209,6 +224,9 @@
 - **Residual:** on a python-less machine the agent uses the static reference tables rather than
   ranked search — reduced quality, not a failure. Accepted.
 
+
+
+
 ### RISK-DESIGNSTACK-006 — Pinned npm package ids can drift or rename
 
 - **Status:** Active
@@ -220,6 +238,9 @@
   without aborting `/init-stack`. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a silent rename leaves the components un-updated until the ids are corrected;
   detection is manual. Accepted / low.
+
+
+
 
 ### RISK-GRAPHPUSH-001 — Automatic push drags a full global MERGE behind every commit
 - **Status:** Active
@@ -234,6 +255,7 @@
   slower, and the first sign will be a push that outlives its ten-minute lock TTL. If that
   happens, the answer is a throttle stamp, deliberately not built now (see 13-SPEC.md).
 
+
 ### RISK-GRAPHPUSH-002 — Driver recovery installs a package as a side effect of a commit
 - **Status:** Active
 - **Context:** The `neo4j` driver disappeared once already, because `uv tool install graphifyy`
@@ -246,6 +268,94 @@
   fail-soft skip carrying the command to run, never a throw, and never blocks the commit.
 - **Residual:** Accepted. The alternative is a chain that silently stops working after a routine
   upgrade, which is the failure this phase exists to end.
+
+
+### RISK-GRAPHPUSH-003 — graphify export neo4j --push writes every node and then never returns
+- **Status:** Active
+- **Resolution:** Closed by removal on 2026-08-02. The Neo4j path left the bundle entirely —
+  `graphify-neo4j-push.mjs`, `graphify-neo4j-prune.py`, `neo4j-config.mjs`, `graphify-neo4j.cypher`,
+  the push step in the autosync worker, `--neo4j-push` in `graphify-sync-all.mjs`, the `neo4j`
+  optional profile group, the `setup.mjs` opt-in and the GSD agent routing block. Measured before
+  the decision: 84,640 nodes and 77,343 edges written per push, zero reads of the Neo4j copy in
+  any transcript, and one indexed node lookup still costing 3.7 s.
+- **Context:** Observed 2026-08-01/02 during phase 13's live verification. `graphify export neo4j
+  --push` wrote the complete global graph — 84,640 nodes and 77,343 edges across 99 repositories,
+  exactly the total `graphify global list` reports — and then did not exit. It sat for 23 hours
+  with no TCP connections, all 24 threads in `UserRequest`, and 47 seconds of CPU across the whole
+  period. The log's last line is `[neo4j-push] pushing global graph to bolt://…`; the success line
+  `Pushed to Neo4j: <n> nodes, <m> edges` that `graphify-neo4j-push.mjs` relies on never arrives.
+  The defect is in graphify, not in this bundle: every line of the chain this repository owns did
+  its job, and the data reached Neo4j intact.
+- **Mitigation:** The ten-minute lock TTL in `hooks/lib/state-lock.mjs` contains the blast radius.
+  A wedged push holds `~/.claude/state/graphify-neo4j-push.lock` forever because
+  `process.on("exit")` cannot fire in a process that never exits, but `isHeld` judges by mtime, so
+  after ten minutes the stale lock is ignored and the next push proceeds. Without that TTL a single
+  wedge would have disabled every future push permanently. Status nuance (migrated 2026-08-02): Closed
+- **Residual:** Three things stay broken until graphify is fixed or the push learns a timeout.
+  (1) Nothing ever reports success: `~/.claude/state/graphify-neo4j-push.log` accumulates progress
+  lines and no verdict, so "did the push work" can only be answered by querying Neo4j. (2) Each
+  commit leaves a wedged python process behind, since the detached shell never reaches the step
+  that removes the sync lock either. (3) **The TTL that saves the system also defeats the
+  serialisation task 5 was written to provide.** A wedged push never refreshes
+  `graphify-neo4j-push.lock`, so ten minutes after it starts `isHeld` calls the lock stale and the
+  next commit launches a *second* concurrent push — whose prune `DETACH DELETE`s what the first one
+  has just merged. That is precisely the failure the global lock exists to prevent, and combined
+  with `RISK-GRAPHPUSH-004`'s nine-hour rebuild the window in which it can happen is the whole day.
+  Observed 2026-08-02: the sync lock had already been removed by a later commit's chain while the
+  02:03 push was still running.
+
+  The obvious fix is a wall-clock timeout around the `spawnSync` in `bin/graphify-neo4j-push.mjs`
+  that treats a non-returning export as done-and-unreported rather than waiting forever — which
+  also restores the lock's release path and with it the serialisation. It is not in phase 13's
+  scope and is deliberately not being written blind. Until then the switch is
+  `CLAUDE_GRAPHIFY_NEO4J_PUSH=0`, which stops the push and leaves the extract running.
+
+
+### RISK-GRAPHPUSH-004 — every commit prunes and re-pushes the whole graph, leaving Neo4j gutted for the duration
+- **Status:** Active
+- **Resolution:** Closed by removal on 2026-08-02, together with `RISK-GRAPHPUSH-003`. No commit
+  pushes anything to Neo4j any more. The root cause is recorded for whoever revisits the idea:
+  graphify's `graphdb.py` MERGEs one node per auto-commit round trip against an unindexed key,
+  and its edge `MATCH (a {id: $src}), (b {id: $tgt})` carries no label, so it cannot use an index
+  at all. Neither graphify nor this bundle ever issued a `CREATE INDEX`.
+- **Context:** Measured 2026-08-02, immediately after phase 13 made the push automatic. A single
+  commit to one repository triggers `graphify-neo4j-push.mjs`, which prunes **every** repo tag this
+  machine owns and then re-pushes the entire 135 MB global graph. The measured curve, sampled every
+  30 s from the commit:
+
+  | t | nodes |
+  |---|---|
+  | +30 s | 19,503 (prune still running) |
+  | +60 s | **80** |
+  | +600 s | 1,739 |
+  | +1200 s | 3,077 |
+  | +1800 s | 4,536 |
+
+  The database is not degraded during a rebuild, it is **emptied** — 84,640 nodes down to 80 — and
+  refills at roughly 2.7 nodes/s. Measured against the clock rather than extrapolated: the node
+  phase finished in about **eleven hours**, and only then did the relationship phase begin — at
+  11 h 15 m past the commit the graph held all 84,640 nodes but just 6,034 of 77,343 edges, and was
+  still running. A single commit therefore takes the graph away for **more than a day**, and per
+  `RISK-GRAPHPUSH-003` never announces coming back.
+
+  Two earlier figures in this entry were wrong and are kept as corrections rather than deleted:
+  "twenty minutes" was extrapolated from the first manual push's opening phase, which ran at ~84
+  nodes/s before degrading; "near nine hours" projected the observed 2.7 nodes/s across the nodes
+  alone and did not account for the edge phase at all. The rate difference between the two pushes is
+  itself a clue — the manual one pruned almost nothing, since the database held 269 nodes, while
+  this one had to `DETACH DELETE` 84,640 first.
+- **Mitigation:** None in place. The per-repository sync lock stops two commits in the *same*
+  repository from stacking, and `RISK-GRAPHPUSH-003`'s global push lock stops two repositories from
+  pruning against each other, so the damage is bounded to one rebuild at a time rather than
+  compounded. `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` disables the push entirely and leaves the extract
+  running, which is the only switch available today. Status nuance (migrated 2026-08-02): Closed
+- **Residual:** The design assumed a push is cheap enough to attach to every commit; at this graph
+  size it is not. Three directions worth weighing before the next change, none of them written
+  blind: push only the committed repository's subgraph instead of the global one; debounce the push
+  so a burst of commits produces a single rebuild; or move it off the commit path onto a timer.
+  Choosing among them needs a decision record, not an edit — and `RISK-GRAPHPUSH-003` should be
+  settled first, since a push that never returns makes any debounce window meaningless.
+
 
 ### RISK-GSDEXEC-001 — `gsd-executor-decomposing.md` is a full fork with no inheritance, will drift
 
@@ -269,6 +379,9 @@
   the cost of the only mechanism that gives a genuinely structural (tools-grant-based, not
   prose-based) depth-3 cap — see `rules-src/gsd.md`'s "The one sanctioned depth-3 exception"
   section for why the alternative (a prose-conditional single file) was rejected.
+
+
+
 
 ### RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
 
@@ -314,6 +427,9 @@
 
 - **Mitigation:** Status nuance (migrated 2026-07-31): Root-caused 2026-07-28 — a LAN-side proxy timeout, not a Claude Code defect. Mitigated
 
+
+
+
 ### RISK-HOOKSTDIN-001 — `token-usage-log.mjs` throws on a literal `null` on stdin
 
 - **Status:** Active
@@ -328,6 +444,9 @@
 - **Mitigation:** none yet. The one-line guard above is known to work and is already proven in a
   sibling hook. Status nuance (migrated 2026-07-31): 2026-07-30 — found by phase 09, not caused by it, and deliberately not fixed there
 
+
+
+
 ### RISK-NEO4J-003 — Neo4j credentials leaking into the repo or argv
 
 - **Status:** Active
@@ -340,6 +459,9 @@
   remains the backstop. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a user could still hand-paste creds into a committed file; the gate catches common
   shapes but not all. Accepted.
+
+
+
 
 ### RISK-NEO4J-004 — graphify upgrade breaks the write path or the agent patch
 
@@ -355,6 +477,9 @@
 - **Residual:** a CLI-level breaking change in graphify would need a wrapper update; surfaced by the
   quality-check queries failing. Accepted.
 
+
+
+
 ### RISK-NEO4J-005 — Same repo cloned on two PCs flip-flops in Neo4j
 
 - **Status:** Active
@@ -367,6 +492,9 @@
   distinct nodes. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** transient oscillation for a genuinely divergent shared repo under frequent dual
   sync. Accepted; revisit only if observed.
+
+
+
 
 ### RISK-PHASEDIR-001 — `phase-dir` caps a kind at 99, and a leaked lock is never collected
 
@@ -397,6 +525,9 @@
   by hand (`rmdir` the lock; rename by hand past 99). Widening the prefix is deferred until a tree
   approaches the ceiling, since it would rename every existing directory and every document inside
   it.
+
+
+
 
 ### RISK-PLANTREE-001 — The risk register no longer lives where the rules say to look for it
 
@@ -443,6 +574,9 @@
   all implement. No data-loss exposure in any of these: the register is tracked in git and
   maintained by hand; what was lost was one automatic append.
 
+
+
+
 ### RISK-PNPM-001 — False positives from dynamic/conditional imports
 
 - **Status:** Active
@@ -458,6 +592,9 @@
   so an over-declaration is trivially reversible by hand. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** at worst a harmless, unused optional-peer line in `pnpm-workspace.yaml`. Accepted.
 
+
+
+
 ### RISK-PNPM-002 — Native-trigger coverage gap for sub-package installs
 
 - **Status:** Active
@@ -470,6 +607,9 @@
   detection latency, not a wrong write. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** a phantom introduced by a manual sub-package install stays latent until the next
   top-level install or manual scan. Accepted; documented as a caveat in the command.
+
+
+
 
 ### RISK-PNPM-003 — Auto-writing pnpm-workspace.yaml
 
@@ -484,6 +624,9 @@
   unit tests. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** an unusual hand-authored `pnpm-workspace.yaml` shape falls back to manual entry
   rather than an automated fix. Accepted — safety over convenience.
+
+
+
 
 ### RISK-RULESREACH-001 — Process rules bind only after a deploy, so a repository can run for weeks under rules it does not have
 - **Status:** Active
@@ -512,6 +655,9 @@
   repository, where a test gates a commit without any installation step. The second is what this
   entry's own mitigation did, and it is the only half that worked today.
 
+
+
+
 ### RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported
 
 - **Status:** Active
@@ -533,6 +679,9 @@
   test that the note is actually emitted; left out of the gsd-core detector's fix wave because it is
   neither that feature's code nor on its recovery path.
 
+
+
+
 ### RISK-STACKRULES-001 — Model-driven rules compilation can lose requirements
 
 - **Status:** Active
@@ -545,6 +694,9 @@
   frontmatter marks it machine-owned so fixes go into `rules-src/` (source of truth) and a
   rebuild is idempotent; the snapshot is a reviewable file, not hidden state. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** prose-level nuance can still be lossy between rebuilds. Accepted.
+
+
+
 
 ### RISK-STACKRULES-002 — Snapshot desync / stale auto-loading copies
 
@@ -577,6 +729,9 @@
   `markers` and never reads the rule sections. (4) Machines that skip `setup.mjs` after upgrading
   stay on the old (working) mechanism until they run it. All accepted.
 
+
+
+
 ### RISK-STATUSLINE-002 — the autocompact point is assumed until a compaction is observed
 
 - **Status:** Active
@@ -600,6 +755,9 @@
   its `windowSize`, and no `pending` key remains. If `pending` survives, promotion is not
   happening; if `tokens` equals `windowSize`, nothing was learned.
 
+
+
+
 ### RISK-SUP-001 — Hang supervision depends on the model wrapping the job
 
 - **Status:** Active
@@ -613,6 +771,9 @@
 - **Residual:** a model that ignores the nudge and launches a raw job can still hang invisibly.
   Accepted — this is the ceiling of what hooks can enforce.
 
+
+
+
 ### RISK-SUP-003 — supervise-bg could kill a legitimately long or quiet job
 
 - **Status:** Active
@@ -623,6 +784,9 @@
   skips obvious long-lived servers entirely, so those are not wrapped in the first place. Status nuance (migrated 2026-07-31): accepted / low
 - **Residual:** a mis-tuned bound on an atypical job could kill it early; the `HANG` marker and
   exit code 124 make that diagnosable. Accepted.
+
+
+
 
 ### RISK-TESTUNIT-001 — `.test/unit/` is gitignored, so tests there rot unnoticed
 
@@ -651,6 +815,9 @@
   sharpens the risk rather than changing its status, because whichever way the user settles it,
   "run the full suite" needs an invocation that actually collects these files.
 
+
+
+
 ### RISK-TOKENLOG-001 — Scraped model pricing can silently break
 
 - **Status:** Active
@@ -667,6 +834,9 @@
   token counts only). Status nuance (migrated 2026-07-31): accepted
 - **Residual:** `cost_usd` is always a **best-effort local estimate**, never billing-grade — same
   disclaimer Claude Code's own `/usage` command carries for its dollar figure. Accepted.
+
+
+
 
 ### RISK-ULTRAPOWERS-001 — Owning a fork carries merge burden on every upstream release
 
@@ -686,6 +856,9 @@
   upstream has since implemented is reported as obsolete instead of carried forever. Status nuance (migrated 2026-07-31): accepted, 2026-07-27; rewritten the same day, when the fork replaced the patcher
 - **Residual:** a release that restructures the tree wholesale still needs a human read. That is
   what the size threshold exists to surface rather than hide.
+
+
+
 
 ### RISK-ULTRAPOWERS-004 — Keep-list rot devalues the completeness check
 
@@ -713,6 +886,9 @@
 
 - **Mitigation:** Status nuance (migrated 2026-07-31): Open (mitigated by design; narrowed 2026-07-27 when the ignore list became a
 
+
+
+
 ### RISK-ULTRAPOWERS-006 — Agent registry adds resident context cost every session
 
 - **Status:** Active
@@ -729,6 +905,9 @@
 - **Residual:** ~1 300-2 200 tokens resident in `base`/`lite`, deliberately spent to buy per-agent
   tier selection. Accepted.
 
+
+
+
 ### RISK-ULTRAPOWERS-008 — Upstream may change its licence or its direction
 
 - **Status:** Active
@@ -741,6 +920,9 @@
   the fork's README and `plugin.json` description, stated as a fork rather than implied. Status nuance (migrated 2026-07-31): accepted, 2026-07-27
 - **Residual:** future releases could become unusable to us. The fork keeps working at whatever
   version we last merged, which is the whole point of holding the objects ourselves.
+
+
+
 
 ### RISK-ULTRAPOWERS-010 — `/gsd-update` reinstalls gsd-core at any time
 
@@ -756,6 +938,9 @@
   hook that polices another product's installation on every session — a standing background
   behaviour to remove software the user may have just deliberately installed. That is a worse
   trade than periodic drift, and it is out of scope for this feature.
+
+
+
 
 ### RISK-VARIANT-001 — Variant switch could delete a file the user hand-edited under `~/.claude`
 
@@ -777,6 +962,9 @@
   list first — the hash gate still protects modified files even then, but curated/unmodified
   surplus is removed without a per-file prompt. Accepted — same trust model as every other
   bulk-flag use in this installer.
+
+
+
 
 ### RISK-VARIANT-002 — `managedPlugins` marketplace ids can drift from the live marketplace
 
@@ -811,6 +999,9 @@
   the user runs by hand, catching the failure before it executes. Accepted; revisit by
   confirming the id on a machine that has `gsd` installed via the marketplace.
 
+
+
+
 ### RISK-VARIANT-003 — The gsd-core detector edits hook entries this bundle does not own
 
 - **Status:** Active
@@ -829,6 +1020,9 @@
   removed with the rest. It is restorable from the batch, but the user is not asked about it
   separately. Accepted: the alternative is leaving dead registrations pointing at deleted files.
 
+
+
+
 ### RISK-VARIANT-004 — `/gsd-update` reinstalls gsd-core behind the detector's back
 
 - **Status:** Active
@@ -842,6 +1036,9 @@
   says it should not be in, with no signal. A session-start guard was considered and left out of
   scope — it would put a foreign-product check on every session start for a condition the user
   creates deliberately.
+
+
+
 
 ### RISK-VARIANT-005 — A declined prune of `gsd-defaults.partial.json` is re-offered on every non-`full` run
 
@@ -866,6 +1063,9 @@
   hardcoded; that changes what `manifestNow` means (files this bundle *ships*, not files it writes)
   and was too broad to make inside the gsd-core detector's branch.
 
+
+
+
 ### RISK-VERBOSITY-001 — "Terse" verbosity axis slides into minification or drops load-bearing intent
 
 - **Status:** Active
@@ -879,6 +1079,9 @@
   construction (same carve-out leanmode makes). Status nuance (migrated 2026-07-31): accepted, behavioral
 - **Residual:** prose-guided behavior can still misfire on an edge case; caught in review, not
   hook-enforced. Accepted.
+
+
+
 
 ## Deferred
 ### RISK-GRAPHFRESH-001 — Stage 2 freshness edits regress the working graphify autosync
@@ -895,6 +1098,9 @@
 - **Residual:** none accepted yet — this risk is not closed until Stage 2 ships with the guard
   test green, or is deferred to its own spec.
 
+
+
+
 ### RISK-INJECT-001 — Generalizing the leanmode hook into an axis injector could change leanmode behavior
 
 - **Status:** Deferred (until tests green)
@@ -909,6 +1115,9 @@
 - **Residual:** the injector composition layer is new code; regression risk retired once the
   leanmode suite + new tests are green.
 
+
+
+
 ### RISK-SUP-002 — Task* hook events unverified in this harness build
 
 - **Status:** Deferred (verification pending)
@@ -918,6 +1127,9 @@
   not exist, the entries are inert (unknown events are ignored). Real handling is wired only after
   the probe log confirms they fire and reveals their schema (post-restart).
 - **Residual:** the cleaner TaskCreated launch surface stays unused until verified. Accepted.
+
+
+
 
 ## Mitigated
 ### RISK-CLEANUP-001 — `/claude-cleanup` could cause irreversible loss of user data
@@ -952,6 +1164,9 @@
   never wired into `buildPlan`; the running session stays protected by
   `--exclude-session <uuid>` plus the age-based KEEP window.)
 
+
+
+
 ### RISK-DESIGNSTACK-001 — Impeccable installer footgun writes into all harnesses + settings.local.json
 
 - **Status:** Mitigated
@@ -969,6 +1184,9 @@
 - **Residual:** relies on the installer honouring `--scope=project`/`--no-hooks`; a future
   Impeccable that ignores them would need the orchestrator pinned/updated. Accepted.
 
+
+
+
 ### RISK-DESIGNSTACK-002 — `impeccable update` clobbers the Pro Max content-graft
 
 - **Status:** Mitigated
@@ -983,6 +1201,9 @@
   not found and the graft is **skipped** (reported as `skippedNoAnchor`), not mis-inserted — the
   detector still works, just without Pro Max enrichment until the anchors are refreshed. Accepted.
 
+
+
+
 ### RISK-DESIGNSTACK-004 — Registered hook path couples to the installed skill's script location
 
 - **Status:** Mitigated
@@ -995,6 +1216,9 @@
   present. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** between an upstream rename and the next `/init-stack`/update cycle the hook could be
   stale. Low (Impeccable's script layout has been stable at v3.3.1); accepted.
+
+
+
 
 ### RISK-NEO4J-001 — Multi-source staleness when several PCs push the global graph to one Neo4j
 
@@ -1011,6 +1235,9 @@
   them first and can be briefly orphaned on that repo's refresh; MERGE re-adds them on next push.
   See RISK-NEO4J-005 for the same-repo-two-PCs case. Accepted.
 
+
+
+
 ### RISK-NEO4J-002 — NAS/Neo4j unavailable at push time
 
 - **Status:** Mitigated
@@ -1022,6 +1249,9 @@
   push is never a prerequisite for any commit/sync step. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** Neo4j can lag the JSON until the next successful push. Acceptable — JSON is the
   source of truth graphify reads; Neo4j is an eventually-consistent mirror. Accepted.
+
+
+
 
 ### RISK-NEO4J-006 — Connection test at setup time depends on the neo4j driver being present
 
@@ -1038,6 +1268,9 @@
   failure). Governed by decision D1 in the plan. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** on a PC with no way to install the driver, Neo4j config is deferred, not saved
   broken. Accepted — deferral is the correct outcome there.
+
+
+
 
 ### RISK-PNPM-004 — enableGlobalVirtualStore structurally incompatible with Turbopack
 
@@ -1065,6 +1298,9 @@
   consent-gated manual step. Strategy B is the less-trodden path and may hit Turbopack edge cases;
   the fallback (disable gVS, store in-tree) is noted in the recipe. Accepted.
 
+
+
+
 ### RISK-ULTRAPOWERS-005 — Migration can mis-pair spec and plan documents
 
 - **Status:** Mitigated
@@ -1078,6 +1314,9 @@
   at. Acceptance counts files in and out. Status nuance (migrated 2026-07-31): mitigated by design
 - **Residual:** a confirmed-but-wrong pairing. Recoverable — `git mv` keeps history, so the move
   is reversible.
+
+
+
 
 ### RISK-ULTRAPOWERS-007 — A fork left un-updated drifts until merging stops being mechanical
 
@@ -1094,6 +1333,9 @@
   about. Status nuance (migrated 2026-07-31): mitigated by design, 2026-07-27
 - **Residual:** the command still has to be run. Whether a periodic nudge is warranted should be
   decided after the first few real updates, not guessed now.
+
+
+
 
 ### RISK-ULTRAPOWERS-009 — Removing foreign hook registrations weakens "only ever touch our own entries"
 
@@ -1124,6 +1366,9 @@
   alternative is reading gsd-core's own manifest, which would couple this bundle to a foreign
   product's internal layout.
 
+
+
+
 ## Closed
 ### RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill
 
@@ -1144,6 +1389,9 @@
 - **Residual:** if `uipro` is run OUTSIDE the orchestrator first (extras pre-exist the orchestrator's
   snapshot) they are treated as user content and left in place — acceptable (the orchestrator only
   prunes what it installs). Accepted.
+
+
+
 
 ### RISK-FALLOW-001 — `fallow.enabled` is set optimistically, not gated on binary presence
 
@@ -1205,90 +1453,8 @@
   The inline fallow install command assumes pnpm (consistent with the rest of this repo's Node
   tooling conventions) — a project on npm/yarn only would need to adapt the command by hand.
 
-### RISK-GRAPHPUSH-003 — graphify export neo4j --push writes every node and then never returns
-- **Status:** Closed (2026-08-02) — the Neo4j path was removed from the bundle
-- **Resolution:** Closed by removal on 2026-08-02. The Neo4j path left the bundle entirely —
-  `graphify-neo4j-push.mjs`, `graphify-neo4j-prune.py`, `neo4j-config.mjs`, `graphify-neo4j.cypher`,
-  the push step in the autosync worker, `--neo4j-push` in `graphify-sync-all.mjs`, the `neo4j`
-  optional profile group, the `setup.mjs` opt-in and the GSD agent routing block. Measured before
-  the decision: 84,640 nodes and 77,343 edges written per push, zero reads of the Neo4j copy in
-  any transcript, and one indexed node lookup still costing 3.7 s.
-- **Context:** Observed 2026-08-01/02 during phase 13's live verification. `graphify export neo4j
-  --push` wrote the complete global graph — 84,640 nodes and 77,343 edges across 99 repositories,
-  exactly the total `graphify global list` reports — and then did not exit. It sat for 23 hours
-  with no TCP connections, all 24 threads in `UserRequest`, and 47 seconds of CPU across the whole
-  period. The log's last line is `[neo4j-push] pushing global graph to bolt://…`; the success line
-  `Pushed to Neo4j: <n> nodes, <m> edges` that `graphify-neo4j-push.mjs` relies on never arrives.
-  The defect is in graphify, not in this bundle: every line of the chain this repository owns did
-  its job, and the data reached Neo4j intact.
-- **Mitigation:** The ten-minute lock TTL in `hooks/lib/state-lock.mjs` contains the blast radius.
-  A wedged push holds `~/.claude/state/graphify-neo4j-push.lock` forever because
-  `process.on("exit")` cannot fire in a process that never exits, but `isHeld` judges by mtime, so
-  after ten minutes the stale lock is ignored and the next push proceeds. Without that TTL a single
-  wedge would have disabled every future push permanently. Status nuance (migrated 2026-08-02): Closed
-- **Residual:** Three things stay broken until graphify is fixed or the push learns a timeout.
-  (1) Nothing ever reports success: `~/.claude/state/graphify-neo4j-push.log` accumulates progress
-  lines and no verdict, so "did the push work" can only be answered by querying Neo4j. (2) Each
-  commit leaves a wedged python process behind, since the detached shell never reaches the step
-  that removes the sync lock either. (3) **The TTL that saves the system also defeats the
-  serialisation task 5 was written to provide.** A wedged push never refreshes
-  `graphify-neo4j-push.lock`, so ten minutes after it starts `isHeld` calls the lock stale and the
-  next commit launches a *second* concurrent push — whose prune `DETACH DELETE`s what the first one
-  has just merged. That is precisely the failure the global lock exists to prevent, and combined
-  with `RISK-GRAPHPUSH-004`'s nine-hour rebuild the window in which it can happen is the whole day.
-  Observed 2026-08-02: the sync lock had already been removed by a later commit's chain while the
-  02:03 push was still running.
 
-  The obvious fix is a wall-clock timeout around the `spawnSync` in `bin/graphify-neo4j-push.mjs`
-  that treats a non-returning export as done-and-unreported rather than waiting forever — which
-  also restores the lock's release path and with it the serialisation. It is not in phase 13's
-  scope and is deliberately not being written blind. Until then the switch is
-  `CLAUDE_GRAPHIFY_NEO4J_PUSH=0`, which stops the push and leaves the extract running.
 
-### RISK-GRAPHPUSH-004 — every commit prunes and re-pushes the whole graph, leaving Neo4j gutted for the duration
-- **Status:** Closed (2026-08-02) — no commit pushes to Neo4j any more
-- **Resolution:** Closed by removal on 2026-08-02, together with `RISK-GRAPHPUSH-003`. No commit
-  pushes anything to Neo4j any more. The root cause is recorded for whoever revisits the idea:
-  graphify's `graphdb.py` MERGEs one node per auto-commit round trip against an unindexed key,
-  and its edge `MATCH (a {id: $src}), (b {id: $tgt})` carries no label, so it cannot use an index
-  at all. Neither graphify nor this bundle ever issued a `CREATE INDEX`.
-- **Context:** Measured 2026-08-02, immediately after phase 13 made the push automatic. A single
-  commit to one repository triggers `graphify-neo4j-push.mjs`, which prunes **every** repo tag this
-  machine owns and then re-pushes the entire 135 MB global graph. The measured curve, sampled every
-  30 s from the commit:
-
-  | t | nodes |
-  |---|---|
-  | +30 s | 19,503 (prune still running) |
-  | +60 s | **80** |
-  | +600 s | 1,739 |
-  | +1200 s | 3,077 |
-  | +1800 s | 4,536 |
-
-  The database is not degraded during a rebuild, it is **emptied** — 84,640 nodes down to 80 — and
-  refills at roughly 2.7 nodes/s. Measured against the clock rather than extrapolated: the node
-  phase finished in about **eleven hours**, and only then did the relationship phase begin — at
-  11 h 15 m past the commit the graph held all 84,640 nodes but just 6,034 of 77,343 edges, and was
-  still running. A single commit therefore takes the graph away for **more than a day**, and per
-  `RISK-GRAPHPUSH-003` never announces coming back.
-
-  Two earlier figures in this entry were wrong and are kept as corrections rather than deleted:
-  "twenty minutes" was extrapolated from the first manual push's opening phase, which ran at ~84
-  nodes/s before degrading; "near nine hours" projected the observed 2.7 nodes/s across the nodes
-  alone and did not account for the edge phase at all. The rate difference between the two pushes is
-  itself a clue — the manual one pruned almost nothing, since the database held 269 nodes, while
-  this one had to `DETACH DELETE` 84,640 first.
-- **Mitigation:** None in place. The per-repository sync lock stops two commits in the *same*
-  repository from stacking, and `RISK-GRAPHPUSH-003`'s global push lock stops two repositories from
-  pruning against each other, so the damage is bounded to one rebuild at a time rather than
-  compounded. `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` disables the push entirely and leaves the extract
-  running, which is the only switch available today. Status nuance (migrated 2026-08-02): Closed
-- **Residual:** The design assumed a push is cheap enough to attach to every commit; at this graph
-  size it is not. Three directions worth weighing before the next change, none of them written
-  blind: push only the committed repository's subgraph instead of the global one; debounce the push
-  so a burst of commits produces a single rebuild; or move it off the commit path onto a timer.
-  Choosing among them needs a decision record, not an edit — and `RISK-GRAPHPUSH-003` should be
-  settled first, since a push that never returns makes any debounce window meaningless.
 
 ### RISK-INITSTACK-001 — `/init-stack` GSD-free rewrite deleted steps 6-11; ~24 stale references + 2 dropped capabilities
 
@@ -1341,6 +1507,9 @@
   unreinstated by design — if the orchestration-pilot idea is revisited later, it starts fresh
   from the dormant reference doc rather than resuming this risk.
 
+
+
+
 ### RISK-STATUSLINE-001 — the context-window size field name is documented, not observed
 
 - **Status:** Closed (2026-07-31) — observed, 2026-07-30
@@ -1375,6 +1544,9 @@
   statusline, which is what makes the outstanding task non-blocking in practice as well as in
   principle.
 
+
+
+
 ### RISK-ULTRAPOWERS-002 — Rebrand is machine-wide and cannot be gated per project
 
 - **Status:** Closed (2026-07-27) — the fork removed the premise, not just the symptom.
@@ -1387,6 +1559,9 @@
 - **Resolution:** a fork is a plugin, enabled and disabled per project like any other, so the
   existing gate reaches it. Nothing needed to be built for this; the limitation was an artefact
   of patching a machine-wide cache.
+
+
+
 
 ### RISK-ULTRAPOWERS-003 — Blind replacement would break `superpowers:` skill resolution
 

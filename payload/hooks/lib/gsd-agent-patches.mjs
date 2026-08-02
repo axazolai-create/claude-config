@@ -139,21 +139,6 @@ precheck, worktree checks) through the sandbox — GSD drives its own control fl
 literal exit codes/stdout, and the sandbox would strip that signal.
 </context_mode_routing>`;
 
-const NEO4J_GRAPH_ROUTING_BLOCK = `<neo4j_global_graph_routing>
-A Neo4j MCP named \`neo4j\` may hold graphify's merged GLOBAL graph (all repos on this machine),
-pushed by graphify-neo4j-push.mjs. When it is configured:
-- CROSS-PROJECT / "how does repo A relate to repo B" / "who else uses this library" questions →
-  query the \`neo4j\` MCP with Cypher (query by \`label\`/\`repo\`, never by node id — ids are not
-  stable across graphify rebuilds). See ~/.claude/graphify-neo4j.cypher for canned queries.
-- CURRENT-repo questions → keep using \`graphify query "<question>"\` on the local JSON graph.
-The local JSON graph stays graphify's source of truth; Neo4j is an additive cross-project mirror.
-</neo4j_global_graph_routing>`;
-
-// Neo4j guidance is only useful once the write side is configured on this machine.
-function isNeo4jConfigured() {
-  return existsSync(join(homedir(), ".graphify", "neo4j.env"));
-}
-
 const FILESYSTEM_SEARCH_DISCIPLINE_BLOCK = `<filesystem_search_discipline>
 **Never run \`find /\`, \`find ~\`, \`find $HOME\`, or any \`find\` with no starting path (defaults
 to cwd but chained into a broad tree) or a drive/root path.** These sweep the entire
@@ -392,23 +377,6 @@ the same task): a behavior-adding task that would otherwise get \`tdd="true"\` i
 // Caveat: this only governs a FRESH insertion. A content upgrade (`legacyMatch`/marked-span
 // replace) rewrites the block IN PLACE at its existing position and never touches ordering.
 export const PATCHES = [
-  {
-    id: "neo4j-global-graph-routing",
-    version: 2,
-    // v2 (2026-07-21): fixed the cookbook pointer to the DEPLOYED path - the repo-relative path
-    // this block used to reference never resolves once installed; setup.mjs lands that file at
-    // ~/.claude/graphify-neo4j.cypher, so the block now points there. Also narrowed appliesTo to
-    // exclude EXCLUDED_AGENTS, matching context-mode-routing-block's scope.
-    // Gated on the write side being configured (neo4j.env present) - otherwise the guidance
-    // points agents at an MCP that isn't there. Same anchor as the context-mode routing block.
-    // Placed FIRST in array order (not appended) so it reads LAST among the `</role>`-anchored
-    // group, per the reversal rule above - it's situational/gated guidance, subordinate to the
-    // core context-mode/executor disciplines that follow it in the array.
-    appliesTo: (name, claudeDir) => name.startsWith("gsd-") && name.endsWith(".md")
-      && !EXCLUDED_AGENTS.has(name) && isNeo4jConfigured(),
-    block: NEO4J_GRAPH_ROUTING_BLOCK,
-    insertAnchor: "</role>", insertMode: "after",
-  },
   {
     id: "executor-context-mode-read-discipline",
     version: 1,

@@ -62,20 +62,18 @@ the target provider's setup below. This is what makes the choice reversible on r
 - Needs `uv`/`uvx` present (see `graphify-setup.mjs --bootstrap-uv` if missing - with consent).
 - Verify: `claude mcp list` shows `postgres`; then have it read the schema.
 
-## 2b. Neo4j (opt-in, reads the graphify global graph via Cypher)
-- Only if I ask, and only meaningful once the global graph has been pushed to Neo4j (see
-  `graphify-neo4j-push.mjs`). This is the READ side of the graphify Neo4j mirror.
-- **User scope** (not project) - the global graph is cross-project, so the MCP must be
-  available in every repo: `--scope user`.
+## 2b. Neo4j (opt-in, Cypher access to an existing database)
+- Only if I ask. This bundle does not write to Neo4j; it is a plain database connection.
+  For code questions use `graphify query` (current repo) and `graphify explain --graph
+  ~/.graphify/global-graph.json` (cross-repo).
+- Scope it where the database is used: `--scope user` for a machine-wide database,
+  `--scope project` for one this repo owns.
 - Verify the current Cypher MCP package via WebSearch before adding (package names drift);
   the common one is `mcp-neo4j-cypher`. Confirm, then:
-  `claude mcp add neo4j --scope user -e NEO4J_URI="bolt://<nas>:7687" -e NEO4J_USERNAME="neo4j" -e NEO4J_PASSWORD="<pw>" -- uvx mcp-neo4j-cypher`
-- Reuse the same URI/creds as `~/.graphify/neo4j.env`. Never echo the password back.
+  `claude mcp add neo4j --scope user -e NEO4J_URI="bolt://<host>:7687" -e NEO4J_USERNAME="neo4j" -e NEO4J_PASSWORD="<pw>" -- uvx mcp-neo4j-cypher`
+- Never echo the password back.
 - Needs `uv`/`uvx` (see `graphify-setup.mjs --bootstrap-uv` if missing - with consent).
-- Verify: `claude mcp list` shows `neo4j` connected; then run a Cypher query
-  (`MATCH (n) RETURN count(n)`) - see `~/.claude/graphify-neo4j.cypher` for a cookbook.
-- Overlap: graphify (local JSON, per-project) vs this Neo4j MCP (cross-project global graph).
-  Rule of thumb: `graphify query` for the current repo, Neo4j MCP for cross-repo questions.
+- Verify: `claude mcp list` shows `neo4j` connected; then run `MATCH (n) RETURN count(n)`.
 
 ## 3. Web search (opt-in). Default: the built-in WebSearch tool - add nothing.
 - Only if I want an independent/self-hosted search. Recommend **SearXNG self-hosted** (fully
