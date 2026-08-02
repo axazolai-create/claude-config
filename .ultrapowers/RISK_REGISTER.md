@@ -25,6 +25,7 @@
 - [RISK-PNPM-002 — Native-trigger coverage gap for sub-package installs](#risk-pnpm-002-native-trigger-coverage-gap-for-sub-package-installs)
 - [RISK-PNPM-003 — Auto-writing pnpm-workspace.yaml](#risk-pnpm-003-auto-writing-pnpm-workspaceyaml)
 - [RISK-RULESREACH-001 — Process rules bind only after a deploy, so a repository can run for weeks under rules it does not have](#risk-rulesreach-001-process-rules-bind-only-after-a-deploy-so-a-repository-can-run-for-weeks-under-rules-it-does-not-have)
+- [RISK-SECRETS-001 — Placeholder allowlist in `secrets-gate.mjs` can mask a real secret](#risk-secrets-001-placeholder-allowlist-in-secrets-gatemjs-can-mask-a-real-secret)
 - [RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported](#risk-setup-001-a-corrupt-settingspartialjson-crashes-the-installer-instead-of-being-reported)
 - [RISK-STACKRULES-001 — Model-driven rules compilation can lose requirements](#risk-stackrules-001-model-driven-rules-compilation-can-lose-requirements)
 - [RISK-STACKRULES-002 — Snapshot desync / stale auto-loading copies](#risk-stackrules-002-snapshot-desync-stale-auto-loading-copies)
@@ -533,6 +534,32 @@
   rules-src rules actually bind, or move the rules that matter most into checks that live in the
   repository, where a test gates a commit without any installation step. The second is what this
   entry's own mitigation did, and it is the only half that worked today.
+
+### RISK-SECRETS-001 — Placeholder allowlist in `secrets-gate.mjs` can mask a real secret
+
+- **Status:** Active (accepted — a deliberate weakening to cut false positives on example configs)
+- **Context:** `payload/hooks/secrets-gate.mjs` skips values that look like placeholders so docs
+  and example configs stop false-positiving. Two tiers: `placeholderRe` (word markers — `your_`,
+  `example`, `<...>`, `xxxx`, `changeme`, `test_secret`, `_here`, …) is tested against the matched
+  value of EVERY rule; `weakPlaceholderRe` (anchored trivial values — `1234…`, `abc123`, `qwerty`,
+  `password`, `changeit`, …) applies only to user-chosen value groups (assignment / connection
+  string, `grp > 0`). A real secret that happens to embed a word marker — a genuine password
+  containing `example`, a token with `xxxx` in it — passes the regex baseline silently. The
+  word-marker test is substring-based, so it is the widest exposure.
+- **Mitigation:** the markers are distinctive words unlikely to appear in high-entropy tokens; the
+  trivial tier is `^`-anchored so it cannot match a substring inside a structured token (an earlier
+  un-anchored `123456`/`abc123` leaked real `AKIA…`/`xoxb…` tokens); structured-format rules
+  (AWS/Slack/GitHub/private-key) never get the weak tier; gitleaks, when installed, runs additively
+  with its own allowlist and is untouched by this regex layer. `payload/hooks/secrets-gate.test.mjs`
+  covers six cases end-to-end through a real staged diff — three placeholders pass, two real secrets
+  block, one env reference passes.
+- **Residual:** the zero-dependency baseline can miss a real secret that embeds a word marker, and
+  on a machine without gitleaks it is the only automated gate. Accepted as the cost of usable
+  example configs; escalate to a per-value entropy check if a real leak slips through.
+- **Provenance:** ported to master 2026-08-02 from `fix/worktree-deps-and-initstack-hardening`
+  (`3a21f4d`, 2026-07-21) — see [RISK-BRANCH-001](#risk-branch-001-fixworktree-deps-and-initstack-hardening-holds-fixes-master-never-got).
+  The branch's own copy of this entry claimed twenty regression fixtures; no such file was in the
+  commit, so the count above is the coverage that actually exists.
 
 ### RISK-SETUP-001 — A corrupt `settings.partial.json` crashes the installer instead of being reported
 
