@@ -49,6 +49,7 @@ import { applyPlan, purgeRetention, trashRoot } from "./payload/bin/lib/claude-c
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
 import { buildPluginPlan, formatPlan, selectActions, describeAction } from "./plugin-reconcile.mjs";
 import { knownMarketplaces } from "./payload/bin/init-stack.mjs";
+import { reconcileBundleInstall } from "./payload/hooks/lib/config-update-check-run.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
 // settings.partial.json, RISK_REGISTER*.md, bootstrap.sh/ps1, .gitignore - never mirrored).
@@ -696,6 +697,17 @@ async function resolveInstalledSha() {
   return undefined;
 }
 
+// The component checker throttles itself to one remote check per 24h, so the verdict it recorded
+// BEFORE this install would keep telling the user to re-run an installer that just ran. Nothing
+// is created here: with no prior verdict there is no stale banner to correct.
+function reconcileUpdateState(installedSha) {
+  const p = join(CDIR, "state", "component-updates.json");
+  const state = safe(() => JSON.parse(readFileSync(p, "utf8")));
+  if (!state) return;
+  const next = reconcileBundleInstall(state, installedSha);
+  if (next !== state) write(p, JSON.stringify(next, null, 2) + "\n");
+}
+
 async function main() {
   await proposeConfigDir();
 
@@ -1202,6 +1214,7 @@ async function main() {
       manifestPayload.repoRoot = existsSync(join(REPO_ROOT, ".git")) ? REPO_ROOT : null;
     }
     write(MANIFEST, JSON.stringify(manifestPayload, null, 2) + "\n");
+    if (installedSha) reconcileUpdateState(installedSha);
   }
 
   /* ---------- summary ---------- */

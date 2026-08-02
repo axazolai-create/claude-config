@@ -64,6 +64,19 @@ export function bundleUpdateAvailable(installedSha, remoteSha) {
   return !!installedSha && !!remoteSha && installedSha !== remoteSha;
 }
 
+// setup.mjs just moved installedSha forward, but the checker's 24h throttle would keep serving
+// the pre-install verdict for a full day - a "re-run the installer" banner for an installer that
+// already ran. Re-decide against the SHA now installed, and drop lastCheckedAt so the next
+// session re-checks the remote instead of trusting the window this install invalidated.
+export function reconcileBundleInstall(state, installedSha) {
+  if (!state || typeof state !== "object" || !installedSha) return state;
+  const entry = state["claude-config"];
+  if (!entry || typeof entry !== "object") return state;
+  const { lastCheckedAt, ...rest } = entry;
+  return { ...state, "claude-config": { ...rest, installed: installedSha,
+    updateAvailable: bundleUpdateAvailable(installedSha, rest.latest) } };
+}
+
 export async function checkBundleUpdate(claudeDir) {
   const manifestPath = join(claudeDir, "state", "bundle-manifest.json");
   const manifest = existsSync(manifestPath) ? (safe(() => JSON.parse(readFileSync(manifestPath, "utf8"))) || {}) : {};

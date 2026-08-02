@@ -109,6 +109,30 @@ test("manifest without variant field = full (no surplus prune on full reinstall)
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("install clears the update notice it just made obsolete", (t) => {
+  const g = spawnSync("git", ["-C", ROOT, "rev-parse", "HEAD"], { encoding: "utf8" });
+  if (g.error || g.status !== 0) return t.skip("no git checkout to resolve installedSha from");
+  const head = g.stdout.trim();
+  const dir = mkdtempSync(join(tmpdir(), "cc-reconcile-"));
+  mkdirSync(join(dir, "state"), { recursive: true });
+  const statePath = join(dir, "state/component-updates.json");
+  writeFileSync(statePath, JSON.stringify({
+    graphify: { class: "safe", updateAvailable: false, lastCheckedAt: "2026-08-02T15:10:54.914Z" },
+    "claude-config": { class: "reinit", installed: "stale", latest: head,
+      updateAvailable: true, lastCheckedAt: "2026-08-02T15:10:54.916Z" },
+  }));
+
+  assert.equal(run(dir, ["--variant=lite", "--replace-all"]).status, 0);
+
+  assert.equal(readManifest(dir).installedSha, head);
+  const state = JSON.parse(readFileSync(statePath, "utf8"));
+  assert.equal(state["claude-config"].installed, head);
+  assert.equal(state["claude-config"].updateAvailable, false, "banner must not outlive the install");
+  assert.equal("lastCheckedAt" in state["claude-config"], false, "throttle window must reopen");
+  assert.equal(state.graphify.lastCheckedAt, "2026-08-02T15:10:54.914Z");
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("manifest profile round-trips and falls back to variant", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-fallback-"));
   assert.equal(run(dir, ["--variant=base", "--replace-all"]).status, 0);

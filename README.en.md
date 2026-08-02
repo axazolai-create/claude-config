@@ -978,7 +978,10 @@ different write policies, deliberately:
   in `~/.claude/state/bundle-manifest.json` (what `setup.mjs` last installed) against the current
   master on GitHub (public API, no auth, nothing sent) and reports ONLY good news — that an update
   is available; every failure (offline, rate-limit, corporate proxy) is swallowed silently, like
-  every other background bundle check.
+  every other background bundle check. The verdict lands in
+  `~/.claude/state/component-updates.json` and is re-checked at most once per 24h, so `setup.mjs`
+  reconciles that file against the SHA it just installed (`reconcileBundleInstall`) — otherwise the
+  banner would keep asking for an installer run that already happened until the window expired.
 
 ---
 
