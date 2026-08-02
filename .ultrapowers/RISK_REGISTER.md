@@ -967,13 +967,24 @@
   `process.on("exit")` cannot fire in a process that never exits, but `isHeld` judges by mtime, so
   after ten minutes the stale lock is ignored and the next push proceeds. Without that TTL a single
   wedge would have disabled every future push permanently.
-- **Residual:** Two things stay broken until graphify is fixed or the push learns a timeout.
+- **Residual:** Three things stay broken until graphify is fixed or the push learns a timeout.
   (1) Nothing ever reports success: `~/.claude/state/graphify-neo4j-push.log` accumulates progress
   lines and no verdict, so "did the push work" can only be answered by querying Neo4j. (2) Each
   commit leaves a wedged python process behind, since the detached shell never reaches the step
-  that removes the sync lock either. The obvious fix is a wall-clock timeout around the `spawnSync`
-  in `bin/graphify-neo4j-push.mjs` that treats a non-returning export as done-and-unreported rather
-  than waiting forever; it is not in phase 13's scope and is deliberately not being written blind.
+  that removes the sync lock either. (3) **The TTL that saves the system also defeats the
+  serialisation task 5 was written to provide.** A wedged push never refreshes
+  `graphify-neo4j-push.lock`, so ten minutes after it starts `isHeld` calls the lock stale and the
+  next commit launches a *second* concurrent push — whose prune `DETACH DELETE`s what the first one
+  has just merged. That is precisely the failure the global lock exists to prevent, and combined
+  with `RISK-GRAPHPUSH-004`'s nine-hour rebuild the window in which it can happen is the whole day.
+  Observed 2026-08-02: the sync lock had already been removed by a later commit's chain while the
+  02:03 push was still running.
+
+  The obvious fix is a wall-clock timeout around the `spawnSync` in `bin/graphify-neo4j-push.mjs`
+  that treats a non-returning export as done-and-unreported rather than waiting forever — which
+  also restores the lock's release path and with it the serialisation. It is not in phase 13's
+  scope and is deliberately not being written blind. Until then the switch is
+  `CLAUDE_GRAPHIFY_NEO4J_PUSH=0`, which stops the push and leaves the extract running.
 
 ### RISK-GRAPHPUSH-004 — every commit prunes and re-pushes the whole graph, leaving Neo4j gutted for the duration
 - **Status:** Active
