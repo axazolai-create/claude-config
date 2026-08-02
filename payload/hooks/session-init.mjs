@@ -45,6 +45,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, spawn } from "node:child_process";
 import { resolveDial } from "./lib/leanmode-rules.mjs";
 import { pruneGlobalLogIfDue } from "./lib/token-usage-prune.mjs";
+import { updateJsonFile } from "./lib/atomic-json.mjs";
 import { formatUpdateNotes } from "./lib/component-registry.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
@@ -213,16 +214,18 @@ if (process.env.CLAUDE_GRAPHIFY_AUTOSYNC !== "0" && process.env.CLAUDE_GRAPHIFY_
 const planningClaude = join(root, ".planning", "CLAUDE.md");
 if (FULL && existsSync(planningClaude) && !isMarked(planningClaude)) {
   const sp = join(root, ".claude", "settings.json");
-  const s = existsSync(sp) ? safe(() => JSON.parse(readFileSync(sp, "utf8"))) : {};
-  if (s) {
-    const ex = new Set(s.claudeMdExcludes || []); const before = ex.size;
+  const freshSettings = !existsSync(sp);
+  const wrote = updateJsonFile(sp, (s) => {
+    // Creating settings.json without an enabledPlugins key silently drops settings.local.json's
+    // plugin entries on the next startup merge. init-stack.mjs always emits it; this path
+    // bypasses init-stack, so it must too.
+    if (freshSettings && s.enabledPlugins === undefined) s.enabledPlugins = {};
+    const ex = new Set(s.claudeMdExcludes || []);
     ex.add("**/.planning/CLAUDE.md");
-    if (ex.size !== before) {
-      s.claudeMdExcludes = [...ex];
-      if (writeFile(sp, JSON.stringify(s, null, 2) + "\n"))
-        actions.push("excluded GSD .planning/CLAUDE.md from auto-load");
-    }
-  }
+    s.claudeMdExcludes = [...ex];
+  });
+  if (wrote && freshSettings) actions.push("created .claude/settings.json (enabledPlugins + GSD exclude)");
+  else if (wrote) actions.push("excluded GSD .planning/CLAUDE.md from auto-load");
 }
 
 // 2) root CLAUDE.md: auto-mark unless it looks GSD-generated
@@ -548,7 +551,11 @@ if (process.env.CLAUDE_COMPONENT_AUTOUPDATE !== "0") {
 // record/update state (the risk step is allowed to run again on later sessions)
 if (firstTime) { state[root].initialized = new Date().toISOString(); state[root].actions = actions.slice(); state[root].notes = notes.slice(); }
 if (riskAdded > 0) state[root].lastRisk = new Date().toISOString();
-writeFile(stateFile, JSON.stringify(state, null, 2) + "\n");
+// Merge THIS project's subtree onto the fresh on-disk copy under a lock, rather than writing the
+// whole stale `state`. In-memory state[root] only ever gains keys during a run and each flag has
+// a single owning writer, so spreading it over the fresh value keeps what gsd-config-patch.mjs or
+// another session added meanwhile.
+updateJsonFile(stateFile, (st) => { st[root] = { ...(st[root] || {}), ...(state[root] || {}) }; });
 
 emit([
   actions.length ? `Project auto-init (${root}): ${actions.join("; ")}.` : "",

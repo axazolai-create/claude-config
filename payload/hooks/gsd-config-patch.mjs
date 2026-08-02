@@ -15,13 +15,13 @@
 // The full per-key decision log (which gsd-core keys are patched / deliberately NOT patched
 // and why; the model_overrides cross-check vs gsd-core's adaptive profile) lives in
 // docs/gsd-config-defaults.md - update THAT file when changing TIER 2 keys or overrides.
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
+import { updateJsonFile, writeFileAtomic } from "./lib/atomic-json.mjs";
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
 const safe = (fn) => { try { return fn(); } catch { return undefined; } };
-const writeFile = (p, content) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, content); return true; } catch { return false; } };
 // Strips a leading UTF-8 BOM before parsing - some external tool (PowerShell's
 // `Set-Content -Encoding utf8`, or a manual save) can write project-init.json with one, and a
 // raw JSON.parse throws on it, which the `safe()` wrapper then silently swallows into `{}` -
@@ -238,6 +238,7 @@ if (!tier2Done && tier2Enabled) {
 // see the tier3Due comment above for why this needs its own throttled copy of the check
 // session-init.mjs runs unthrottled every SessionStart.
 let gapNote = "";
+let gapStamp = ""; // throttle timestamp, applied to state only on the non-exit (write) path
 if (tier3Due) {
   const fallowCfg = parsed.code_quality && parsed.code_quality.fallow;
   if (fallowCfg && fallowCfg.enabled === true) {
@@ -254,18 +255,24 @@ if (tier3Due) {
         "code_quality.fallow.enabled: false for this project.";
     }
   }
-  if (!state[root]) state[root] = {};
-  state[root].gsdInitStackGapLastCheck = new Date().toISOString();
+  gapStamp = new Date().toISOString();
 }
 
 if (applied.length === 0 && !gapNote) process.exit(0);
 
-if (applied.length > 0 && !writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n")) process.exit(0);
+if (applied.length > 0) {
+  try { writeFileAtomic(configPath, JSON.stringify(parsed, null, 2) + "\n"); }
+  catch { process.exit(0); }
+}
 
-if (!state[root]) state[root] = {};
-if (!tier1Done) state[root].gsdModelConfigPatched = new Date().toISOString();
-if (!tier2Done && tier2Enabled) state[root].gsdWorkflowConfigPatched = new Date().toISOString();
-writeFile(stateFile, JSON.stringify(state, null, 2) + "\n");
+// Only this run's own flag keys, set on the fresh on-disk subtree under a lock, so a concurrent
+// session-init.mjs or another session's write to project-init.json survives.
+updateJsonFile(stateFile, (st) => {
+  st[root] ||= {};
+  if (!tier1Done) st[root].gsdModelConfigPatched = new Date().toISOString();
+  if (!tier2Done && tier2Enabled) st[root].gsdWorkflowConfigPatched = new Date().toISOString();
+  if (gapStamp) st[root].gsdInitStackGapLastCheck = gapStamp;
+});
 
 emit([
   applied.length ? `Applied default ${applied.join(" and ")} to ${configPath} (one-time, freshly-created gsd-core config).` : "",
