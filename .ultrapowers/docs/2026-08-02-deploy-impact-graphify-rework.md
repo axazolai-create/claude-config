@@ -41,7 +41,21 @@ that split is deliberate and predates this deploy.
 
 `~/.claude/CLAUDE.md` comes back `kept` without `--replace-all`: it carries `CURATED:NOEDIT` and
 differs from what the fragments now assemble to. The dry run shows it is the **only** conflict, so
-`--replace-all` touches that file's resolution and nothing else. It drops from 121 lines to 92.
+`--replace-all` touches that file's resolution and nothing else. It drops from 121 lines to 101.
+
+*(Corrected after the run: this said 92, measured two commits before the deploy and stale by the
+`13-graph-find.md` fragment and the `07-conventions.md` rule added after it.)*
+
+## Result
+
+Ran at `330a879` + this document's commit. 9 created, 10 updated, `CLAUDE.md` replaced,
+`settings.json` reconciled, 5 pruned — the four Neo4j files plus the now-empty `~/.claude/rules`
+directory. A dry run immediately afterwards reports zero outstanding changes.
+
+`kotlin-lsp` and `pyright-lsp` survived the plugin reconciliation, which is the intended behaviour:
+it only ever touches `managedPlugins`, and those two are enabled per project by
+`setting-templates`. `context7@claude-plugins-official` left `enabledPlugins` entirely; its
+`uninstall` was printed as a manual command, not executed, per the `--replace-all` split.
 
 ## What a deploy cannot settle
 
