@@ -88,24 +88,33 @@
 
 ### RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` holds fixes master never got
 
-- **Status:** Active
+- **Status:** Active (three of seven commits ported 2026-08-02; two remain, two are dead)
 - **Context:** seven commits from 2026-07-21 exist only on
   `origin/fix/worktree-deps-and-initstack-hardening`. master has moved **393 commits** past their
   merge base (`f467811`), and a trial merge reports six conflicts — two of them modify/delete,
   because the branch edits files master no longer has: root `RISK_REGISTER.md` (moved to
-  `.ultrapowers/`) and `payload/bin/init-stack.py` (rewritten as `init-stack.mjs`). Those two
-  commits — `93b6da6 docs(risk)` and `3ab1742 fix(init-stack)` — are dead on arrival. Three
-  payloads, however, are absent from master by CONTENT, not merely blocked by conflict:
-  `payload/hooks/lib/atomic-json.mjs` (92 lines, concurrency-safe shared-state writes) exists
-  nowhere on master; master's `secrets-gate.mjs` carries no placeholder allowlist; master's
-  `rules-src/testing.md` carries no parallel-test isolation rule. `178140d fix(agent-patches)`
-  and `abdbc09 docs(worktree)` conflict textually and need reading against today's files.
-- **Mitigation:** the branch is kept on origin, not deleted, and this entry names which commits
-  are recoverable and which are not — a later port is a review of three items against current
-  files, not an archaeology run. Every other branch in the tree, local and remote, is a strict
-  ancestor of master and was cleaned up on 2026-08-02.
-- **Residual:** the drift only widens; a port costs more the longer it waits. Nothing on master
-  is broken by leaving it — what is lost is the absence of those three fixes, not a regression.
+  `.ultrapowers/`) and `payload/bin/init-stack.py` (rewritten as `init-stack.mjs`). The branch
+  cannot be merged; it can only be read from, commit by commit.
+- **Ported to master on 2026-08-02:**
+  - `d95dd29 docs(testing)` — parallel-test DB isolation rule; cherry-picked clean (`de6ac09`).
+  - `3a21f4d fix(secrets-gate)` — placeholder allowlist; the code applied unchanged (master's
+    `secrets-gate.mjs` had not drifted), the register hunk was dropped and its content re-entered
+    here as [RISK-SECRETS-001](#risk-secrets-001-placeholder-allowlist-in-secrets-gatemjs-can-mask-a-real-secret)
+    (`5ea4655`, `29d1dd2`), with `secrets-gate.test.mjs` added — the port had no tests of its own.
+  - `8bf44a6 fix(hooks)` — `atomic-json.mjs` and the three `project-init.json` writers;
+    hand-ported, not cherry-picked, because every caller had drifted (`49f2c4d`).
+- **Dead on arrival:** `93b6da6 docs(risk)` (appends to the moved register — its content is now
+  RISK-SECRETS-001) and `3ab1742 fix(init-stack)` (patches `init-stack.py`, which no longer
+  exists). Whether `init-stack.mjs` reproduces that commit's locked settings write, list-union
+  merge and per-`.csproj` detection has NOT been checked.
+- **Still unported:** `178140d fix(agent-patches)` (`gsd-agent-patches.mjs` — broken-marker
+  double-apply, curated-pending surfacing, atomic writes) and `abdbc09 docs(worktree)`
+  (`rules-src/gsd.md` — dependency provisioning across stacks, deletion gaps). Both conflict
+  textually and need reading against today's files.
+- **Mitigation:** the branch stays on origin until those two are resolved. Every other branch in
+  the tree, local and remote, was a strict ancestor of master and was deleted on 2026-08-02.
+- **Residual:** the drift only widens. Nothing on master is broken by leaving the remainder — what
+  is lost is the absence of those two changes, not a regression.
 
 ### RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
 
