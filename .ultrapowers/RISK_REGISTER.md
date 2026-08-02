@@ -4,7 +4,6 @@
 
 ### Active
 - [RISK-BOOTSTRAP-001 — Remote code execution via `curl|bash` / `irm|iex` bootstrap](#risk-bootstrap-001-remote-code-execution-via-curlbash-irmiex-bootstrap)
-- [RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` holds fixes master never got](#risk-branch-001-fixworktree-deps-and-initstack-hardening-holds-fixes-master-never-got)
 - [RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits](#risk-changelog-001-the-post-commit-trigger-enqueues-the-skills-own-manual-bump-commits)
 - [RISK-CHANGELOG-002 — `lint` costs two `git log` subprocesses per queued entry, on every commit once the nudge lands](#risk-changelog-002-lint-costs-two-git-log-subprocesses-per-queued-entry-on-every-commit-once-the-nudge-lands)
 - [RISK-CLAUDEMD-001 — Legacy `@.claude/CLAUDE.md` imports double-load project context](#risk-claudemd-001-legacy-claudeclaudemd-imports-double-load-project-context)
@@ -65,6 +64,7 @@
 - [RISK-ULTRAPOWERS-009 — Removing foreign hook registrations weakens "only ever touch our own entries"](#risk-ultrapowers-009-removing-foreign-hook-registrations-weakens-only-ever-touch-our-own-entries)
 
 ### Closed
+- [RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` held fixes master never got](#risk-branch-001-fixworktree-deps-and-initstack-hardening-held-fixes-master-never-got)
 - [RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill](#risk-designstack-005-pro-max-design-sub-skill-hardcodes-global-paths-prune-could-delete-a-user-skill)
 - [RISK-FALLOW-001 — `fallow.enabled` is set optimistically, not gated on binary presence](#risk-fallow-001-fallowenabled-is-set-optimistically-not-gated-on-binary-presence)
 - [RISK-GRAPHPUSH-003 — graphify export neo4j --push writes every node and then never returns](#risk-graphpush-003-graphify-export-neo4j---push-writes-every-node-and-then-never-returns)
@@ -85,36 +85,6 @@
   reproducibility; documented safe alternative (download → inspect → run) in README; secrets
   never embedded in bootstrap scripts. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** Standard installer trust model — user must trust the repo owner. Accepted.
-
-### RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` holds fixes master never got
-
-- **Status:** Active (three of seven commits ported 2026-08-02; two remain, two are dead)
-- **Context:** seven commits from 2026-07-21 exist only on
-  `origin/fix/worktree-deps-and-initstack-hardening`. master has moved **393 commits** past their
-  merge base (`f467811`), and a trial merge reports six conflicts — two of them modify/delete,
-  because the branch edits files master no longer has: root `RISK_REGISTER.md` (moved to
-  `.ultrapowers/`) and `payload/bin/init-stack.py` (rewritten as `init-stack.mjs`). The branch
-  cannot be merged; it can only be read from, commit by commit.
-- **Ported to master on 2026-08-02:**
-  - `d95dd29 docs(testing)` — parallel-test DB isolation rule; cherry-picked clean (`de6ac09`).
-  - `3a21f4d fix(secrets-gate)` — placeholder allowlist; the code applied unchanged (master's
-    `secrets-gate.mjs` had not drifted), the register hunk was dropped and its content re-entered
-    here as [RISK-SECRETS-001](#risk-secrets-001-placeholder-allowlist-in-secrets-gatemjs-can-mask-a-real-secret)
-    (`5ea4655`, `29d1dd2`), with `secrets-gate.test.mjs` added — the port had no tests of its own.
-  - `8bf44a6 fix(hooks)` — `atomic-json.mjs` and the three `project-init.json` writers;
-    hand-ported, not cherry-picked, because every caller had drifted (`49f2c4d`).
-- **Dead on arrival:** `93b6da6 docs(risk)` (appends to the moved register — its content is now
-  RISK-SECRETS-001) and `3ab1742 fix(init-stack)` (patches `init-stack.py`, which no longer
-  exists). Whether `init-stack.mjs` reproduces that commit's locked settings write, list-union
-  merge and per-`.csproj` detection has NOT been checked.
-- **Still unported:** `178140d fix(agent-patches)` (`gsd-agent-patches.mjs` — broken-marker
-  double-apply, curated-pending surfacing, atomic writes) and `abdbc09 docs(worktree)`
-  (`rules-src/gsd.md` — dependency provisioning across stacks, deletion gaps). Both conflict
-  textually and need reading against today's files.
-- **Mitigation:** the branch stays on origin until those two are resolved. Every other branch in
-  the tree, local and remote, was a strict ancestor of master and was deleted on 2026-08-02.
-- **Residual:** the drift only widens. Nothing on master is broken by leaving the remainder — what
-  is lost is the absence of those two changes, not a regression.
 
 ### RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
 
@@ -1183,6 +1153,39 @@
   product's internal layout.
 
 ## Closed
+### RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` held fixes master never got
+
+- **Status:** Closed (2026-08-02) — all seven commits accounted for, branch archived as a tag
+- **Context:** seven commits from 2026-07-21 existed only on that branch. master had moved **393
+  commits** past their merge base (`f467811`), and a trial merge reported six conflicts — two of
+  them modify/delete, because the branch edited files master no longer has: root
+  `RISK_REGISTER.md` (moved to `.ultrapowers/`) and `payload/bin/init-stack.py` (rewritten as
+  `init-stack.mjs`). The branch could not be merged, only read from, commit by commit.
+- **Resolution — every commit, where it went:**
+  - `d95dd29 docs(testing)` → `de6ac09`, cherry-picked clean (parallel-test DB isolation rule).
+  - `abdbc09 docs(worktree)` → `9d529cf`, cherry-picked clean (per-stack dependency provisioning,
+    `robocopy /MIR` as a third reparse-point deletion vector).
+  - `3a21f4d fix(secrets-gate)` → `5ea4655`; the code applied unchanged (master's
+    `secrets-gate.mjs` had not drifted), the register hunk was dropped and re-entered as
+    [RISK-SECRETS-001](#risk-secrets-001-placeholder-allowlist-in-secrets-gatemjs-can-mask-a-real-secret)
+    (`29d1dd2`). `secrets-gate.test.mjs` was written for it — the original carried no tests.
+  - `93b6da6 docs(risk)` → its content IS RISK-SECRETS-001; the file it appended to had moved.
+  - `8bf44a6 fix(hooks)` → `49f2c4d`, hand-ported: `atomic-json.mjs` plus the three
+    `project-init.json` writers and session-init's `settings.json` path. Every caller had drifted.
+  - `178140d fix(agent-patches)` → `d07af11`, hand-ported: broken-marker flagging,
+    `checkCuratedGsdAgentPatches`, locked+atomic agent-file writes. master had moved the GSD
+    helpers behind a dynamic import and added the frontmatter patch kind.
+  - `3ab1742 fix(init-stack)` → `c25d9d3`. Dead against its target (`init-stack.py`) but all three
+    defects were live in `init-stack.mjs`: pooled `.csproj` classification, array-replacing
+    `deepMerge`, unlocked `settings.json` write. Ported to the JS implementation.
+- **Mitigation:** the branch is deleted; its tip is preserved as the tag
+  `archive/worktree-deps-and-initstack-hardening` so the original commits stay reachable and every
+  SHA above resolves. Every other branch in the tree, local and remote, was a strict ancestor of
+  master and was deleted the same day, leaving `master` alone.
+- **Residual:** the ports were reviewed against today's files rather than merged, so a subtle
+  intent from the originals could have been dropped silently. Each carries tests written for the
+  behaviour it claims; the archive tag is the record to check against if something looks missing.
+
 ### RISK-DESIGNSTACK-005 — Pro Max `design` sub-skill hardcodes global paths / prune could delete a user skill
 
 - **Status:** Closed (2026-07-31) — subset choice + provenance-based prune
