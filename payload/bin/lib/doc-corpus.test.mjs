@@ -73,3 +73,25 @@ test("each entry names the file and the repo so a hit is actionable", () => {
 test("an unreadable file is skipped, not thrown on", () => {
   assert.equal(buildDocCorpus(nodes, () => null), "");
 });
+
+// graphify extracts a project's own build output too. Bundled vendor code carries generic
+// doc comments in bulk and outranks the hand-written source it was built from.
+test("build output and vendored paths never reach the corpus", () => {
+  const doc = ["// Return an iterable of key, value pairs.", "function entries() {"];
+  for (const file of [
+    ".vite-inspect/assets/pages-C5.js", "dist/bundle.js", "build/main.js",
+    "node_modules/lodash/index.js", "out/app.js", "coverage/lcov.js", "static/js/app.min.js",
+  ]) {
+    const out = buildDocCorpus(
+      [{ label: "entries()", repo: "r", source_file: file, source_location: "L2", file_type: "code" }],
+      () => doc);
+    assert.equal(out, "", `${file} should be excluded`);
+  }
+});
+
+test("a normal source path is kept", () => {
+  const out = buildDocCorpus(
+    [{ label: "entries()", repo: "r", source_file: "src/lib/stream.ts", source_location: "L2", file_type: "code" }],
+    () => ["// Return an iterable of key, value pairs.", "function entries() {"]);
+  assert.match(out, /entries\(\)/);
+});
