@@ -19,10 +19,12 @@
  *   node graphify-sync-all.mjs --root /home/me/dev --install-hooks
  *   node graphify-sync-all.mjs --root C:\Dev --max-depth 4
  */
-import { readdirSync, existsSync, appendFileSync } from "node:fs";
+import { readdirSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_EXCLUDE, isProjectRoot } from "./bin/lib/project-scan.mjs";
 
 const argv = process.argv.slice(2);
 const optVal = (name, def) => {
@@ -38,8 +40,7 @@ const INSTALL_HOOKS = flag("--install-hooks");
 const SEMANTIC = flag("--semantic");
 const DRY = flag("--dry-run");
 const EXCLUDE = new Set(
-  optVal("--exclude",
-    "node_modules,graphify-out,bin,obj,.venv,venv,dist,build,__pycache__,.git,vendor,.gradle,.idea,target,.next")
+  optVal("--exclude", DEFAULT_EXCLUDE.join(","))
     .split(",").map((s) => s.trim()).filter(Boolean),
 );
 
@@ -52,24 +53,10 @@ if (gv.error) {
 }
 if (!existsSync(ROOT)) { log(`! root does not exist: ${ROOT}`); process.exit(1); }
 
-// project-root markers: exact filenames + simple extension globs (Delphi .dpr/.dproj kept for legacy)
-const EXACT = new Set([".git", "package.json", "pyproject.toml", "go.mod", "requirements.txt"]);
-const EXTS = new Set([".sln", ".csproj", ".dpr", ".dproj", ".groupproj"]);
-function isProjectDir(dir) {
-  let names;
-  try { names = readdirSync(dir); } catch { return false; }
-  for (const n of names) {
-    if (EXACT.has(n)) return true;
-    const dot = n.lastIndexOf(".");
-    if (dot > 0 && EXTS.has(n.slice(dot))) return true;
-  }
-  return false;
-}
-
 // walk ROOT (inclusive) down to MAX_DEPTH, collecting project dirs (deduped by the Set)
 const found = new Set();
 function walk(dir, depth) {
-  if (isProjectDir(dir)) found.add(dir);
+  if (isProjectRoot(dir)) found.add(dir);
   if (depth >= MAX_DEPTH) return;
   let entries;
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -82,7 +69,9 @@ walk(ROOT, 0);
 const projects = [...found];
 log(`Projects found: ${projects.length}`);
 
-const logFile = join(ROOT, "graphify-sync.log");
+// The scanned root holds other people's projects; the log belongs to graphify, not to it.
+const logFile = join(homedir(), ".graphify", "graphify-sync.log");
+mkdirSync(dirname(logFile), { recursive: true });
 const fileLog = (s) => { try { appendFileSync(logFile, s + "\n"); } catch { /* best-effort */ } };
 fileLog(`=== Run started ${new Date().toISOString()} ===`);
 
