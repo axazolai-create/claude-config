@@ -38,7 +38,7 @@ export function resolvedExclude(cfg, name) {
   return [...parent, ...(def.exclude || [])];
 }
 
-export function resolveVariant({ repoRoot, variant, activeOptional = [], cfg = null }) {
+export function resolveVariant({ repoRoot, variant, cfg = null }) {
   cfg = cfg || loadVariants(repoRoot);
   const profiles = profilesOf(cfg);
   const def = profiles[variant];
@@ -56,34 +56,26 @@ export function resolveVariant({ repoRoot, variant, activeOptional = [], cfg = n
       excludedSet: new Set(payloadRels.filter(isAlways)), uncovered: [], orphanOverlay: [], plugins: def.plugins };
   }
 
-  // Active optional groups are promoted OVER exclude: their globs are installed this run and,
-  // being in the manifest, get pruned again automatically on a later opt-out. Unknown group
-  // names contribute nothing (no throw) so a stale flag can never break resolution.
-  const optGlobs = (activeOptional || []).flatMap((g) => (def.optional && def.optional[g]) || []);
-  const optRes = optGlobs.map(globToRe);
-
-  // denylist (base/lite via extends): everything not excluded; optional-active wins over exclude
+  // denylist (base/lite via extends): everything not excluded
   if (!def.include) {
     const excRes = resolvedExclude(cfg, variant).map(globToRe);
     const rels = [], excluded = [];
     for (const rel of payloadRels) {
       if (isAlways(rel)) { excluded.push(rel); continue; }
-      if (matchAny(rel, optRes)) { rels.push(rel); continue; }   // optional promoted over exclude
       if (matchAny(rel, excRes)) { excluded.push(rel); continue; }
       rels.push(rel);
     }
     return finalizeResolved({ variant, def, repoRoot, payloadDir, rels, excluded, plugins: def.plugins });
   }
 
-  // legacy allowlist (kept one release for back-compat) — existing include/exclude/optional body,
+  // legacy allowlist (kept one release for back-compat) — existing include/exclude body,
   // wrapped to also drop alwaysExclude and route through finalizeResolved().
   const incRes = def.include.map(globToRe);
   const excRes = def.exclude.map(globToRe);
   const rels = [], excluded = [], uncovered = [];
   for (const rel of payloadRels) {
     if (isAlways(rel)) { excluded.push(rel); continue; }
-    if (matchAny(rel, optRes)) rels.push(rel);           // active optional wins over exclude
-    else if (matchAny(rel, excRes)) excluded.push(rel);  // exclude wins over include
+    if (matchAny(rel, excRes)) excluded.push(rel);       // exclude wins over include
     else if (matchAny(rel, incRes)) rels.push(rel);
     else uncovered.push(rel);
   }

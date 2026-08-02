@@ -214,17 +214,13 @@ test("a hand-set statusLine survives a base install", () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-// No profile declares an `optional` group today. A --configure-<group> flag for a group that
-// does not exist must install normally and record an empty activeOptional, never fail.
-test("a --configure flag for an unknown group is a no-op, and the install still succeeds", () => {
+// An unrecognised flag must not change the install or fail it.
+test("an unknown flag is inert, and the install still succeeds", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-augment-"));
-
   assert.equal(run(dir, ["--variant=base", "--skip-all"]).status, 0);
-  assert.deepEqual(readManifest(dir).activeOptional, []);
-
-  assert.equal(run(dir, ["--variant=base", "--configure-nosuchgroup=on", "--skip-all"]).status, 0);
-  assert.deepEqual(readManifest(dir).activeOptional, []);
-
+  const before = readManifest(dir).files.length;
+  assert.equal(run(dir, ["--variant=base", "--nosuchflag=on", "--skip-all"]).status, 0);
+  assert.equal(readManifest(dir).files.length, before);
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -536,7 +532,7 @@ test("the detector never fires on full, nor when gsd-core is absent", () => {
 });
 
 test("the interactive prompt defaults to no; only an explicit yes removes anything", async () => {
-  const TTY_ARGS = ["--variant=base", "--configure-neo4j=off", "--enable-update-check"];
+  const TTY_ARGS = ["--variant=base", "--enable-update-check"];
   const PROMPT = "Move all of it to the cleanup trash?";
   const asked = (r) => {
     assert.match(r.stdout, /left unchanged \(CLAUDE_CONFIG_DIR not set\)/, "an earlier prompt was not answered");

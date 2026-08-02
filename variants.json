@@ -31,10 +31,7 @@
         "rules-src/gsd.md", "skills/using-git-worktrees/**",
         "references/**",
         "hooks/db-live-access-gate.mjs", "hooks/ci-watch-nudge*"
-      ],
-      "optional": {
-        "$comment": "Excluded by default, promotable at install time via setup.mjs. When active, globs win over exclude and files are installed (pruned again on opt-out)."
-      }
+      ]
     },
 
     "lite": {

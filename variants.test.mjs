@@ -202,8 +202,6 @@ test("import graph: no static import in the lite set resolves to an excluded fil
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
-// No profile declares an `optional` group today. These pin the machinery's behaviour when a
-// group name arrives anyway, so reintroducing a group starts from a known-good baseline.
 test("base is import-closed (no dangling static import)", () => {
   const on = resolveVariant({ repoRoot: ROOT, variant: "base" });
   const relSet = new Set(on.rels);
@@ -219,14 +217,8 @@ test("base is import-closed (no dangling static import)", () => {
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
-test("an unknown optional group name is a no-op, not a throw", () => {
-  const off = resolveVariant({ repoRoot: ROOT, variant: "base" });
-  const on = resolveVariant({ repoRoot: ROOT, variant: "base", activeOptional: ["does-not-exist"] });
-  assert.deepEqual(on.rels, off.rels);
-});
-
-test("optional groups are a no-op on full (already identity)", () => {
-  const v = resolveVariant({ repoRoot: ROOT, variant: "full", activeOptional: ["anything"] });
+test("full is identity over payload minus alwaysExclude", () => {
+  const v = resolveVariant({ repoRoot: ROOT, variant: "full" });
   // full ships everything except the alwaysExclude families: task-lifecycle-probe (.mjs +
   // .test.mjs), every **.test.mjs, and the claude-md/ fragments (build input, see the test
   // above), nothing else leaks in. Non-vacuous: also assert the excluded set is non-empty and
