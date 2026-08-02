@@ -1002,13 +1002,18 @@
   | +1800 s | 4,536 |
 
   The database is not degraded during a rebuild, it is **emptied** — 84,640 nodes down to 80 — and
-  refills at roughly 2.7 nodes/s, which puts a full restore near **nine hours**. Combined with
-  `RISK-GRAPHPUSH-003`, which says the process never exits, a single commit takes the graph away for
-  most of a day and never reports coming back. The earlier estimate in this entry said twenty
-  minutes; that was extrapolated from the first manual push's opening phase, which ran at ~84
-  nodes/s before degrading, and it was wrong. The rate difference is itself a clue: that push
-  pruned almost nothing (the database held 269 nodes), while this one had to `DETACH DELETE` 84,640
-  first.
+  refills at roughly 2.7 nodes/s. Measured against the clock rather than extrapolated: the node
+  phase finished in about **eleven hours**, and only then did the relationship phase begin — at
+  11 h 15 m past the commit the graph held all 84,640 nodes but just 6,034 of 77,343 edges, and was
+  still running. A single commit therefore takes the graph away for **more than a day**, and per
+  `RISK-GRAPHPUSH-003` never announces coming back.
+
+  Two earlier figures in this entry were wrong and are kept as corrections rather than deleted:
+  "twenty minutes" was extrapolated from the first manual push's opening phase, which ran at ~84
+  nodes/s before degrading; "near nine hours" projected the observed 2.7 nodes/s across the nodes
+  alone and did not account for the edge phase at all. The rate difference between the two pushes is
+  itself a clue — the manual one pruned almost nothing, since the database held 269 nodes, while
+  this one had to `DETACH DELETE` 84,640 first.
 - **Mitigation:** None in place. The per-repository sync lock stops two commits in the *same*
   repository from stacking, and `RISK-GRAPHPUSH-003`'s global push lock stops two repositories from
   pruning against each other, so the damage is bounded to one rebuild at a time rather than

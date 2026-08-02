@@ -10,8 +10,8 @@ should not be left switched on as it stands, and both are filed rather than smoo
 - `RISK-GRAPHPUSH-003` — `graphify export neo4j --push` writes everything and never returns, so the
   chain cannot report its own success.
 - `RISK-GRAPHPUSH-004` — every commit prunes and re-pushes the *whole* graph. Measured: 84,640 nodes
-  down to **80** within a minute of the commit, refilling at ~2.7 nodes/s, which is close to nine
-  hours. A commit takes the graph away for most of a day.
+  down to **80** within a minute of the commit; the node phase took about eleven hours to come back,
+  and the edge phase was 8% done at 11 h 15 m. A commit takes the graph away for more than a day.
 
 **Recommendation, not applied:** run with `CLAUDE_GRAPHIFY_NEO4J_PUSH=0` until 003 and 004 are
 settled. The extract half is cheap, correct and worth keeping on; the push half needs a design
