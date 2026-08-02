@@ -4,6 +4,7 @@
 
 ### Active
 - [RISK-BOOTSTRAP-001 — Remote code execution via `curl|bash` / `irm|iex` bootstrap](#risk-bootstrap-001-remote-code-execution-via-curlbash-irmiex-bootstrap)
+- [RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` holds fixes master never got](#risk-branch-001-fixworktree-deps-and-initstack-hardening-holds-fixes-master-never-got)
 - [RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits](#risk-changelog-001-the-post-commit-trigger-enqueues-the-skills-own-manual-bump-commits)
 - [RISK-CHANGELOG-002 — `lint` costs two `git log` subprocesses per queued entry, on every commit once the nudge lands](#risk-changelog-002-lint-costs-two-git-log-subprocesses-per-queued-entry-on-every-commit-once-the-nudge-lands)
 - [RISK-CLAUDEMD-001 — Legacy `@.claude/CLAUDE.md` imports double-load project context](#risk-claudemd-001-legacy-claudeclaudemd-imports-double-load-project-context)
@@ -83,6 +84,27 @@
   reproducibility; documented safe alternative (download → inspect → run) in README; secrets
   never embedded in bootstrap scripts. Status nuance (migrated 2026-07-31): accepted
 - **Residual:** Standard installer trust model — user must trust the repo owner. Accepted.
+
+### RISK-BRANCH-001 — `fix/worktree-deps-and-initstack-hardening` holds fixes master never got
+
+- **Status:** Active
+- **Context:** seven commits from 2026-07-21 exist only on
+  `origin/fix/worktree-deps-and-initstack-hardening`. master has moved **393 commits** past their
+  merge base (`f467811`), and a trial merge reports six conflicts — two of them modify/delete,
+  because the branch edits files master no longer has: root `RISK_REGISTER.md` (moved to
+  `.ultrapowers/`) and `payload/bin/init-stack.py` (rewritten as `init-stack.mjs`). Those two
+  commits — `93b6da6 docs(risk)` and `3ab1742 fix(init-stack)` — are dead on arrival. Three
+  payloads, however, are absent from master by CONTENT, not merely blocked by conflict:
+  `payload/hooks/lib/atomic-json.mjs` (92 lines, concurrency-safe shared-state writes) exists
+  nowhere on master; master's `secrets-gate.mjs` carries no placeholder allowlist; master's
+  `rules-src/testing.md` carries no parallel-test isolation rule. `178140d fix(agent-patches)`
+  and `abdbc09 docs(worktree)` conflict textually and need reading against today's files.
+- **Mitigation:** the branch is kept on origin, not deleted, and this entry names which commits
+  are recoverable and which are not — a later port is a review of three items against current
+  files, not an archaeology run. Every other branch in the tree, local and remote, is a strict
+  ancestor of master and was cleaned up on 2026-08-02.
+- **Residual:** the drift only widens; a port costs more the longer it waits. Nothing on master
+  is broken by leaving it — what is lost is the absence of those three fixes, not a regression.
 
 ### RISK-CHANGELOG-001 — The post-commit trigger enqueues the skill's own manual bump commits
 
