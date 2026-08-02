@@ -1,8 +1,9 @@
 // The one shell string the autosync worker spawns, as data rather than inline concatenation.
 const quote = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
 
-export function buildSyncCommand({ root, name, lock, isWin }) {
+export function buildSyncCommand({ root, name, lock, isWin, indexScript = null, node = "node" }) {
   const steps = [`graphify ${["extract", root, "--code-only", "--global", "--as", name].map(quote).join(" ")}`];
+  if (indexScript) steps.push(`${quote(node)} ${quote(indexScript)} ${quote("--build")}`);
   steps.push(isWin ? `del /f /q ${quote(lock)}` : `rm -f ${quote(lock)}`);
   return {
     shell: isWin ? "cmd" : "sh",

@@ -1078,6 +1078,13 @@ node ~/.claude/bin/graphify-setup.mjs --build-global /path/repoA /path/repoB /pa
 Under the hood, per repository: `graphify extract <repo> --global --as <name>`. Management -
 `graphify global list | remove <name> | path`.
 
+**Cross-repository symbol lookup** - `node ~/.claude/bin/graph-find.mjs "<symbol>"`. Answers in
+~200 ms from the flat index at `~/.graphify/global-index.tsv`; the same question through
+`graphify explain --graph ~/.graphify/global-graph.json` takes ~4.5 s, because it re-parses the
+whole graph. The index rebuilds in the tail of each commit's sync; `--build` forces it. The same
+symbol in the same file across repositories (worktree copies) collapses into one hit that names
+them all.
+
 ### Where the result is stored and how it's available in any project
 
 - **File:** `~/.graphify/global-graph.json` (cross-project, outside any specific repo).

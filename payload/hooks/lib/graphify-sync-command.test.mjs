@@ -43,6 +43,30 @@ test("the command is extract then unlock, and nothing else", () => {
   }
 });
 
+const withIndex = { ...args, indexScript: "C:/claude/bin/graph-find.mjs", node: "C:/node.exe" };
+
+// The index is rebuilt from the graph the extract has just written, so it runs after the
+// extract and before the lock is released.
+test("the index rebuild runs after the extract and before the unlock", () => {
+  for (const isWin of [true, false]) {
+    const inner = buildSyncCommand({ ...withIndex, isWin }).inner;
+    const iExtract = inner.indexOf("extract");
+    const iIndex = inner.indexOf("graph-find.mjs");
+    const iUnlock = inner.search(isWin ? /del \/f \/q/ : /rm -f/);
+    assert.ok(iExtract < iIndex && iIndex < iUnlock, `order wrong on ${isWin ? "win" : "posix"}: ${inner}`);
+  }
+});
+
+test("the index step passes --build", () => {
+  assert.match(buildSyncCommand({ ...withIndex, isWin: false }).inner, /graph-find\.mjs" "--build"/);
+});
+
+test("no index script means the command is the plain sync", () => {
+  const plain = buildSyncCommand({ ...args, isWin: true });
+  const withNull = buildSyncCommand({ ...withIndex, indexScript: null, isWin: true });
+  assert.equal(withNull.inner, plain.inner);
+});
+
 // node escapes the quotes inside `inner` as \" , cmd.exe has no such escape, and the mangled
 // line makes cmd exit without running a single step - silently, since stdio is ignored.
 test("the windows spawn passes its arguments verbatim, or cmd runs nothing at all", () => {

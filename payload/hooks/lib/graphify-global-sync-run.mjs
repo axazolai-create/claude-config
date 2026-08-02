@@ -29,6 +29,7 @@
 // Never throws, never blocks: no-ops (exit 0) if this isn't a git repo, HEAD has no
 // commits yet, or `graphify` isn't installed - this must never surface as an error
 // to whichever caller ran it (a Claude Code hook or git itself).
+import { existsSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
@@ -65,7 +66,12 @@ take(lock);
 
 // Run graphify, then remove the lock, all inside one detached background process -
 // the caller (Claude Code hook or git itself) is never delayed by this.
-const cmd = buildSyncCommand({ root, name, lock, isWin: IS_WIN });
+const indexScript = join(CLAUDE_DIR, "bin", "graph-find.mjs");
+const cmd = buildSyncCommand({
+  root, name, lock, isWin: IS_WIN,
+  indexScript: existsSync(indexScript) ? indexScript : null,
+  node: process.execPath,
+});
 spawn(cmd.shell, [cmd.flag, cmd.inner], cmd.opts).unref();
 
 process.exit(0);
