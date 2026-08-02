@@ -426,7 +426,7 @@ if (process.env.CLAUDE_GSD_INITSTACK_SUGGEST !== "0" && gsdProject) {
 if (FULL) {
   try {
     const { syncGsdAgentsContextMode } = await import("./lib/context-mode-gsd-agents.mjs");
-    const { checkGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } =
+    const { checkGsdAgentPatches, checkCuratedGsdAgentPatches, checkRetiredGsdAgentPatches, checkRecursiveAgentSpawnGuardrail } =
       await import("./lib/gsd-agent-patches.mjs");
     const { checkGsdWorkflowPatches } = await import("./lib/gsd-workflow-patches.mjs");
     const { checkGsdSkillPatches } = await import("./lib/gsd-skill-patches.mjs");
@@ -459,6 +459,15 @@ if (FULL) {
         notes.push(`gsd-* agent patches pending for ${files.length} file(s) ` +
           `(${files.slice(0, 5).join(", ")}${files.length > 5 ? ", ..." : ""}) - ` +
           `run /init-session to apply.`);
+
+      // Curated (CURATED:NOEDIT) agent files are skipped by the apply path, so a pending patch on
+      // one is never auto-applied - surface it instead of letting it sit silently unpatched.
+      const curatedPending = safe(() => checkCuratedGsdAgentPatches({ claudeDir })) || {};
+      const curatedFiles = Object.keys(curatedPending);
+      if (curatedFiles.length)
+        notes.push(`WARNING: ${curatedFiles.length} CURATED gsd-* agent file(s) have pending patches ` +
+          `that can NOT be auto-applied (${curatedFiles.slice(0, 5).join(", ")}` +
+          `${curatedFiles.length > 5 ? ", ..." : ""}) - apply by hand or remove the CURATED:NOEDIT marker.`);
 
       // Same check-only/apply-gated split, but for the inverse direction: a file still holding text
       // from a patch that's since been dropped from PATCHES entirely (see RETIRED_PATCHES) - stale

@@ -9,6 +9,7 @@ import {
   applyGsdAgentPatches,
   checkGsdAgentPatches,
   checkRecursiveAgentSpawnGuardrail,
+  checkCuratedGsdAgentPatches,
 } from "./gsd-agent-patches.mjs";
 
 const PATCH_ID = "debug-session-manager-no-recursive-agent-spawn";
@@ -187,4 +188,38 @@ test("frontmatter effort re-apply is idempotent", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// The close marker gone AND the block hand-edited, so neither findMarkedSpan nor the legacy
+// exact-block match can recognise it. With only the close marker missing, legacyMatch still
+// finds the untouched block and re-wraps it in place - that path self-heals and is not this one.
+test("a hand-broken marker span is flagged, never re-inserted as a second copy", () => {
+  const broken = FIXTURE.replace("</role>",
+    `</role>\n<!-- gsd-patch:${PATCH_ID} v1 -->\n<no_recursive_agent_spawn>hand-edited</no_recursive_agent_spawn>\n`);
+  const dir = makeClaudeDir({ [AGENT]: broken });
+  try {
+    const r = applyGsdAgentPatches({ claudeDir: dir });
+    assert.ok(r.skippedBrokenMarker.includes(`${AGENT}:${PATCH_ID}`), "must report the broken span");
+    assert.equal(occurrences(readFileSync(join(dir, "agents", AGENT), "utf8"), "<no_recursive_agent_spawn>"), 1,
+      "an unrecognisable span must not cause a second copy to be inserted");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a curated file with a pending patch is reported, not silently skipped", () => {
+  const dir = makeClaudeDir({ [AGENT]: `<!-- CURATED:NOEDIT -->\n${FIXTURE}` });
+  try {
+    assert.deepEqual(checkGsdAgentPatches({ claudeDir: dir })[AGENT], undefined,
+      "the editable-file checker must not claim a curated file");
+    assert.ok(checkCuratedGsdAgentPatches({ claudeDir: dir })[AGENT].includes(PATCH_ID));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a curated file with no pending patch is not reported", () => {
+  const dir = makeClaudeDir({ [AGENT]: FIXTURE });
+  try {
+    applyGsdAgentPatches({ claudeDir: dir });
+    const p = join(dir, "agents", AGENT);
+    writeFileSync(p, `<!-- CURATED:NOEDIT -->\n${readFileSync(p, "utf8")}`);
+    assert.deepEqual(checkCuratedGsdAgentPatches({ claudeDir: dir })[AGENT], undefined);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
