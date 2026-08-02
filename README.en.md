@@ -1084,6 +1084,16 @@ node ~/.claude/bin/graphify-setup.mjs --build-global /path/repoA /path/repoB /pa
 Under the hood, per repository: `graphify extract <repo> --global --as <name>`. Management -
 `graphify global list | remove <name> | path`.
 
+**Search by meaning** - `node ~/.claude/bin/graph-semantic.mjs "<question>"`, ~1 s. Answers "have
+I written something like this before?" when the name cannot be guessed: "a lock that stops two
+processes" finds the mutex, where full-text search returned an app's PIN lock screen. Vectors are
+built by `/graphify-build-docs` (~2 min, 24 MB); the environment is created once in
+`~/.graphify/embed-venv` and graphify's own is left alone.
+
+**The mass sync** skips nested archive copies with `--skip-nested-archives` (off by default): only
+the pair "nested in another project" AND "archival name" counts - nesting alone catches monorepo
+packages, the name alone catches a legitimate project called `backup`.
+
 **Cross-repository symbol lookup** - `node ~/.claude/bin/graph-find.mjs "<symbol>"`. Answers in
 ~200 ms from the flat index at `~/.graphify/global-index.tsv`; the same question through
 `graphify explain --graph ~/.graphify/global-graph.json` takes ~4.5 s, because it re-parses the

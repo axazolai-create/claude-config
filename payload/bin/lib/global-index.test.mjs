@@ -17,6 +17,17 @@ test("every labelled node becomes one row; unlabelled nodes are dropped", () => 
   assert.equal(rows.length, 4);
 });
 
+// A hit with no file is a dead end - there is nowhere to go and look.
+test("a node with no source file is dropped", () => {
+  const g = { nodes: [
+    { label: "Lock", repo: "r", source_file: "", source_location: "", file_type: "code" },
+    { label: "real()", repo: "r", source_file: "a.mjs", source_location: "L1", file_type: "code" },
+  ] };
+  const rows = buildIndex(g).split("\n").filter(Boolean);
+  assert.equal(rows.length, 1);
+  assert.match(rows[0], /^real\(\)/);
+});
+
 test("a row carries label, repo, file and location, tab separated", () => {
   const row = buildIndex(graph).split("\n").find((r) => r.startsWith("isHeld()"));
   assert.deepEqual(row.split("\t"), ["isHeld()", "claude-config", "hooks/lock.mjs", "L8", "code"]);

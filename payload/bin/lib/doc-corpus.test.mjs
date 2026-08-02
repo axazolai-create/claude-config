@@ -89,6 +89,18 @@ test("build output and vendored paths never reach the corpus", () => {
   }
 });
 
+// The corpus is markdown split on "## ". A comment that itself contains a heading would split
+// one entry into two, and the second half loses its symbol name and location.
+test("a heading inside a comment cannot break the corpus into a false entry", () => {
+  const doc = liftDoc(["// ## Section title", "// body follows", "function f() {"], 3);
+  assert.ok(!doc.includes("##"), `heading markers survived: ${doc}`);
+  assert.match(doc, /Section title body follows/);
+  const out = buildDocCorpus(
+    [{ label: "f()", repo: "r", source_file: "a.mjs", source_location: "L3", file_type: "code" }],
+    () => ["// ## Section title", "// body follows", "function f() {"]);
+  assert.equal((out.match(/^## /gm) || []).length, 1);
+});
+
 test("a normal source path is kept", () => {
   const out = buildDocCorpus(
     [{ label: "entries()", repo: "r", source_file: "src/lib/stream.ts", source_location: "L2", file_type: "code" }],

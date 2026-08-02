@@ -1,11 +1,9 @@
 ## CROSS-PROJECT CODE LOOKUP
-- **By name** — "where is X", "who else has a function called X":
-  `node ~/.claude/bin/graph-find.mjs "<symbol>"`. ~200 ms across every repo on this machine.
-  The index refreshes after each commit's sync; `--build` forces it.
-- **By meaning** — "have I already written something that does X?": `ctx_search` over the
-  corpus that `node ~/.claude/bin/graph-docs.mjs --build` writes to
-  `~/.graphify/global-docs.md`, indexed once with `ctx_index`. It carries the comment above
-  each code symbol, so it finds work whose name you cannot guess. About one symbol in five
-  has a comment; the rest are name-only, so fall back to `graph-find`. Matching is lexical:
-  a query whose keyword is common in an unrelated domain will surface that domain instead.
+- **By name** — "where is X": `node ~/.claude/bin/graph-find.mjs "<symbol>"`, ~200 ms across
+  every repo on this machine. The index refreshes after each commit's sync.
+- **By meaning** — "have I already written something that does X?":
+  `node ~/.claude/bin/graph-semantic.mjs "<question>"`, ~1 s. Finds work whose name you cannot
+  guess. Needs `/graphify-build-docs` to have run at least once.
 - **Current repo** — `graphify query "<question>"`.
+- Offer `/graphify-build-docs` unprompted ONLY on a machine running ultrapowers or GSD-Core, and
+  only right after a verification gate or a closed phase. Never mid-task, never twice a session.

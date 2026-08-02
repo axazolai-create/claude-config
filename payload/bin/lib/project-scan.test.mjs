@@ -45,3 +45,39 @@ test("the editor's own extension tree is excluded by default", () => {
   for (const name of [".vscode", "node_modules", ".vite-inspect", "dist", "build", "coverage", "out"])
     assert.ok(DEFAULT_EXCLUDE.includes(name), `${name} must be excluded by default`);
 });
+
+import { looksArchival, dropNestedArchives } from "./project-scan.mjs";
+
+test("archive-looking directory names are recognised", () => {
+  for (const n of ["_old", "_old1", "_old2", "_prod", "_bak", "_backup", "archive", "backup", "app - Copy", "src.bak"])
+    assert.equal(looksArchival(n), true, `${n} should look archival`);
+});
+
+test("ordinary names are not archival", () => {
+  for (const n of ["src", "_parser", "CHD", "packages", "old-router", "production"])
+    assert.equal(looksArchival(n), false, `${n} must not be treated as an archive`);
+});
+
+// Nesting alone is wrong: a monorepo package is nested and legitimate. An archival name alone is
+// wrong too: a top-level project may simply be called `backup`. Only the pair is evidence.
+test("only a nested AND archival directory is dropped", () => {
+  const dirs = [
+    "D:/w/ArkBot",
+    "D:/w/ArkBot/_old1",          // nested + archival -> drop
+    "D:/w/LobbyBot",
+    "D:/w/LobbyBot/_parser",      // nested, not archival -> keep
+    "D:/w/backup",                // archival name, not nested -> keep
+  ];
+  assert.deepEqual(dropNestedArchives(dirs).sort(),
+    ["D:/w/ArkBot", "D:/w/LobbyBot", "D:/w/LobbyBot/_parser", "D:/w/backup"].sort());
+});
+
+test("nothing is dropped when no project is nested", () => {
+  const dirs = ["D:/w/a", "D:/w/b"];
+  assert.deepEqual(dropNestedArchives(dirs), dirs);
+});
+
+test("backslash paths are handled the same as forward slashes", () => {
+  const dirs = [String.raw`D:\w\ArkBot`, String.raw`D:\w\ArkBot\_old1`];
+  assert.deepEqual(dropNestedArchives(dirs), [String.raw`D:\w\ArkBot`]);
+});

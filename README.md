@@ -1079,6 +1079,16 @@ node ~/.claude/bin/graphify-setup.mjs --build-global /path/repoA /path/repoB /pa
 Под капотом на каждый репозиторий: `graphify extract <repo> --global --as <имя>`. Управление -
 `graphify global list | remove <имя> | path`.
 
+**Поиск по смыслу** - `node ~/.claude/bin/graph-semantic.mjs "<вопрос>"`, ~1 с. Отвечает на
+«я уже писал что-то подобное?», когда имя угадать нельзя: запрос «a lock that stops two
+processes» находит мьютекс, а полнотекстовый поиск на том же вопросе выдавал экран блокировки
+PIN. Векторы строит `/graphify-build-docs` (~2 мин, 24 МБ); окружение создаётся один раз в
+`~/.graphify/embed-venv`, среда graphify не трогается.
+
+**Массовый синк** пропускает вложенные архивные копии по флагу `--skip-nested-archives`
+(выключен по умолчанию): срабатывает только пересечение «вложен в другой проект» И «архивное
+имя» - по отдельности первое цепляет пакеты монорепо, второе - законный проект `backup`.
+
 **Поиск символа по всем репозиториям** - `node ~/.claude/bin/graph-find.mjs "<символ>"`.
 Отвечает за ~200 мс из плоского индекса `~/.graphify/global-index.tsv`; тот же вопрос через
 `graphify explain --graph ~/.graphify/global-graph.json` занимает ~4.5 с, потому что заново

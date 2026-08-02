@@ -12,7 +12,11 @@
  * Usage:
  *   node graphify-sync-all.mjs [--root <dir>] [--max-depth N] [--install-hooks]
  *                              [--exclude a,b,c] [--dry-run] [--semantic]
+ *                              [--skip-nested-archives]
  *   Defaults: --root = current directory, --max-depth 3.
+ *   --skip-nested-archives: drop project roots that sit inside another project AND carry an
+ *                 archival name (_old, _old2, _prod, _bak, backup, "- Copy"). Off by default:
+ *                 a stale copy is still your code, and dropping it is your call.
  *   --semantic:   full extraction including docs (needs an LLM API key). Without it the
  *                 sync is code-only: local AST, no key, no cost - the same as the autosync.
  * Examples:
@@ -24,7 +28,7 @@ import { homedir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_EXCLUDE, isProjectRoot } from "./bin/lib/project-scan.mjs";
+import { DEFAULT_EXCLUDE, isProjectRoot, dropNestedArchives } from "./bin/lib/project-scan.mjs";
 
 const argv = process.argv.slice(2);
 const optVal = (name, def) => {
@@ -38,6 +42,7 @@ const ROOT = optVal("--root", process.cwd());
 const MAX_DEPTH = parseInt(optVal("--max-depth", "3"), 10) || 3;
 const INSTALL_HOOKS = flag("--install-hooks");
 const SEMANTIC = flag("--semantic");
+const SKIP_NESTED_ARCHIVES = flag("--skip-nested-archives");
 const DRY = flag("--dry-run");
 const EXCLUDE = new Set(
   optVal("--exclude", DEFAULT_EXCLUDE.join(","))
@@ -66,7 +71,16 @@ function walk(dir, depth) {
 }
 log(`Scanning ${ROOT} (depth ${MAX_DEPTH})...`);
 walk(ROOT, 0);
-const projects = [...found];
+let projects = [...found];
+if (SKIP_NESTED_ARCHIVES) {
+  const kept = dropNestedArchives(projects);
+  const dropped = projects.filter((p) => !kept.includes(p));
+  if (dropped.length) {
+    log(`Skipping ${dropped.length} nested archive copy/copies:`);
+    for (const d of dropped) log(`  ${d}`);
+  }
+  projects = kept;
+}
 log(`Projects found: ${projects.length}`);
 
 // The scanned root holds other people's projects; the log belongs to graphify, not to it.
