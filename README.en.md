@@ -201,6 +201,12 @@ a human classifies it.
 command — re-enable `superpowers`, disable the fork — rather than a reinstall from the marketplace.
 Running both enabled is not the fallback: they share 14 skill names.
 
+**Plugin consent is per action.** `setup.mjs` prints the plan and asks `y` (all) / `n` (none) /
+`s` (choose). Under `s` each action is asked separately and labelled with what it does:
+`enable`/`disable` touch only `settings.json`, `install`/`uninstall` touch files, and
+`marketplace_add` fetches and trusts remote code. Declining a marketplace also drops the installs
+that need it — they would fail at the CLI — and the reason is printed.
+
 Updating is `/up-update`: `check` is read-only and runs from any project; `update` rebuilds in a
 throwaway clone and either refuses with the condition that fired, or prepares the release and
 stops. Publishing needs an explicit `--publish`, and getting the new version onto a machine is a

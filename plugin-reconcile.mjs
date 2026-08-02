@@ -34,6 +34,38 @@ export function buildPluginPlan({ required, managed, enabledPlugins, installedId
   return { actions, notes };
 }
 
+// Per-action consent. `isAccepted(action)` decides each one; the only cross-action rule is that
+// `claude plugin install` fails outright against a marketplace that was never registered, so a
+// refused marketplace_add carries its installs with it.
+export function selectActions(actions, isAccepted) {
+  const refusedMarkets = new Set();
+  const selected = [], dropped = [];
+  for (const a of actions) {
+    if (a.type === "marketplace_add") {
+      if (isAccepted(a)) selected.push(a);
+      else { refusedMarkets.add(a.marketplace); dropped.push({ action: a, reason: "declined" }); }
+      continue;
+    }
+    const marketplace = String(a.id || "").split("@")[1];
+    if (a.type === "install" && refusedMarkets.has(marketplace)) {
+      dropped.push({ action: a, reason: `needs marketplace "${marketplace}", which was declined` });
+      continue;
+    }
+    if (isAccepted(a)) selected.push(a);
+    else dropped.push({ action: a, reason: "declined" });
+  }
+  return { selected, dropped };
+}
+
+export function describeAction(a) {
+  if (a.type === "marketplace_add") return `register marketplace ${a.source} (needed by ${a.id})`;
+  if (a.type === "install") return `install ${a.id}`;
+  if (a.type === "uninstall") return `uninstall ${a.id} (removes files)`;
+  if (a.type === "enable") return `enable ${a.id} (settings only)`;
+  if (a.type === "disable") return `disable ${a.id} (settings only)`;
+  return `${a.type} ${a.id}`;
+}
+
 export function formatPlan(actions, notes) {
   const lines = actions.map((a) => `  ${a.type.padEnd(9)} ${a.type === "marketplace_add" ? `${a.source} (marketplace "${a.marketplace}", needed by ${a.id})` : a.id}`);
   return [...lines, ...notes.map((n) => `  NOTE: ${n}`)].join("\n") || "  (plugins already match the variant)";

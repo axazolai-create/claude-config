@@ -146,3 +146,53 @@ test("keepInstalled defaults to none, so callers that never heard of it are unch
     enabledPlugins: { "gsd@m": true }, installedIds: ["gsd@m", "superpowers@m", "cm@m", "c7@m"] });
   assert.ok(actions.some((a) => a.type === "uninstall" && a.id === "gsd@m"));
 });
+
+// ---- partial consent ----
+import { selectActions } from "./plugin-reconcile.mjs";
+
+const PLAN = [
+  { type: "marketplace_add", name: "up", id: "up@mk", marketplace: "mk", source: "o/mk" },
+  { type: "install", name: "up", id: "up@mk" },
+  { type: "enable", name: "up", id: "up@mk" },
+  { type: "uninstall", name: "old", id: "old@other" },
+  { type: "disable", name: "old", id: "old@other" },
+];
+
+test("accepting everything selects everything, in order", () => {
+  const { selected, dropped } = selectActions(PLAN, () => true);
+  assert.deepEqual(selected, PLAN);
+  assert.deepEqual(dropped, []);
+});
+
+test("accepting nothing selects nothing", () => {
+  const { selected } = selectActions(PLAN, () => false);
+  assert.deepEqual(selected, []);
+});
+
+test("a single action can be taken while its neighbours are refused", () => {
+  const { selected } = selectActions(PLAN, (a) => a.type === "disable");
+  assert.deepEqual(selected.map((a) => a.type), ["disable"]);
+});
+
+// Installing from a marketplace the user just refused to register fails at the CLI, so the
+// refusal has to carry the install with it rather than leaving a call that cannot work.
+test("refusing a marketplace also drops the installs that need it, with the reason", () => {
+  const { selected, dropped } = selectActions(PLAN, (a) => a.type !== "marketplace_add");
+  assert.ok(!selected.some((a) => a.type === "install"), "install must not survive");
+  assert.ok(selected.some((a) => a.type === "enable"), "enable is a local settings edit and survives");
+  const why = dropped.find((d) => d.action.type === "install");
+  assert.match(why.reason, /marketplace "mk"/);
+});
+
+test("an install from an already-registered marketplace is unaffected", () => {
+  const plan = [{ type: "install", name: "x", id: "x@known" }];
+  const { selected } = selectActions(plan, () => true);
+  assert.deepEqual(selected, plan);
+});
+
+// disable is an enabledPlugins edit; uninstall shells out. Refusing to remove the files must
+// not silently leave the plugin enabled.
+test("refusing an uninstall still allows the disable", () => {
+  const { selected } = selectActions(PLAN, (a) => a.type !== "uninstall");
+  assert.ok(selected.some((a) => a.type === "disable"));
+});

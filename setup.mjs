@@ -47,7 +47,7 @@ import { migrateSettingsModel } from "./payload/bin/lib/model-migration.mjs";
 import { gsdCorePresent, buildGsdInventory, filterGsdHooks, gsdCoreInstallPlan } from "./payload/bin/lib/gsd-core-detect.mjs";
 import { applyPlan, purgeRetention, trashRoot } from "./payload/bin/lib/claude-cleanup-lib.mjs";
 import { resolveVariant, filterPartialHooks, loadVariants, profilesOf, globToRe } from "./variants.mjs";
-import { buildPluginPlan, formatPlan } from "./plugin-reconcile.mjs";
+import { buildPluginPlan, formatPlan, selectActions, describeAction } from "./plugin-reconcile.mjs";
 import { knownMarketplaces } from "./payload/bin/init-stack.mjs";
 
 // REPO_ROOT = where setup.mjs itself lives (installer meta: setup.mjs, README.md,
@@ -1117,16 +1117,32 @@ async function main() {
       // never auto-execute - only the local, reversible enabledPlugins edit does. Interactive
       // aggregate y/N still executes everything, unchanged.
       let go = false, execInstall = false;
+      let chosen = actions;
       if (DRY) log("  (dry-run: no plugin changes)");
       else if (process.env.CLAUDE_SETUP_SKIP_PLUGINS === "1") log("  (skipped: CLAUDE_SETUP_SKIP_PLUGINS=1)");
       else if (BULK === "skip") log("  (--skip-all: no plugin changes)");
       else if (BULK) go = true;   // enabledPlugins edits only; install/uninstall printed as manual commands below
-      else if (INTERACTIVE) { const a = await ask(`    apply ${actions.length} plugin action(s)? (y/N) > `); go = execInstall = a[0] === "y"; }
+      else if (INTERACTIVE) {
+        const a = await ask(`    apply ${actions.length} plugin action(s)? (y = all / n = none / s = choose) > `);
+        if (a[0] === "y") { go = execInstall = true; }
+        else if (a[0] === "s") {
+          const yes = new Set();
+          for (const act of actions) {
+            const r = await ask(`      ${describeAction(act)}? (y/N) > `);
+            if (r[0] === "y") yes.add(act);
+          }
+          const { selected, dropped } = selectActions(actions, (act) => yes.has(act));
+          for (const d of dropped) if (d.reason !== "declined") log(`      skipped ${d.action.id}: ${d.reason}`);
+          chosen = selected;
+          go = execInstall = chosen.length > 0;
+          if (!chosen.length) log("  (nothing selected)");
+        }
+      }
       else log("  (non-interactive: printed only - re-run in a terminal or with --replace-all)");
       if (go) {
         const s = safe(() => JSON.parse(readFileSync(SETTINGS, "utf8"))) || {};
         s.enabledPlugins = s.enabledPlugins || {};
-        for (const a of actions) {
+        for (const a of chosen) {
           // Registering a marketplace fetches and trusts remote code, so it gets the SAME gate as
           // install - never a weaker one just because it is a prerequisite.
           if (a.type === "marketplace_add") {
