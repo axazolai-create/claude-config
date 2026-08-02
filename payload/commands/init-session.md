@@ -5,9 +5,8 @@ allowed-tools: Bash(node *)
 
 Applies the patch registry in `~/.claude/hooks/lib/gsd-agent-patches.mjs` to
 `~/.claude/agents/gsd-*.md`. These files are owned by the separate `gsd-core` tool, not this
-bundle - this command is best-effort cross-tool maintenance, review-gated on purpose (unlike
-the silent per-session context-mode tool-grant sync) because it injects prose across 30+
-files. `session-init.mjs` checks read-only every session and tells you when something here is
+bundle - this command is best-effort cross-tool maintenance, and review-gated: it injects
+prose across 30+ files. `session-init.mjs` checks read-only every session and tells you when something here is
 pending; this command is what actually writes.
 
 ## 1. Run the patcher
@@ -21,8 +20,8 @@ node ~/.claude/apply-gsd-agent-patches.mjs
 Show me exactly what it printed: which `file:patchId` pairs were freshly applied, which were
 **upgraded** (a patch's content changed since it was last applied - e.g. a `version` bump in
 the registry - and the stale text got replaced with the current version; this is expected and
-not an error), which files were skipped as curated (left untouched on purpose -
-`CURATED:NOEDIT` marker), and which were skipped for a missing anchor (means the target file
+not an error), which files were skipped as curated (`CURATED:NOEDIT` marker), and which were
+skipped for a missing anchor (means the target file
 changed upstream since this patch was written - flag those to me explicitly, don't silently
 treat them as done).
 

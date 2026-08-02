@@ -1,7 +1,7 @@
 # rules-src
 
 Source rules, compiled into a per-project snapshot — `<project>/.claude/stack-rules.md`.
-These files are NOT auto-loaded by Claude Code; that is why the directory is `rules-src`,
+These files are NOT auto-loaded by Claude Code. The directory is `rules-src`,
 not `rules` — everything under `~/.claude/rules/` is loaded by Claude Code itself
 (path-scoped via `paths:` frontmatter, unconditionally without it), and that mechanism has
 no off switch. Delivery works by compilation instead:
@@ -96,8 +96,8 @@ session-start note flags it missing, or when the user asks for a rebuild:
    applies them to its backend too — which is how a Next rule ends up governing a Nest service.
 
    Write rules **only for what was actually detected**. A project with no Python marker never
-   receives Python rules, and the snapshot says so explicitly — a `## Not detected` line listing
-   the layers deliberately absent — rather than leaving it to be inferred from omission.
+   receives Python rules. State the absence in **one line** — `Not detected: <markers looked for>`
+   — and stop there. Never enumerate the deliberately-absent layers.
 4. **Rewrite location-sensitive lines**: imports resolve relative to `.claude/`, so
    `@AGENTS.md` (from `node.next.md`) becomes `@../AGENTS.md` in the snapshot.
 5. **Write `<project>/.claude/stack-rules.md`** with this frontmatter (hash values come
@@ -145,7 +145,7 @@ output), so re-serialise it to a single line yourself.
     `stale`, do NOT regenerate the snapshot from scratch. Add the `rules-src/` layers that
     answer each `added` marker, remove the sections belonging to each `removed` marker, and
     restamp `stackFingerprint` and `markers`. A full rebuild discards any hand-tuning in the
-    snapshot and produces a diff nobody can review. A `legacy` status means the snapshot
+    snapshot and produces an unreviewable diff. A `legacy` status means the snapshot
     predates the `markers:` line: rebuild it once, fully, and it becomes comparable from then on.
     Re-running the check afterwards proves only that the frontmatter parses: it compares `markers`
     and never reads the body, so a rule section dropped by accident still reports `ok`. Check the

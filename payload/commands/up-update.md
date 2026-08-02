@@ -18,9 +18,8 @@ one invocation; there is no config file to edit and no state to clear.
 
 ## Show me the report as it is
 
-Print the tool's output verbatim. Do not summarise the legal entries away: each one is a path we
-are obliged to leave alone plus the reason we are obliged to, and the reason is the part that
-stops the list rotting into folklore. If the list looks long, that is the list.
+Print the tool's output verbatim. Do not summarise the legal entries away: each one is a path
+to leave alone, with its reason. If the list looks long, that is the list.
 
 ## What the statuses mean
 

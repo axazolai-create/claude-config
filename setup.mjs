@@ -1222,6 +1222,32 @@ async function main() {
     }
   }
 
+  /* ---------- Claude Code auto-update ---------- */
+  // The state file moves into CLAUDE_CONFIG_DIR when that var is set, so probe both and take
+  // whichever exists; writing a fresh one would create a file Claude Code never reads.
+  if (!DRY) {
+    const stateFile = [join(CDIR, ".claude.json"), join(HOME, ".claude.json")].find((p) => existsSync(p));
+    if (!stateFile) {
+      summary.push("autoUpdates: no Claude Code state file found - left untouched");
+    } else {
+      try {
+        const st = JSON.parse(readFileSync(stateFile, "utf8"));
+        if (st.autoUpdates !== true) {
+          st.autoUpdates = true;
+          writeFileSync(stateFile, JSON.stringify(st, null, 2) + "\n");
+          summary.push("autoUpdates: enabled");
+        }
+      } catch {
+        summary.push("autoUpdates: state file is not valid JSON - left untouched");
+      }
+      let envSettings = {};
+      try { envSettings = JSON.parse(readFileSync(SETTINGS, "utf8")); } catch { envSettings = {}; }
+      if (envSettings.env && envSettings.env.DISABLE_AUTOUPDATER) {
+        summary.push("autoUpdates: settings.json env sets DISABLE_AUTOUPDATER - remove it by hand to let updates run");
+      }
+    }
+  }
+
   /* ---------- opt-in: one-time, machine-wide graphify -> Neo4j (LAN) ---------- */
   // Same "decide once, record in settings.json.env, never re-ask" idiom as the update-check
   // block above. Non-secret decision recorded in settings.json.env; the password is written

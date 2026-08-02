@@ -27,9 +27,8 @@ Surface any `Re-migrated ...` lines it prints.
 
 ## 2. Stack-rules snapshot (build if missing or stale)
 `.claude/stack-rules.md` is the compiled per-project rules snapshot (language/framework rules,
-no longer auto-loaded from `~/.claude/rules-src/` - see that folder's README). `session-init.mjs`
-only flags it as missing; its passive every-session sourceHash/stackFingerprint check was removed
-(too eager, fired on any drift). Staleness gets caught and fixed here instead - an explicit,
+not auto-loaded from `~/.claude/rules-src/` - see that folder's README). `session-init.mjs`
+only flags it as missing. Staleness gets caught and fixed here - an explicit,
 review-gated invocation, not a background nag.
 
 Check:

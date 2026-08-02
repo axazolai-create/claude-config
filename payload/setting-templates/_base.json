@@ -1,32 +1,12 @@
 {
   "stack": "root",
-  "description": "Root extension point, inherited by every stack. Universal, low-footprint plugins: up-to-date library docs (Context7) and active security review (Security Guidance).",
+  "description": "Root extension point, inherited by every stack. Universal, low-footprint plugins: active security review (Security Guidance).",
   "merge": {
     "enabledPlugins": {
-      "context7@claude-plugins-official": true,
       "security-guidance@claude-plugins-official": true
     }
   },
   "plugins": [
-    {
-      "id": "context7@claude-plugins-official",
-      "description": "Context7 (Upstash) - injects up-to-date, version-specific library docs and real code examples into the prompt, killing hallucinated/stale APIs. Stack-agnostic (useful in every direction), small footprint. FREE, works with no account; an optional CONTEXT7_API_KEY only raises rate limits. NOTE: the docs index is a hosted Upstash service, so it is not a true offline/local tool. Complements the language servers (LSP = your repo's symbols; Context7 = external canonical docs).",
-      "check": {
-        "installed_file": "~/.claude/plugins/installed_plugins.json",
-        "cmd": "claude plugin list",
-        "bash": "jq -e '.plugins[\"context7@claude-plugins-official\"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1 && echo INSTALLED || echo MISSING",
-        "slash": "/plugin list"
-      },
-      "install": {
-        "marketplace_add": {
-          "cmd": "claude plugin marketplace add anthropics/claude-plugins-official",
-          "slash": "/plugin marketplace add anthropics/claude-plugins-official"
-        },
-        "cmd": "claude plugin install context7@claude-plugins-official --scope project",
-        "bash": "claude plugin install context7@claude-plugins-official --scope project",
-        "slash": "/plugin install context7@claude-plugins-official"
-      }
-    },
     {
       "id": "security-guidance@claude-plugins-official",
       "description": "Security Guidance (Anthropic, official) - ACTIVE runtime hooks, not prose: PostToolUse regex warnings on every Edit/Write (~25 dangerous patterns), a Stop-hook LLM diff review, and an agentic cross-file review on git commit (injection/XSS/SSRF/IDOR/auth-bypass/unsafe-deserialization/secrets). Fully local (uses your Claude session, no external calls). COMPLEMENTARY to rules/security.md (that guidance shapes what gets written BEFORE; this catches unsafe code AFTER + at commit). NOTE: the Stop-hook review is an extra LLM call per turn (cost/latency); its commit review overlaps in place - not in purpose - with this config's secrets-gate.mjs.",

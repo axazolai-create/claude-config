@@ -1,8 +1,9 @@
 ## PLUGINS & SKILLS (loading policy)
-- Base plugins (ultrapowers, context-mode, context7) are enabled at USER scope and load every
-  session. Do not duplicate them in project settings.
-- GSD-Core is NOT a marketplace plugin here: it is installed with npx and detected on disk.
-  The marketplace plugin named `gsd` is deliberately not enabled by any profile.
+- Base plugins (ultrapowers, context-mode) are enabled at USER scope and load every session.
+  Do not duplicate them in project settings.
+- Context7 is an MCP SERVER here, not a plugin. Never enable the marketplace plugin of that name.
+- GSD-Core is installed with npx and detected on disk. Never enable the marketplace plugin
+  named `gsd`.
 - Stack-specific plugins are enabled PER PROJECT via `.claude/settings.json` -> enabledPlugins.
 - Project plugin sets live under `~/.claude/setting-templates/`, nested by direction (e.g.
   `frontend/react.json`, `bots/node.json` - see that folder's README for the full layout) and

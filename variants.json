@@ -15,13 +15,14 @@
     "context-mode":            "mksglu/context-mode"
   },
   "$gsd": "`gsd` stays in managedPlugins but appears in no profile, so plugin-reconcile prints its uninstall command rather than its install command. GSD-Core is installed with npx, not from a marketplace, and the marketplace plugin of that name was never what this bundle wanted - it was carried in the full profile by inheritance. Removing the entry entirely would be quieter but weaker: a plugin nobody manages is a plugin nobody offers to remove, and a machine that already has it would keep it forever without ever being told.",
-  "$keepInstalled": "Managed plugins that are disabled when not required, but never uninstalled. superpowers is here because ultrapowers is our fork of it: keeping upstream on disk makes rollback one command (re-enable it, disable the fork) instead of a reinstall from the marketplace. It must stay in managedPlugins to be disabled at all - a plugin we stop managing is a plugin we stop turning off. Both enabled at once is NOT the fallback: they share 14 skill names and that is undocumented behaviour we do not run in production.",
-  "keepInstalled": ["superpowers"],
+  "$context7": "In managedPlugins, in no profile: plugin-reconcile prints its uninstall command. Context7 is reached through its MCP server.",
+  "$keepInstalled": "Managed plugins that are disabled when not required, but never uninstalled. superpowers is here because ultrapowers is our fork of it: keeping upstream on disk makes rollback one command (re-enable it, disable the fork) instead of a reinstall from the marketplace. It must stay in managedPlugins to be disabled at all - a plugin we stop managing is a plugin we stop turning off. Both enabled at once is NOT the fallback: they share 14 skill names and that is undocumented behaviour we do not run in production. ultrapowers is here for `lite`, which ships it to disk but does not enable it.",
+  "keepInstalled": ["superpowers", "ultrapowers"],
   "profiles": {
-    "full": { "plugins": ["ultrapowers", "context-mode", "context7"] },
+    "full": { "plugins": ["ultrapowers", "context-mode"] },
 
     "base": {
-      "plugins": ["ultrapowers", "context-mode", "context7"],
+      "plugins": ["ultrapowers", "context-mode"],
       "exclude": [
         "agents/gsd-*.md", "apply-gsd-agent-patches.mjs", "gsd-defaults-sync.mjs",
         "sync-gsd-context-mode-tool.mjs", "commands/init-session.md",
@@ -40,7 +41,7 @@
 
     "lite": {
       "extends": "base",
-      "plugins": ["ultrapowers", "context-mode", "context7"],
+      "plugins": ["context-mode"],
       "overlay": "payload-lite",
       "maxPluginTier": "core",
       "exclude": [

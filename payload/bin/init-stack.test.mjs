@@ -235,7 +235,8 @@ test("react inherits the frontend chain (typescript-lsp, accesslint; frontend-de
   assert.ok(ids.has("typescript-lsp@claude-plugins-official"));
   assert.ok(ids.has("accesslint@accesslint"));
   assert.ok(!ids.has("frontend-design@claude-plugins-official"), "frontend-design removed in Phase 3");
-  assert.ok(ids.has("context7@claude-plugins-official")); // root _base, universal
+  assert.ok(ids.has("security-guidance@claude-plugins-official")); // root _base, universal
+  assert.ok(!ids.has("context7@claude-plugins-official"), "context7 is an MCP server here, not a plugin");
 });
 
 test("react-native inherits both frontend (vertical) and mobile (explicit extends)", () => {
@@ -256,7 +257,8 @@ test("kotlin is standalone (no frontend/mobile cross-branch leaks)", () => {
   const { entries } = gather(["kotlin"], { templatesDir: REPO_TEMPLATES_DIR });
   const ids = new Set(entries.map((e) => e.id));
   assert.ok(ids.has("kotlin-lsp@claude-plugins-official"));
-  assert.ok(ids.has("context7@claude-plugins-official"));
+  assert.ok(ids.has("security-guidance@claude-plugins-official"));
+  assert.ok(!ids.has("context7@claude-plugins-official"));
   assert.ok(!ids.has("typescript-lsp@claude-plugins-official"));
   assert.ok(!ids.has("expo@claude-plugins-official"));
 });
@@ -265,7 +267,8 @@ test("csharp-cli is standalone", () => {
   const { entries } = gather(["csharp-cli"], { templatesDir: REPO_TEMPLATES_DIR });
   const ids = new Set(entries.map((e) => e.id));
   assert.ok(ids.has("csharp-lsp@claude-plugins-official"));
-  assert.ok(ids.has("context7@claude-plugins-official"));
+  assert.ok(ids.has("security-guidance@claude-plugins-official"));
+  assert.ok(!ids.has("context7@claude-plugins-official"));
   assert.ok(!ids.has("typescript-lsp@claude-plugins-official"));
   assert.ok(!ids.has("kotlin-lsp@claude-plugins-official"));
 });
@@ -280,15 +283,18 @@ test("wpf is standalone", () => {
 test("bare node/python/csharp stacks reuse their direction's _base.json as the leaf", () => {
   const node = gather(["node"], { templatesDir: REPO_TEMPLATES_DIR }).entries.map((e) => e.id);
   assert.ok(node.includes("typescript-lsp@claude-plugins-official"));
-  assert.ok(node.includes("context7@claude-plugins-official"));
+  assert.ok(node.includes("security-guidance@claude-plugins-official"));
+  assert.ok(!node.includes("context7@claude-plugins-official"));
 
   const python = gather(["python"], { templatesDir: REPO_TEMPLATES_DIR }).entries.map((e) => e.id);
   assert.ok(python.includes("pyright-lsp@claude-plugins-official"));
-  assert.ok(python.includes("context7@claude-plugins-official"));
+  assert.ok(python.includes("security-guidance@claude-plugins-official"));
+  assert.ok(!python.includes("context7@claude-plugins-official"));
 
   const csharp = gather(["csharp"], { templatesDir: REPO_TEMPLATES_DIR }).entries.map((e) => e.id);
   assert.ok(csharp.includes("csharp-lsp@claude-plugins-official"));
-  assert.ok(csharp.includes("context7@claude-plugins-official"));
+  assert.ok(csharp.includes("security-guidance@claude-plugins-official"));
+  assert.ok(!csharp.includes("context7@claude-plugins-official"));
 });
 
 test("gather: no_template for an unknown stack against real templates", () => {

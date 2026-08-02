@@ -23,8 +23,7 @@ If `isMonorepo` is `false`, continue as a single project:
 
 Run `node ~/.claude/skills/update-changelog/scripts/detect-project.mjs` from the repo root.
 
-`isReactOrNext` no longer decides whether to run. It decides only whether a **rendered
-changelog** belongs here:
+`isReactOrNext` decides only whether a **rendered changelog** belongs here:
 
 - `isReactOrNext: true` — this part has a changelog UI. Write `changelog.json` and bump.
 - `isReactOrNext: false` — this part has no UI of its own. Bump the version with
@@ -226,9 +225,8 @@ node ~/.claude/skills/update-changelog/scripts/lint-versions.mjs --root <root>
 
 It re-reads **every** queued commit from `git log`, recorded level or not — a recorded level is
 only what the trigger saw at commit time, and re-reading is the only way to notice history has
-drifted from it. One line per problem on stderr: queued commits with no recognised type (a
-commit that bumps nothing would otherwise vanish without a trace), queued hashes `git log` can
-no longer resolve, a version-bump commit that reached the queue (so a version moved outside a
+drifted from it. One line per problem on stderr: queued commits with no recognised type,
+queued hashes `git log` cannot resolve, a version-bump commit that reached the queue (so a version moved outside a
 drain), and any major proposal still awaiting approval. Exit 1 when it found something, 0 and
 silent when it did not, so a script can branch on it.
 
@@ -479,8 +477,8 @@ Idempotent; installs three things:
   re-trigger itself. It enqueues `<hash> <level>`, classifying the commit at commit time
   (`queue.mjs append --classify`); if that classification fails the hash is still queued, bare,
   and gets classified at drain time instead. The line carries the **level and nothing else** —
-  a breaking marker leaves no trace in the queue, which is why `lint` re-reads the commits
-  rather than trusting it (§4). Nothing walks history at install time, so adopting the trigger
+  a breaking marker leaves no trace in the queue. `lint` re-reads the commits rather than
+  trusting it (§4). Nothing walks history at install time, so adopting the trigger
   on an existing project never moves its version retroactively;
 - `.changelog.config.json` (committed) with the aggregate location + part-name map, if absent;
 - `.gitignore` entries for `.claude/changelog-queue` and `.claude/changelog.lock`.

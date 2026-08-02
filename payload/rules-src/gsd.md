@@ -36,9 +36,8 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 - `TaskCreate`/`TaskUpdate` have no batch parameter — don't try to batch them.
 - GSD subagents get the same routing rule directly in their own prompt file (a
   `<context_mode_routing>` block, applied by `hooks/lib/gsd-agent-patches.mjs` via
-  `/init-session` — init-stack.md no longer runs this step) rather than through this snapshot —
-  subagents never read the project's compiled `stack-rules.md`, so a prose rule living only
-  here would be dead weight for them.
+  `/init-session`), not through this snapshot. Subagents never read the project's compiled
+  `stack-rules.md`.
 
 ## Ultrapowers is retained only for gaps GSD does not fill
 
@@ -54,7 +53,7 @@ Pipeline: discuss -> plan -> execute -> verify -> ship. Artifacts live in `.plan
 - Two worktree creators collide and fail silently outside a git repo. `git init` before any
   phase.
 
-### Depth boundary: waves stay at depth 2, on purpose
+### Depth boundary: waves stay at depth 2
 
 - **Exactly one `Agent`-capable context dispatches every leaf worker directly — no chain of
   coordinator agents.** For "N stages x M parallel workers," the orchestrator issues M `Agent`

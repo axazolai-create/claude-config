@@ -2,8 +2,10 @@
 profiles: [base, lite]
 ---
 ## PLUGINS & SKILLS (loading policy)
-- Base plugins (ultrapowers, context-mode, context7) are enabled at USER scope and load every
-  session. Do not duplicate them in project settings.
+- Base plugins (ultrapowers, context-mode) are enabled at USER scope and load every session.
+  Do not duplicate them in project settings. In the `lite` profile ultrapowers is installed
+  but disabled.
+- Context7 is an MCP SERVER here, not a plugin. Never enable the marketplace plugin of that name.
 - Stack-specific plugins are enabled PER PROJECT via `.claude/settings.json` -> enabledPlugins.
 - Project plugin sets live under `~/.claude/setting-templates/`, nested by direction (e.g.
   `frontend/react.json`, `bots/node.json` - see that folder's README for the full layout) and
