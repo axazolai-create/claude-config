@@ -83,12 +83,14 @@ function pyRequirements(root) {
   return text.toLowerCase();
 }
 
-function csprojText(root) {
-  let text = "";
+// One lowered text PER .csproj, never pooled: a solution's web project and its console project
+// must be classified independently, or the web one suppresses the other's csharp-cli tag.
+function csprojTexts(root) {
+  const texts = [];
   walk(root, (dirpath, _dirnames, filenames) => {
-    for (const fn of filenames) if (fn.endsWith(".csproj")) text += "\n" + readText(join(dirpath, fn));
+    for (const fn of filenames) if (fn.endsWith(".csproj")) texts.push(readText(join(dirpath, fn)).toLowerCase());
   });
-  return text.toLowerCase();
+  return texts;
 }
 
 // ---------- detector-id -> template path (paths no longer mirror the id 1:1 - see
@@ -176,13 +178,19 @@ export function detect(root) {
   // "node" above.
   if (py && !["django", "fastapi", "flask", "telegram-python"].some((s) => found.includes(s))) found.push("python");
 
-  const cs = csprojText(root);
+  const csTexts = csprojTexts(root);
   const hasXaml = globAny(root, "*.xaml");
-  if (cs) {
-    if (cs.includes('sdk="microsoft.net.sdk.web"') || cs.includes("microsoft.aspnetcore")) found.push("aspnet");
-    if (cs.includes("<usewpf>true") || cs.includes("<usewindowsforms>true") || hasXaml) found.push("wpf");
-    if (cs.includes("outputtype>exe") && !["aspnet", "wpf"].some((s) => found.includes(s))) found.push("csharp-cli");
-    if (!["aspnet", "wpf", "csharp-cli"].some((s) => found.includes(s))) found.push("csharp");
+  if (csTexts.length) {
+    for (const cs of csTexts) {
+      const isWeb = cs.includes('sdk="microsoft.net.sdk.web"') || cs.includes("microsoft.aspnetcore");
+      const isDesktop = cs.includes("<usewpf>true") || cs.includes("<usewindowsforms>true");
+      const isExe = cs.includes("outputtype>exe");
+      if (isWeb) found.push("aspnet");
+      if (isDesktop) found.push("wpf");
+      if (isExe && !isWeb && !isDesktop) found.push("csharp-cli");
+      if (!isWeb && !isDesktop && !isExe) found.push("csharp");
+    }
+    if (hasXaml && !found.includes("wpf")) found.push("wpf"); // repo-level XAML implies WPF without a UseWPF flag
   } else if (hasXaml || globAny(root, "*.cs")) {
     found.push(hasXaml ? "wpf" : "csharp");
   }

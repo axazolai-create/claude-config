@@ -22,6 +22,7 @@ import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { STACK_PATHS, detect } from "./lib/stack-markers.mjs";
 import { migrateProjectModelConfig } from "./lib/model-migration.mjs";
+import { updateJsonFile } from "../hooks/lib/atomic-json.mjs";
 
 export { STACK_PATHS };
 
@@ -83,6 +84,14 @@ export function deepMerge(dst, src) {
   for (const [k, v] of Object.entries(src || {})) {
     if (isPlainObject(v) && isPlainObject(dst[k])) {
       deepMerge(dst[k], v);
+    } else if (Array.isArray(v) && Array.isArray(dst[k])) {
+      // Union, order-preserving, structurally deduped: a template array (permissions.allow, hook
+      // entries) must ADD to a user-set array, not replace it wholesale.
+      const seen = new Set(dst[k].map((x) => JSON.stringify(x)));
+      for (const x of v) {
+        const key = JSON.stringify(x);
+        if (!seen.has(key)) { seen.add(key); dst[k].push(x); }
+      }
     } else {
       dst[k] = v;
     }
@@ -468,31 +477,31 @@ export function apply(enableIds, removeIds, stacks, opts = {}) {
   const root = opts.root || process.cwd();
   const settingsFile = opts.settingsFile || opts.settingsPath || join(root, ".claude", "settings.json");
   const { nonpluginMerge } = gather(stacks, opts);
-  const settings = loadJson(settingsFile);
-  let ep = settings.enabledPlugins;
-  if (!ep || typeof ep !== "object" || Array.isArray(ep)) ep = {};
-  settings.enabledPlugins = ep;
-  deepMerge(settings, nonpluginMerge); // stack settings (non-plugin keys)
   const enabled = [];
   const removed = [];
-  for (const pid of enableIds) {
-    if (pid && !isPlaceholder(pid)) {
-      ep[pid] = true;
-      enabled.push(pid);
+  // Re-read under a lock and write atomically: session-init.mjs mutates this same settings.json,
+  // so a whole-file rewrite of a stale in-memory copy would clobber whatever it added meanwhile.
+  const wrote = updateJsonFile(settingsFile, (settings) => {
+    let ep = settings.enabledPlugins;
+    if (!ep || typeof ep !== "object" || Array.isArray(ep)) ep = {};
+    settings.enabledPlugins = ep;
+    deepMerge(settings, nonpluginMerge); // stack settings (non-plugin keys)
+    for (const pid of enableIds) {
+      if (pid && !isPlaceholder(pid)) {
+        ep[pid] = true;
+        enabled.push(pid);
+      }
     }
-  }
-  for (const pid of removeIds) {
-    if (pid in ep) {
-      delete ep[pid];
-      removed.push(pid);
+    for (const pid of removeIds) {
+      if (pid in ep) {
+        delete ep[pid];
+        removed.push(pid);
+      }
     }
-  }
-  settings.enabledPlugins = settings.enabledPlugins || {};
-  mkdirSync(dirname(settingsFile), { recursive: true });
-  writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n", "utf8");
+  });
   console.log("Enabled:", enabled.length ? enabled.join(", ") : "(none)");
   console.log("Removed:", removed.length ? removed.join(", ") : "(none)");
-  console.log(`Wrote ${settingsFile}`);
+  console.log(wrote ? `Wrote ${settingsFile}` : `${settingsFile} already up to date`);
   console.log("enabledPlugins resolves at startup - RESTART Claude Code to apply.");
   return 0;
 }

@@ -6,7 +6,7 @@
 // apply/tier-filter/CLI additions (init-stack.py has no equivalent to port from).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,7 @@ import {
   readMaxPluginTier,
   migrateProjectModelConfigFile,
 } from "./init-stack.mjs";
+import { detect } from "./lib/stack-markers.mjs";
 
 const REPO_TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "setting-templates");
 
@@ -597,4 +598,40 @@ test("migrateProjectModelConfigFile: malformed config is left untouched, never t
 test("classify: the fork's managed id is marketplace_missing on a machine that never added it", () => {
   assert.equal(classify("ultrapowers@ultrapowers", { installed: new Set(), known: new Set() }), "marketplace_missing");
   assert.equal(classify("ultrapowers@ultrapowers", { installed: new Set(["ultrapowers@ultrapowers"]), known: new Set() }), "installed");
+});
+
+test("deepMerge unions arrays instead of replacing a user-set one", () => {
+  const dst = { permissions: { allow: ["Bash(git:*)"] } };
+  deepMerge(dst, { permissions: { allow: ["Bash(npm:*)", "Bash(git:*)"] } });
+  assert.deepEqual(dst, { permissions: { allow: ["Bash(git:*)", "Bash(npm:*)"] } });
+});
+
+test("deepMerge array union dedupes structurally, not by reference", () => {
+  const dst = { hooks: [{ m: "Bash", cmd: "a" }] };
+  deepMerge(dst, { hooks: [{ m: "Bash", cmd: "a" }, { m: "Read", cmd: "b" }] });
+  assert.deepEqual(dst.hooks, [{ m: "Bash", cmd: "a" }, { m: "Read", cmd: "b" }]);
+});
+
+test("two .csproj projects are classified independently, not as one pooled blob", () => {
+  const dir = mkdtempSync(join(tmpdir(), "csproj-"));
+  try {
+    mkdirSync(join(dir, "Web"), { recursive: true });
+    mkdirSync(join(dir, "Cli"), { recursive: true });
+    writeFileSync(join(dir, "Web", "Web.csproj"), '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>');
+    writeFileSync(join(dir, "Cli", "Cli.csproj"), "<Project><OutputType>Exe</OutputType></Project>");
+    const found = detect(dir);
+    assert.ok(found.includes("aspnet"), `expected aspnet in ${JSON.stringify(found)}`);
+    assert.ok(found.includes("csharp-cli"),
+      `a console project must not be suppressed by a sibling web project: ${JSON.stringify(found)}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("applying settings leaves no lock or temp sibling behind", () => {
+  const dir = mkdtempSync(join(tmpdir(), "initstack-apply-"));
+  try {
+    const settingsFile = join(dir, ".claude", "settings.json");
+    apply([], [], [], { root: dir, settingsFile, templatesDir: REPO_TEMPLATES_DIR });
+    const left = readdirSync(join(dir, ".claude"));
+    assert.deepEqual(left, ["settings.json"], `stray files: ${JSON.stringify(left)}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
