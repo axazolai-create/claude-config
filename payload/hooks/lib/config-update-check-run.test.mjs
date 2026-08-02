@@ -26,10 +26,16 @@ test("reconcileBundleInstall: clears the notice once the install catches up to t
   assert.equal(out["claude-config"].updateAvailable, false);
 });
 
-test("reconcileBundleInstall: keeps the notice when the install is still behind the remote", () => {
-  const out = reconcileBundleInstall(stale(), "middle");
-  assert.equal(out["claude-config"].installed, "middle");
+test("reconcileBundleInstall: a moved install voids the verdict rather than re-deciding it", () => {
+  const out = reconcileBundleInstall(stale(), "newer-than-the-checked-remote");
+  assert.equal(out["claude-config"].installed, "newer-than-the-checked-remote");
+  assert.equal(out["claude-config"].updateAvailable, false, "never point at a SHA the install passed");
+});
+
+test("reconcileBundleInstall: re-installing the same SHA leaves a real notice standing", () => {
+  const out = reconcileBundleInstall(stale({ installed: "same" }), "same");
   assert.equal(out["claude-config"].updateAvailable, true);
+  assert.equal(out["claude-config"].lastCheckedAt, "2026-08-02T15:10:54.916Z");
 });
 
 test("reconcileBundleInstall: drops lastCheckedAt so the next session re-checks", () => {
