@@ -41,7 +41,7 @@ export function paintContext(text, opts) {
   const { colour, icon } = opts || {};
   if (!text) return "";
   const painted = colour ? `\x1b[${colour}m${text}\x1b[0m` : text;
-  return icon ? `${painted} ${icon}` : painted;
+  return icon ? `${icon} ${painted}` : painted;
 }
 
 export function installedProfile(claudeDir) {

@@ -892,9 +892,12 @@ from this bundle, driving your Claude Code" principle — here for findability:
      count, and not on the right the way the deleted wrapper appended it;
   2. **model** — `data.model.display_name` from the statusLine payload;
   3. **context** — tokens and percent, e.g. `165.6K/1M 17%`, coloured and iconed by two separate
-     ladders: **colour** — by percent of the model window (15/45/70/85/95% → grey/green/yellow/
-     orange/red/bright red), **icon** — by percent of the way to automatic compaction
-     (45/70/85/95% → 💡/⚠️/🔥/💀) within a capacity — `CLAUDE_CODE_AUTO_COMPACT_WINDOW` when set,
+     ladders: **colour** — by percent of the model window (00–15 grey / 16–30 green / 31–55
+     yellow / 56–80 orange / 81–100 red), **icon** — left of the digits and outside the colour
+     wrapper, by percent of the way to automatic compaction (00–39 no icon / 40–59 💡 / 60–74 ❗ /
+     75–89 🔥 / 90–100 💀; each one `Emoji_Presentation=Yes`, or xterm.js renders a monochrome
+     glyph). Both ladders compare the rounded percent — the one the line prints. The capacity is
+     `CLAUDE_CODE_AUTO_COMPACT_WINDOW` when set,
      capped at the model's window, otherwise the model's window whole; within that capacity the
      autocompact point resolves in this order: `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` → an observation
      from `precompact-observe.mjs` for the current model (`~/.claude/state/autocompact.json`) →

@@ -232,11 +232,11 @@ test("entry point: CLAUDE_CODE_AUTO_COMPACT_WINDOW narrows the icon ladder, not 
     context_window: { context_window_size: 1000000, used_percentage: 32 },
   }), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "600000" } });
   assert.equal(out.status, 0);
-  // colour: 32% of the full 1M window is the green band - windowPct is never narrowed.
-  assert.match(out.stdout, /\x1b\[32m320\.0K\/1M 32%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
+  // colour: 32% of the full 1M window is the yellow band - windowPct is never narrowed.
+  assert.match(out.stdout, /\x1b\[33m320\.0K\/1M 32%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
   // icon: 320K of a 600K capacity is 53% of the way to compaction - past the 💡 floor.
   // Asserting both, on the same render, fails if colour and icon ever collapse onto one number.
-  assert.match(strip(out.stdout), /320\.0K\/1M 32% 💡/, `icon: got ${JSON.stringify(out.stdout)}`);
+  assert.match(strip(out.stdout), /💡 320\.0K\/1M 32%/, `icon: got ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: a disabled autocompact collapses the icon onto windowPct, not the raw ratio", () => {
@@ -244,14 +244,14 @@ test("entry point: a disabled autocompact collapses the icon onto windowPct, not
   write(join(claudeDir, "settings.json"), JSON.stringify({ autoCompactEnabled: false }));
   const root = dir("plain-ac-disabled");
   const out = runEntry(payload(root, {
-    context_window: { context_window_size: 200000, used_percentage: 44,
+    context_window: { context_window_size: 200000, used_percentage: 38,
       current_usage: { input_tokens: 91000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 } },
   }), { claudeDir });
   assert.equal(out.status, 0);
-  // 91K/200K is 45.5% raw - past the icon floor - but windowPct (the payload's own 44%) is not;
+  // 91K/200K is 45.5% raw - past the icon floor - but windowPct (the payload's own 38%) is not;
   // disabled autocompact has nothing to warn about, so the icon must not fire ahead of the colour.
-  assert.match(out.stdout, /\x1b\[32m91\.0K\/200K 44%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
-  assert.doesNotMatch(strip(out.stdout), /💡|⚠️|🔥|💀/, `icon leaked ahead of windowPct: got ${JSON.stringify(out.stdout)}`);
+  assert.match(out.stdout, /\x1b\[33m91\.0K\/200K 38%\x1b\[0m/, `colour: got ${JSON.stringify(out.stdout)}`);
+  assert.doesNotMatch(strip(out.stdout), /💡|❗|🔥|💀/, `icon leaked ahead of windowPct: got ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: no context_window means no context segment, not a broken one", () => {
@@ -551,24 +551,24 @@ test("entry point: stdin that never closes still renders and exits", async () =>
   assert.ok(strip(out).includes("hang-guard"), `got: ${JSON.stringify(out)}`);
 });
 
-test("paintContext: wraps in the colour and hangs the icon outside it", () => {
+test("paintContext: wraps the text in the colour and leads with the icon, outside it", () => {
   assert.equal(paintContext("12K/1M 12%", { colour: "32", icon: "" }), "\x1b[32m12K/1M 12%\x1b[0m");
-  assert.equal(paintContext("12K/1M 12%", { colour: "91", icon: "💀" }), "\x1b[91m12K/1M 12%\x1b[0m 💀");
-  assert.equal(paintContext("", { colour: "91", icon: "💀" }), "");
+  assert.equal(paintContext("12K/1M 12%", { colour: "31", icon: "💀" }), "💀 \x1b[31m12K/1M 12%\x1b[0m");
+  assert.equal(paintContext("", { colour: "31", icon: "💀" }), "");
 });
 
 test("paintContext: a null opts argument does not throw", () => {
   assert.equal(paintContext("12K/1M 12%", null), "12K/1M 12%");
 });
 
-test("entry point: a full window is bright red and carries the skull", () => {
+test("entry point: a full window is red and carries the skull", () => {
   const out = runEntry(payload(dir("proj-hot"), {
     context_window: { context_window_size: 200000, used_percentage: 96,
       current_usage: { input_tokens: 192000, cache_creation_input_tokens: 0,
         cache_read_input_tokens: 0, output_tokens: 0 } },
   }), { claudeDir: dir("claude-hot") });
   assert.equal(out.status, 0);
-  assert.ok(out.stdout.includes("\x1b[91m"), `no bright red: ${JSON.stringify(out.stdout)}`);
+  assert.ok(out.stdout.includes("\x1b[31m"), `no red: ${JSON.stringify(out.stdout)}`);
   assert.ok(out.stdout.includes("💀"), `no skull: ${JSON.stringify(out.stdout)}`);
 });
 
@@ -580,7 +580,7 @@ test("entry point: an empty window is grey and silent", () => {
   }), { claudeDir: dir("claude-cold") });
   assert.equal(out.status, 0);
   assert.ok(out.stdout.includes("\x1b[2m30.0K/1M 3%\x1b[0m"), `got: ${JSON.stringify(out.stdout)}`);
-  for (const icon of ["💡", "⚠️", "🔥", "💀"]) assert.equal(out.stdout.includes(icon), false);
+  for (const icon of ["💡", "❗", "🔥", "💀"]) assert.equal(out.stdout.includes(icon), false);
 });
 
 test("entry point: an observed autocompact point makes the icon lead the colour", () => {
@@ -595,19 +595,19 @@ test("entry point: an observed autocompact point makes the icon lead the colour"
         cache_read_input_tokens: 0, output_tokens: 0 } },
   }), { claudeDir });
   assert.equal(out.status, 0);
-  assert.ok(out.stdout.includes("\x1b[32m"), `expected green: ${JSON.stringify(out.stdout)}`);
+  assert.ok(out.stdout.includes("\x1b[33m"), `expected yellow: ${JSON.stringify(out.stdout)}`);
   assert.ok(out.stdout.includes("💡"), `expected the lamp: ${JSON.stringify(out.stdout)}`);
 });
 
 test("entry point: a default-configuration render never shows an icon while the colour disagrees", () => {
   const out = runEntry(payload(dir("proj-collapse"), {
-    context_window: { context_window_size: 1000000, used_percentage: 44,
+    context_window: { context_window_size: 1000000, used_percentage: 38,
       current_usage: { input_tokens: 452000, cache_creation_input_tokens: 0,
         cache_read_input_tokens: 0, output_tokens: 0 } },
   }), { claudeDir: dir("claude-collapse") });
   assert.equal(out.status, 0);
-  assert.ok(out.stdout.includes("\x1b[32m"), `expected green: ${JSON.stringify(out.stdout)}`);
-  for (const icon of ["💡", "⚠️", "🔥", "💀"]) {
+  assert.ok(out.stdout.includes("\x1b[33m"), `expected yellow: ${JSON.stringify(out.stdout)}`);
+  for (const icon of ["💡", "❗", "🔥", "💀"]) {
     assert.equal(out.stdout.includes(icon), false, `unexpected ${icon}: ${JSON.stringify(out.stdout)}`);
   }
 });
