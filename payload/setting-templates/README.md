@@ -18,7 +18,8 @@ setting-templates/
     kotlin.json                  # the "kotlin" stack
     csharp.json                  # the "csharp-cli" stack
   frontend/
-    _base.json                 # typescript-lsp, frontend-design, playwright, accesslint
+    _base.json                 # typescript-lsp, playwright, accesslint, chrome-devtools-mcp,
+                                # plus a designStack block (Impeccable + Pro Max - not plugins)
     react.json
     next.json
     react-native.json          # extends: ["mobile/_base.json"] (cross-branch)
@@ -62,6 +63,11 @@ into the project's `.claude/settings.json`. It also surfaces any `skills[]` a te
 (npx-installed Agent Skills) and, in `-i`, offers to `npx skills add` the missing ones - skills are
 opt-in (never auto-installed) and have no enable/disable, so their present-check is by directory
 name and approximate (the install command is the source of truth; slugs drift - verify at install).
+
+A template may also declare a `designStack` block, as `frontend/_base.json` does. It is not plugin
+machinery and `/init-stack` does not merge it into `settings.json`: step 5 hands it to
+`bin/install-design-stack.mjs`, which installs Impeccable per project and grafts the Pro Max search
+subset into its reference files. Non-frontend stacks skip that step.
 
 ### Framework-less fallback stacks
 
