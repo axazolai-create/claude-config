@@ -13,6 +13,9 @@
 - [RISK-GRAPHPUSH-001 — Automatic push drags a full global MERGE behind every commit](#risk-graphpush-001-automatic-push-drags-a-full-global-merge-behind-every-commit)
 - [RISK-GRAPHPUSH-002 — Driver recovery installs a package as a side effect of a commit](#risk-graphpush-002-driver-recovery-installs-a-package-as-a-side-effect-of-a-commit)
 - [RISK-GSDEXEC-001 — `gsd-executor-decomposing.md` is a full fork with no inheritance, will drift](#risk-gsdexec-001-gsd-executor-decomposingmd-is-a-full-fork-with-no-inheritance-will-drift)
+- [RISK-GSDSURFACE-001 — Two independent layers set the GSD profile, and the overlay wins](#risk-gsdsurface-001-two-independent-layers-set-the-gsd-profile-and-the-overlay-wins)
+- [RISK-GSDSURFACE-002 — The profile flag and marker semantics are verified against one gsd-core version](#risk-gsdsurface-002-the-profile-flag-and-marker-semantics-are-verified-against-one-gsd-core-version)
+- [RISK-GSDSURFACE-003 — Raising the profile restores agent files without this bundle's patches](#risk-gsdsurface-003-raising-the-profile-restores-agent-files-without-this-bundles-patches)
 - [RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it](#risk-harness-001-connection-closed-mid-response-truncates-a-turn-and-the-bundle-cannot-retry-it)
 - [RISK-HOOKSTDIN-001 — `token-usage-log.mjs` throws on a literal `null` on stdin](#risk-hookstdin-001-token-usage-logmjs-throws-on-a-literal-null-on-stdin)
 - [RISK-NEO4J-003 — Neo4j credentials leaking into the repo or argv](#risk-neo4j-003-neo4j-credentials-leaking-into-the-repo-or-argv)
@@ -271,6 +274,56 @@
   the cost of the only mechanism that gives a genuinely structural (tools-grant-based, not
   prose-based) depth-3 cap — see `rules-src/gsd.md`'s "The one sanctioned depth-3 exception"
   section for why the alternative (a prose-conditional single file) was rejected.
+
+### RISK-GSDSURFACE-001 — Two independent layers set the GSD profile, and the overlay wins
+
+- **Status:** Active
+- **Context:** `gsd-core` resolves its installed skill/agent set from two places. The installer
+  writes `<configDir>/.gsd-profile` (`writeActiveProfile`, driven by `--profile=`), while
+  `/gsd-surface` writes `<configDir>/.gsd-surface.json` (`baseProfile`, `disabledClusters`) and
+  re-stages from it. The overlay is applied after the install-time profile, so a bundle-driven
+  `--profile=standard` run against a stale overlay produces a set matching neither. A second
+  asymmetry compounds it: `resolveEffectiveProfile` treats a marker of `full` as absent but
+  honours any lower marker, so a plain re-install can lower the profile and never raise it —
+  raising requires passing `--profile=` explicitly every time.
+- **Mitigation:** phase 14 makes the bundle own exactly one layer: it drives `.gsd-profile`
+  through the installer flag and treats `.gsd-surface.json` as state to clear before the run,
+  never to write. The apply path always passes `--profile=` explicitly rather than relying on
+  the marker.
+- **Residual:** a hand-run `/gsd-surface disable <cluster>` between two bundle runs still
+  diverges from the dial until the next apply. The drift note in `session-init.mjs` reports it;
+  nothing prevents it.
+
+### RISK-GSDSURFACE-002 — The profile flag and marker semantics are verified against one gsd-core version
+
+- **Status:** Active
+- **Context:** the `--profile=` flag, the `.gsd-profile` marker precedence, the prune-before-
+  re-stage behaviour and the per-profile skill/agent counts were all read out of
+  `@opengsd/gsd-core@1.9.1`. `gsd-core` is an npx tool on `@latest`, not a pinned dependency, and
+  the repo's own probe copy under `.test/gsd-marketplace-probe/` is `1.7.0-rc.6` — the `next`
+  tag, two minor versions behind, with a materially different `standard` closure. Planning off
+  the probe copy would have produced the wrong recommendation, and did in
+  `.claude/_analize/optimizations.md`.
+- **Mitigation:** the phase-14 e2e test drives the real installer into a temp `--config-dir` and
+  asserts the counts, so a semantics change fails a test rather than silently reshaping the
+  machine. Related: `RISK-ULTRAPOWERS-010` and `RISK-VARIANT-004` (`/gsd-update` reinstalls
+  `gsd-core` outside this bundle's control).
+- **Residual:** the test asserts today's numbers. An upstream change that moves `gsd-code-review`
+  or `gsd-verify-work` out of the `standard` closure invalidates the recommendation to run
+  `standard`, not just the test.
+
+### RISK-GSDSURFACE-003 — Raising the profile restores agent files without this bundle's patches
+
+- **Status:** Active
+- **Context:** the installer deletes every `agents/gsd-*.md` and re-stages the profile's set on
+  each run. Files restored by a profile raise are `gsd-core`'s originals, so this bundle's
+  content patches (`hooks/lib/gsd-agent-patches.mjs`, `gsd-workflow-patches.mjs`,
+  `gsd-skill-patches.mjs`) are gone from them. The SessionStart check in `session-init.mjs` then
+  reports pending patches on every session until someone runs `/init-session`.
+- **Mitigation:** the phase-14 apply path runs `apply-gsd-agent-patches.mjs` as its own step,
+  after the installer and before the restart notice.
+- **Residual:** curated (`CURATED:NOEDIT`) agent files are skipped by the apply path by design,
+  so a raise that restores one leaves a warning only a human can clear.
 
 ### RISK-HARNESS-001 — `Connection closed mid-response` truncates a turn, and the bundle cannot retry it
 

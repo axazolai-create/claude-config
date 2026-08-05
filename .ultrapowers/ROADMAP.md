@@ -16,6 +16,7 @@ phases:
   - { phase: "11", slug: protected-paths, status: complete, delivery: merged }
   - { phase: "12", slug: decision-records, status: complete, delivery: branch }
   - { phase: "13", slug: graphify-neo4j-autosync, status: complete, delivery: merged }
+  - { phase: "14", slug: gsd-surface-dial, status: planned, delivery: none }
 ---
 
 # Roadmap
@@ -59,6 +60,7 @@ queued redesign below is where it gets fixed — it is not a reason to leave a s
 | 12 decision-records | complete | merged, deployed |
 | 13 graphify-neo4j-autosync | complete | merged at `50e26e4`, deployed |
 | 13 graphify-neo4j-autosync | running | specified, on `feat/graphify-neo4j-autosync` |
+| 14 gsd-surface-dial | planned | `phases/14-gsd-surface-dial/14-PLAN.md`, no branch |
 
 Phase 03's row is the reason `status` and `integration` are separate fields: its probe
 commits and its rollback are both in `master`, and the phase still did not ship. It reads
