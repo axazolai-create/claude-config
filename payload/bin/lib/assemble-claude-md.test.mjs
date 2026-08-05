@@ -42,17 +42,18 @@ test("header present, no frontmatter leaks", () => {
 const REAL = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "claude-md");
 test("real fragments: GSD full-only; base keeps bg-elapsed; lite drops it + says 'lite variant'", () => {
   const full = assembleClaudeMd(REAL, "full"), base = assembleClaudeMd(REAL, "base"), lite = assembleClaudeMd(REAL, "lite");
-  assert.match(full, /GSD \/ ULTRAPOWERS METHODOLOGY/);
-  assert.doesNotMatch(base, /GSD \/ ULTRAPOWERS METHODOLOGY/);
-  assert.doesNotMatch(lite, /GSD \/ ULTRAPOWERS METHODOLOGY/);
+  assert.match(full, /rules-src\/gsd\.md/);
+  assert.doesNotMatch(base, /rules-src\/gsd\.md/);
+  assert.doesNotMatch(lite, /rules-src\/gsd\.md/);
   assert.match(base, /Elapsed time of a background/);
   assert.doesNotMatch(lite, /Elapsed time of a background/);
   assert.match(lite, /lite variant/);
   for (const o of [full, base, lite]) { assert.match(o, /CURATED:NOEDIT/); assert.doesNotMatch(o, /^---$/m); }
 });
 
-// Narrow, non-brittle scope: base/lite must ship neither the GSD-methodology section (10, full-
-// only — already covered above) nor the "gsd" entry in the base-plugins list (09-plugins.full.md
+// Narrow, non-brittle scope: base/lite must ship neither the `rules-src/gsd.md` pointer (04-
+// reading-order.full.md, full-only — already covered above) nor the "gsd" entry in the base-
+// plugins list (09-plugins.full.md
 // vs the shared base/lite version, which lists ultrapowers/context-mode/context7 only). A
 // blanket case-insensitive "gsd" scan is deliberately NOT used here: 04-reading-order and 06-
 // collaboration legitimately mention "GSD project" (a `.planning/` directory convention, not
