@@ -20,7 +20,7 @@ After installing — **restart Claude Code** (hooks and settings are only read a
 - [Order of operations](#order-of-operations)
   - [Initial setup (new machine)](#initial-setup-new-machine)
   - [Reconfiguring](#reconfiguring)
-- [Bundle variants (full/lite)](#bundle-variants-fulllite)
+- [Bundle variants (full/base/lite)](#bundle-variants-fullbaselite)
   - [Selecting a variant](#selecting-a-variant)
   - [Switching variants](#switching-variants)
 - [Relocating `~/.claude` to another drive](#relocating-claude-to-another-drive)
@@ -47,7 +47,7 @@ After installing — **restart Claude Code** (hooks and settings are only read a
   - [Where the result is stored and how it's available in any project](#where-the-result-is-stored-and-how-its-available-in-any-project)
   - [Auto-registering a new project + auto-refresh on commit](#auto-registering-a-new-project-auto-refresh-on-commit)
   - [`graphify claude install` — the official "always consult the graph" hook mechanism](#graphify-claude-install-the-official-always-consult-the-graph-hook-mechanism)
-  - [Auto-updating CLI tools (context-mode, graphify)](#auto-updating-cli-tools-context-mode-graphify)
+  - [Auto-updating components (context-mode, graphify, the bundle itself, the design stack)](#auto-updating-components-context-mode-graphify-the-bundle-itself-the-design-stack)
 - [Other / limitations](#other-limitations)
 - [Diagnostics: `PreToolUse hook error` / `cannot find module` on every Edit](#diagnostics-pretooluse-hook-error-cannot-find-module-on-every-edit)
 - [Cyrillic console: character errors (checkmark/dash) and where RISK_REGISTER lives](#cyrillic-console-character-errors-checkmarkdash-and-where-risk_register-lives)
@@ -118,19 +118,33 @@ changes).
    `~/.claude/bin/init-stack.mjs`, which step 3 uses.
 2. **Restart Claude Code** (hooks and `settings.json` are only read at startup).
 3. In every PROJECT that needs stack-specific plugins — open a Claude Code session there and
-   run `/init-stack`. It:
-   - runs `node ~/.claude/bin/init-stack.mjs` itself (stack detection + report, writes
-     nothing);
-   - the file/dep marker → stack-id mapping and `STACK_PATHS` now live in one shared source,
-     `~/.claude/bin/lib/stack-markers.mjs` (replaces the old `stack-markers` skill);
-   - asks you to run `node ~/.claude/bin/init-stack.mjs -i` yourself, in YOUR OWN terminal —
-     the interactive checklist (arrow-key UI) can't be driven through Claude; on confirmation
-     it installs the missing plugins itself (`claude plugin install`) and writes
-     `./.claude/settings.json`;
-   - if there's no real terminal — non-interactive fallback (`--enable`/`--apply-all`);
-   - GSD-specific proposals (test/build command, `fallow` install, `claude_orchestration`) were
-     removed from `/init-stack` in the GSD-free rewrite (eaf1a50) and have no current
-     replacement — see RISK-INITSTACK-001.
+   run `/init-stack`. Its seven steps:
+   - **1. detect** — runs `node ~/.claude/bin/init-stack.mjs` itself (stack detection + report,
+     writes nothing); the file/dep marker → stack-id mapping and `STACK_PATHS` live in one
+     shared source, `~/.claude/bin/lib/stack-markers.mjs` (replaces the old `stack-markers`
+     skill). The same run re-migrates a GSD project's `.planning/config.json` `model_overrides`
+     to the current model defaults (surgical, a no-op without `.planning/`);
+   - **2. stack-rules snapshot** — `hooks/lib/stack-rules-check.mjs`, and on
+     `stale`/`missing`/`legacy` a subagent rebuilds `.claude/stack-rules.md` (see "Stack rules"
+     below);
+   - **3. interactive install** — asks you to run `node ~/.claude/bin/init-stack.mjs -i`
+     yourself, in YOUR OWN terminal: the interactive checklist (arrow-key UI) can't be driven
+     through Claude; on confirmation it installs the missing plugins (`claude plugin install`),
+     writes `./.claude/settings.json`, and then offers `npx skills add` for the skills the stack
+     declares;
+   - **4. fallback** — with no real terminal, the non-interactive path (`--enable`/
+     `--apply-all`): activation only, no installs;
+   - **5. design stack** — frontend stacks only: `bin/install-design-stack.mjs --root .`
+     (Impeccable + the grafted Pro Max subset, see "Additional subsystems" below);
+   - **6. finish** — the reminder to restart Claude Code;
+   - **7. mark completion** — `hooks/lib/mark-initstack-done.mjs` (this is what lets the
+     project's leanmode dial default to `full`) plus a best-effort graphify freshness check
+     (`bin/graphify-freshness.mjs`, which only prints the upgrade command, never runs it).
+
+   The GSD-specific proposals the pre-rewrite command carried are gone from here for good:
+   `fallow` now reaches every profile through the plugin instead (delta `001-fallow-graft` in
+   the ultrapowers fork), and `claude_orchestration` was deliberately retired — see
+   RISK-INITSTACK-001, closed 2026-07-27.
 4. **Restart Claude Code again** — `enabledPlugins` also only resolves at startup.
 
 Bottom line for a new machine: `setup.mjs` — once, `/init-stack` — per project (right after
@@ -149,7 +163,7 @@ cloning the repo, or whenever it first needs plugins).
 | A new version of this repo shipped (hooks/rules/skills updated) | `node setup.mjs` (conflict flags — see above; `--dry-run` to preview without touching anything) | whenever the package updates |
 | `PreToolUse hook error` / broken paths in `~/.claude/settings.json` | `node setup.mjs --doctor`, then `node setup.mjs` | by symptom (see diagnostics below) |
 | The project's stack changed/gained a new one (new framework, monorepo, etc.) | `/init-stack` again — already-enabled plugins are pre-checked + the new stack's auto-set is added | on a stack change |
-| Toggle one specific plugin without a full `/init-stack` run | `node ~/.claude/bin/init-stack.mjs -i` directly (same checklist, but without the report) | as needed |
+| Toggle one specific plugin without a full `/init-stack` run | `node ~/.claude/bin/init-stack.mjs -i` directly (same checklist, but without the report, the stack-rules build, the design stack, or the completion mark) | as needed |
 | Just check current plugin status, changing nothing | `node ~/.claude/bin/init-stack.mjs` (no args, writes nothing) | as needed |
 
 After ANY of these steps that touched `settings.json` (user-level or project-level) —
@@ -158,15 +172,23 @@ startup, there's no hot-reload.
 
 ---
 
-## Bundle variants (full/lite)
+## Bundle variants (full/base/lite)
 
-The bundle installs in one of two variants. The choice isn't tied to the first install —
-switch at any time by re-running `setup.mjs`.
+The bundle installs in one of three profiles. The choice isn't tied to the first install —
+switch at any time by re-running `setup.mjs`. The profiles live in `variants.json` (`lite`
+inherits `base` through `extends`; `exclude` wins over `include`).
 
 - **full** (default) — everything this README describes: every hook, every command, every
-  skill.
-- **lite** — a slimmed-down set with no GSD machinery:
-  - plugins — the same `ultrapowers`, `context-mode`, `context7` as full;
+  skill. Plugins: `ultrapowers`, `context-mode`.
+- **base** — full minus the GSD machinery: no `agents/gsd-*.md`, no
+  `apply-gsd-agent-patches.mjs`, `gsd-defaults-sync.mjs` or `sync-gsd-context-mode-tool.mjs`,
+  no `/init-session`, none of `hooks/gsd-*` or `hooks/lib/gsd-*`, no `rules-src/gsd.md`, no
+  `references/`, no `using-git-worktrees` shadow skill, and no `db-live-access-gate`,
+  `ci-watch-nudge` or `worktree-executor-discipline-advisor`. Same plugins as full.
+- **lite** — base minus everything that needs heavy machinery:
+  - exactly one plugin, `context-mode`. `ultrapowers` **ships to disk but is not enabled**
+    (`variants.json → keepInstalled`), so bringing it back is one command rather than a
+    reinstall from the marketplace;
   - exactly 10 hooks: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
     `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
     `precompact-observe`, `token-usage-log`, `session-init` (the last one still runs, but skips
@@ -175,16 +197,23 @@ switch at any time by re-running `setup.mjs`.
     (`model-selection-policy`, `token-usage`, `update-changelog`);
   - its own `/init-stack` — stack detection + assembling `.claude/stack-rules.md` only, no
     Python/plugin machinery (see the callout in "Initial setup" above);
-  - its own `CLAUDE.md` (shorter, no GSD sections) and its own `rules-src/README.md` (no GSD
-    specifics) — both come from the `payload-lite/` overlay, which layers on top of `payload/`
-    per the `include`/`exclude` lists in `variants.json` (exclude wins over include);
-  - **NOT included**: `gsd` agents and hooks, `db-live-access-gate`, `ci-watch-nudge`, the
-    `schedulewakeup` nudge, the pnpm-phantom guard, bg-supervision (`supervise-bg.mjs`),
-    `task-lifecycle-probe`, the `/init-mcp` command, the `using-git-worktrees` shadow skill.
+  - its own `rules-src/README.md` (no GSD specifics) and its own `model-selection-policy`, both
+    from the `payload-lite/` overlay layered on top of `payload/`. `CLAUDE.md` is NOT overlaid:
+    it is assembled fragment by fragment from `payload/claude-md/*.md` per profile
+    (`bin/lib/assemble-claude-md.mjs`, each fragment's `profiles:` frontmatter);
+  - **NOT included**, on top of what base already drops: the `schedulewakeup` nudge, the
+    pnpm-phantom guard, bg-supervision (`supervise-bg.mjs`), the Turbopack check, and the
+    `/init-mcp` and `/pnpm-phantom-fix` commands.
+
+No profile ships (`variants.json → alwaysExclude`): `hooks/task-lifecycle-probe*` (the
+`TaskCreated`/`TaskCompleted` schema probe — kept in the repo as a stub, never installed and
+never registered), `claude-md/**` (fragments are input to the `CLAUDE.md` build, not files for
+`~/.claude`), and `**.test.mjs`.
 
 ### `ultrapowers` replaces `superpowers`
 
-All three profiles use **`ultrapowers@ultrapowers`** as the base skills plugin — our fork of
+`full` and `base` use **`ultrapowers@ultrapowers`** as the base skills plugin (in `lite` it
+ships to disk but stays disabled) — our fork of
 [`obra/superpowers`](https://github.com/obra/superpowers) (Jesse Vincent, MIT), narrowed to Claude
 Code. It lives in [`axazolai/ultrapowers`](https://github.com/axazolai/ultrapowers): branch
 `original` holds pristine upstream snapshots, `patch` holds the plugin map, the rename transform
@@ -214,7 +243,7 @@ separate `/plugin update`.
 
 ### Selecting a variant
 
-- Interactively: `node setup.mjs` asks `bundle variant [full/lite] (Enter = …)` — the default
+- Interactively: `node setup.mjs` asks `bundle profile [full/base/lite] (Enter = …)` — the default
   (Enter) comes from whatever is already installed per
   `~/.claude/state/bundle-manifest.json`'s `variant` field, or `full` on a fresh machine.
 - With a flag: `node setup.mjs --variant=lite` (or `--variant=full`) — skips the question.
@@ -290,9 +319,10 @@ Beyond the baseline protection, the set installs a few independent tools (each w
 tests `*.test.mjs`, run via `node --test`):
 
 - **pnpm phantom-dependency guard** — the `/pnpm-phantom-fix` command + `bin/pnpm-phantom-scan.mjs`
-  + a PostToolUse hook: finds undeclared-but-imported packages (e.g. `@hookform/resolvers`→`zod`)
-  and additively declares them as optional peers in `packageExtensions`, so
-  `enableGlobalVirtualStore` doesn't break them. Installed per-project via `/init-stack` (pnpm only);
+  + the PostToolUse hook `hooks/pnpm-phantom-fix-hook.mjs`: finds undeclared-but-imported packages
+  (e.g. `@hookform/resolvers`→`zod`) and additively declares them as optional peers in
+  `packageExtensions`, so `enableGlobalVirtualStore` doesn't break them. The per-project wiring is
+  installed by `bin/pnpm-phantom-fix-install.mjs` (pnpm only, idempotent, no removal path);
   the root `postinstall` is cross-shell — node resolves `$HOME` itself, so it works under cmd.exe
   (where `~` isn't expanded) and POSIX alike, and is a silent no-op on a machine without claude-config.
 - **Turbopack × global-virtual-store** — `bin/turbopack-gvs-check.mjs` (`/init-stack`, Next+pnpm
@@ -305,9 +335,27 @@ tests `*.test.mjs`, run via `node --test`):
 - **Background-task supervision** — `bin/supervise-bg.mjs` wraps a background command in a
   timeout + staleness watchdog (a hang → an exit event, not a silent stall) + the PreToolUse nudge
   `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (after `git push` — `gh run watch`) + the
-  `task-lifecycle-probe` probe (checking `TaskCreated`/`TaskCompleted`) + the PreToolUse nudge
-  `schedulewakeup-loop-only-nudge` (ScheduleWakeup is for /loop pacing only; a tracked background
-  task's completion re-invokes the model by itself, so polling wakeups are pure waste).
+  PreToolUse nudge `schedulewakeup-loop-only-nudge` (ScheduleWakeup is for /loop pacing only; a
+  tracked background task's completion re-invokes the model by itself, so polling wakeups are
+  pure waste).
+- **A frontend project's design stack** — `bin/install-design-stack.mjs` (step 5 of
+  `/init-stack`, only when detection found a frontend stack). It installs **Impeccable**
+  per project (`npx impeccable install --providers=claude --scope=project --no-hooks`) and grafts
+  the search subset of **UI/UX Pro Max** onto it (`uipro init --ai claude --offline`, keeping
+  `ui-ux-pro-max`, `ui-styling` and `design-system` and deleting the rest of its skill folders).
+  What gets installed is declared by the `designStack` block in
+  `setting-templates/frontend/_base.json` — not plugin machinery, and never merged into
+  `settings.json`. Idempotent and fail-soft: a re-run installs only what is missing and
+  re-verifies the hook and the graft. Both halves are in the component registry, so they update
+  themselves (see "Auto-updating components" below).
+- **Cleaning up `~/.claude`** — the `/claude-cleanup` command + `bin/claude-cleanup.mjs`. The
+  engine is allowlist-based: it only ever proposes paths under enumerated category roots
+  (`ephemeral` — caches, logs and shell snapshots 7 days or older; `age` —
+  `file-history`/`jobs`/`tasks`/backups older than 14 days; `session` — old project transcripts;
+  stale temp dirs and superseded plugin-cache versions), so `memory/`, live config, venvs and
+  the running session are out of scope by construction. A dry-run report comes first, then an
+  explicit confirmation; nothing is deleted — everything moves into
+  `~/.claude/.cleanup-trash/<batch>/` and stays restorable for 7 days.
 
 Permissions in `settings.partial.json` are normalized on merge: `Write(x)`/`MultiEdit(x)` →
 `Edit(x)` (+ dedup), since Claude Code now matches all file tools via `Edit(path)`, and
@@ -338,62 +386,104 @@ So this package does three things:
 
 ## What goes where
 
+What follows is the **full** profile (what `base` and `lite` drop from it — see "Bundle
+variants" above). The `*.test.mjs` files next to each script stay in the repo and are not
+installed.
+
 ```
 ~/.claude/
-  CLAUDE.md                              # your curated rules (contains the marker line)
+  CLAUDE.md                              # your curated rules (contains the marker line);
+                                          #   assembled from payload/claude-md/*.md per profile
   settings.json                          # your file + pre-merged keys (hooks, permissions.deny)
   add-risk.mjs                           # risk-register helper (called by auto-init)
   apply-gsd-agent-patches.mjs            # applies agent+workflow content patches (called by /init-session)
+  gsd-defaults-sync.mjs                  # CLI: ~/.gsd/defaults.json + the project's .planning/config.json
   sync-gsd-context-mode-tool.mjs         # CLI wrapper for the tool-grant sync (called by setup.mjs / init-stack.mjs)
+  graphify-sync-all.mjs                  # bulk registration of repos into the shared graph
   hooks/
     deny-curated-claude-md.mjs           # blocks edits to a curated CLAUDE.md (any location)
+    protected-guard.mjs                  # refuses to edit/delete/move paths listed in `.protected`
     secrets-gate.mjs                     # blocks `git commit` when secrets are found in staged
+    decision-records-nudge.mjs           # PreToolUse: lints a staged risk register / ADR / glossary
     db-live-access-gate.mjs              # read-only gate on live DBs (PreToolUse: Bash|mcp__*)
     worktree-executor-discipline-advisor.mjs # advisory: worktree discipline + large-Read backstop
     bg-supervision-nudge.mjs             # PreToolUse: nudge to wrap run_in_background in supervise-bg
+    schedulewakeup-loop-only-nudge.mjs   # PreToolUse: ScheduleWakeup is for /loop pacing only
+    graphify-grep-nudge.mjs              # PreToolUse (Grep|Glob): ask the graph first
     graphify-global-sync.mjs             # after a Claude `git commit` — bg. refresh of global-graph.json
     gsd-config-patch.mjs                 # PostToolUse: one-time .planning/config.json patches (model+workflow)
     ci-watch-nudge.mjs                   # PostToolUse: after `git push` — nudge to `gh run watch`
-    task-lifecycle-probe.mjs             # TaskCreated/TaskCompleted: event-schema probe logger
+    pnpm-phantom-fix-hook.mjs            # PostToolUse: phantom-dependency scan after an install
+    inject-axes.mjs                      # SessionStart + SubagentStart: rule-axis injector (see below)
+    session-init.mjs                     # SessionStart: project bootstrap (+ registration in graphify,
+                                          #   + installing the native post-commit hook in the project)
+    token-usage-log.mjs                  # SubagentStop + Stop — token/$ spend log in JSONL
+    precompact-observe.mjs               # PreCompact — records where automatic compaction fired
+    statusline.mjs                       # statusLine.command — the status line renderer
     lib/
+      inject-axes.mjs                    # axis registry (leanmode, verbosity) for the hook above
+      leanmode-rules.mjs                 # agent_type->level map, BASE+dial resolver, shift table
+      leanmode-{lite,full,ultra}-rule.md # rule texts for the leanmode axis
+      verbosity-rules.mjs                # verbosity-axis resolver (.claude/verbosity.json)
+      verbosity-{lite,full,ultra}-rule.md # rule texts for the verbosity axis
       graphify-global-sync-run.mjs       # shared worker (called by the hook above and the native post-commit)
       context-mode-gsd-agents.mjs        # silent per-session tool-grant sync into gsd-*.md
       gsd-agent-patches.mjs              # review-gated content patches to 30+ gsd-*.md (check/apply)
       gsd-workflow-patches.mjs           # review-gated content patch to execute-phase.md
+      gsd-statusline-registration.mjs    # safe guard around the statusLine registration
+      component-registry.mjs             # registry of updatable components + the decision rules
+      component-update-check-run.mjs     # detached worker: component update checks
       config-update-check-run.mjs        # detached worker: bundle release check against GitHub
-    session-init.mjs                     # SessionStart: project bootstrap (+ registration in graphify,
-                                          #   + installing the native post-commit hook in the project)
-    lib/
+      impeccable-promax-graft.mjs        # grafts the Pro Max search subset onto Impeccable
       stack-rules-check.mjs              # compares the stack-rules snapshot's markers vs the tree (+ CLI)
-    token-usage-log.mjs                  # SubagentStop + Stop — token/$ spend log in JSONL
-    lib/
+      statusline-lib.mjs, phase-segment.mjs, context-severity.mjs, autocompact.mjs # status-line segments
+      state-lock.mjs, atomic-json.mjs    # concurrency-safe state-file writes
       token-usage-shared.mjs             # shared helpers (findRoot, JSONL read/append, cursor)
       token-usage-prune.mjs              # global log retention (3mo / last-but-one day / min 10)
       token-usage-pricing-refresh.mjs    # bg. scrape of the pricing table once a day
-    leanmode-subagent.mjs                # SubagentStart: per-agent_type YAGNI ruleset (see below)
-    lib/
-      leanmode-rules.mjs                 # agent_type->level map, BASE+dial resolver, shift table
-      leanmode-lite-rule.md              # rule text: lite
-      leanmode-full-rule.md              # rule text: full
-      leanmode-ultra-rule.md             # rule text: ultra (extends full)
       mark-initstack-done.mjs            # called from /init-stack; sets initStackRun in project-init.json
-    precompact-observe.mjs               # PreCompact — records where automatic compaction fired
+  bin/
+    init-stack.mjs                       # stack detection + the plugin checklist (the /init-stack engine)
+    install-design-stack.mjs             # Impeccable + the grafted Pro Max subset (step 5 of /init-stack)
+    detect-stack-commands.mjs            # the "Detected commands" block for the stack-rules snapshot
+    graphify-setup.mjs, graphify-freshness.mjs # graphify install, and the stale-version nudge
+    graph-find.mjs, graph-semantic.mjs, graph-docs.mjs # lookup by name / by meaning / the doc corpus
+    claude-cleanup.mjs                   # the /claude-cleanup engine (allowlist + restorable trash)
+    supervise-bg.mjs                     # background-command wrapper: timeout + staleness watchdog
+    pnpm-phantom-scan.mjs, pnpm-phantom-fix-install.mjs, turbopack-gvs-check.mjs # pnpm/Turbopack
+    risks.mjs, adr.mjs, glossary.mjs     # decision-record CLIs (behind decision-records-nudge)
+    up-update.mjs                        # checks/rebuilds the ultrapowers fork (the /up-update engine)
+    lib/                                 # libraries for the above (stack-markers, design-stack,
+                                          #   assemble-claude-md, claude-cleanup-lib, …)
   agents/
     leanmode-executor.md                 # subagent for explicit per-task lean opt-in (see below)
+    gsd-executor-decomposing.md          # GSD executor that decomposes a task
+    gsd-task-verifier.md                 # verifies ONE task's behavior in its own clean context
   commands/
-    leanmode.md                          # /leanmode — interactive/--flag, sets the project-level dial
+    init-stack.md                        # /init-stack — the seven project-setup steps (see above)
     init-session.md                      # /init-session — apply pending gsd-*.md agent patches
+    init-mcp.md                          # /init-mcp — wire up the project's MCP servers
+    leanmode.md                          # /leanmode — interactive/--flag, sets the project-level dial
+    aidev.md                             # /aidev — the verbosity dial (comment/whitespace terseness)
+    claude-cleanup.md                    # /claude-cleanup — ~/.claude cleanup with restorable trash
+    graphify-build-docs.md               # /graphify-build-docs — doc corpus + vectors for meaning search
+    pnpm-phantom-fix.md                  # /pnpm-phantom-fix — pnpm phantom dependencies
+    up-update.md                         # /up-update — update the ultrapowers fork
   skills/
-    using-git-worktrees/SKILL.md         # no-op stub for Superpowers' worktree skill
+    using-git-worktrees/SKILL.md         # no-op stub for Ultrapowers' worktree skill
+    verification-before-completion/SKILL.md # no-op shadow: Opus 5 verifies its own work
     token-usage/SKILL.md                 # /token-usage — token spend log summary
     update-changelog/SKILL.md            # /update-changelog — git history → changelog.json (RU entries)
-    model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, split out of CLAUDE.md
+    model-selection-policy/SKILL.md      # model routing + the effort ladder, split out of CLAUDE.md
   rules-src/                             # stack rule sources — NOT auto-loaded by Claude Code;
                                           #   compiled into <project>/.claude/stack-rules.md (see below)
+  setting-templates/                     # per-direction plugin sets, applied by /init-stack
+  references/gsd-claude-orchestration-pilot.md # reference material (not shipped in base/lite)
   state/project-init.json                # created at runtime; list of already-initialized projects
                                           #   (+ initStackRun per project root — set by /init-stack)
   state/token-usage.jsonl                # created at runtime; global token spend log
   state/model-pricing.json               # created at runtime; pricing table (refreshed once a day)
+  state/component-updates.json           # created at runtime; component update verdicts
 ```
 
 ---
@@ -693,8 +783,13 @@ the layers resolve are in `rules-src/README.md`):
   - **Swift** — `swift.base` + `ios`
   - **Dart** — `dart.base` + `flutter`
 - **Cross-cutting (mixed in per project signals):** `testing`, `security`, `api-contracts`,
-  `ci`, `docker`, `sql`, `shell`, `mobile`, `monorepo`, and for GSD projects (`.planning/`) —
-  `gsd` (methodology routing + `CLAUDE.md` quarantine rules).
+  `ci`, `docker`, `sql`, `shell`, `mobile`, `monorepo`, `context7` (when the MCP server of that
+  name is wired up), and for GSD projects (`.planning/`) — `gsd` (methodology routing +
+  `CLAUDE.md` quarantine rules).
+- **The "Detected commands" block** at the end of the snapshot — the test and build commands
+  derived from the same markers: `bin/detect-stack-commands.mjs` prints ready markdown and the
+  compiler includes it. A stack with no confident default says so plainly instead — an invented
+  command is worse than a missing one.
 - **Templates** (`rules-src/templates/`): `next.AGENTS.md`, `graphify.PROJECT.md` — see above.
 
 Each file is self-documenting; this is only a coverage map, so the 30+ files aren't duplicated in
@@ -794,11 +889,11 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   session — before dispatching any subagent via the Agent tool, resolve its effective level
   (`resolveEffectiveLevel(subagentType, root)`) and announce it in one line right before the
   tool call: fold `(leanmode=<level>)` into whatever narration I'm already about to write (a
-  GSD wave/dispatch line, a Superpowers `Subagent (type): "task"` line) instead of a second
+  GSD wave/dispatch line, an Ultrapowers `Subagent (type): "task"` line) instead of a second
   line; the standalone template `Запускаю суб-агента <type> (<model>) в режиме
   (leanmode=<level>)` is only for when nothing else narrates that launch. Why prose instead of
   a hook: the launch banner (`agent_type(description) Model`) is drawn by the harness before
-  any hook runs, and `SubagentStart`'s own `systemMessage` (see `leanmode-subagent.mjs` below)
+  any hook runs, and `SubagentStart`'s own `systemMessage` (sent by `inject-axes.mjs`, see below)
   is empirically confirmed to never render anywhere — prose is the only channel left to
   surface the level before the banner appears. Same toggle: `CLAUDE_LEANMODE=0`.
   One more `additionalContext` hint (also every session, not a mutation): the stack-rules
@@ -830,23 +925,37 @@ distribution); risks — `RISK-STACKRULES-001/002` in `.ultrapowers/RISK_REGISTE
   over the last 24h). Toggles: `CLAUDE_TOKEN_USAGE_LOG=0` (disable entirely),
   `CLAUDE_TOKEN_USAGE_COST=0` (no cost estimate and no background price refresh),
   `CLAUDE_TOKEN_USAGE_PRUNE=0` (don't prune the global log).
-- **leanmode-subagent.mjs** (`SubagentStart`, the first hook in this repo on this event — until
-  now only SessionStart/PreToolUse/PostToolUse/Stop were used) + **hooks/lib/leanmode-rules.mjs**.
-  A first-party replacement for the third-party `ponytail` plugin: before a subagent starts,
-  keyed on its `agent_type`, injects a YAGNI ("write minimal code") text into its context — but
-  not evenly: `DEFAULT_LEANMODE_MAP` assigns `off/lite/full` per `agent_type` individually (11 of
-  ~40 non-`off`; everything else is deliberately `off` — agents that don't write code at all,
-  like `gsd-planner`/`gsd-security-auditor`, never get this injection). On top of that: per-project
-  overrides (`.claude/leanmode.json`) and a project-wide dial (`off/lite/full/ultra`, set via the
-  `/leanmode` command) that **shifts** the map rather than replacing it — `off` is pinned and
-  never moves either direction under the shift (full design rationale and map:
-  `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`, outside the distribution). The dial
-  defaults to `full` once `/init-stack` has run at least once for a project (the `initStackRun`
-  flag in `~/.claude/state/project-init.json`, set by **hooks/lib/mark-initstack-done.mjs**,
-  called as `/init-stack`'s step 7 — not a registered hook on its own); otherwise `off`.
-  Toggle: `CLAUDE_LEANMODE=0`. The hook also emits `systemMessage: "leanmode: <level>"`
-  alongside `additionalContext` — kept in the source in case the harness renders it.
-  Empirically (2026-07-11, three real subagent launches, debug-log instrumentation)
+- **inject-axes.mjs** (`SessionStart` + `SubagentStart`) + **hooks/lib/inject-axes.mjs** — the
+  universal rule injector. There is no matcher in `settings.json`: the hook receives the whole
+  event and resolves every **axis** in the `AXES` registry independently, and only the blocks
+  whose level is not `off` go into `additionalContext`. Axes never reference one another, so
+  disabling one never affects another, and a new one is a single registry entry. Two axes today:
+  - **leanmode** (`hooks/lib/leanmode-rules.mjs`, `SubagentStart` only) — a first-party
+    replacement for the third-party `ponytail` plugin: before a subagent starts, keyed on its
+    `agent_type`, injects a YAGNI ("write minimal code") text — but not evenly:
+    `DEFAULT_LEANMODE_MAP` assigns `off/lite/full` per `agent_type` individually (11 of ~40
+    non-`off`; everything else is deliberately `off` — agents that don't write code at all, like
+    `gsd-planner`/`gsd-security-auditor`, never get this injection). On top of that: per-project
+    overrides (`.claude/leanmode.json`) and a project-wide dial (`off/lite/full/ultra`, set via
+    the `/leanmode` command) that **shifts** the map rather than replacing it — `off` is pinned
+    and never moves either direction under the shift (full design rationale and map:
+    `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`, outside the distribution). The
+    dial defaults to `full` once `/init-stack` has run at least once for a project (the
+    `initStackRun` flag in `~/.claude/state/project-init.json`, set by
+    **hooks/lib/mark-initstack-done.mjs**, called as `/init-stack`'s step 7 — not a registered
+    hook on its own); otherwise `off`. Toggle: `CLAUDE_LEANMODE=0`.
+  - **verbosity** (`hooks/lib/verbosity-rules.mjs`, both events) — terseness of **comments and
+    blank lines** in generated code, and nothing else: names, mandatory syntax, indentation,
+    error handling at real boundaries and validation are untouched; this is not minification.
+    One project dial in `.claude/verbosity.json` (`off/lite/full/ultra`, the **`/aidev`**
+    command) applies uniformly to the main loop and to every subagent, with optional per-agent
+    overrides — deliberately no per-`agent_type` base map here: unlike code structure, comment
+    verbosity is the same across every code-writing context. Toggle: `CLAUDE_VERBOSITY=0`.
+
+  The hook also emits a `systemMessage` naming the active axes alongside `additionalContext` —
+  kept in the source in case the harness renders it.
+  Empirically (2026-07-11, three real subagent launches, debug-log instrumentation; back then
+  this was a separate `leanmode-subagent.mjs` hook, whose job the leanmode axis now does)
   confirmed: in the orchestrator's own thread, `SubagentStart`'s `systemMessage` doesn't show
   up — not on the banner (which the harness draws before hooks run and can't be rewritten
   regardless), not as a separate line there either. The level is surfaced to the orchestrator
@@ -871,13 +980,11 @@ The "background-task supervision" family. Shared idea: a hung background job NEV
   re-invokes me: "did CI pass?" becomes a guaranteed push event instead of something I must
   remember to poll. The git-command parse honestly handles the value-flags `-C`/`-c` and chains
   via `&&`/`||`/`;`/`|`. Fail-open.
-- **task-lifecycle-probe.mjs** (`TaskCreated` + `TaskCompleted`). Both events are in the public
-  docs, but whether they're wired in the current harness build is unconfirmed, so the hook does
-  NOT act on their (unknown) schema — it only **appends one line** per firing to
-  `~/.claude/logs/task-lifecycle-probe.log` (event name, payload keys, a truncated raw snapshot).
-  After a restart you inspect the log: if lines appear when a background task is created/completed,
-  the events really fire and their schema is captured — real `TaskCreated`-nudge / `TaskCompleted`
-  handling can be wired on top. Fail-open.
+A stub that **no profile installs** (`variants.json → alwaysExclude`):
+`hooks/task-lifecycle-probe*` — the `TaskCreated`/`TaskCompleted` schema probe. Both events are
+in the public docs, but whether they're wired in the current harness build is unconfirmed, so
+the probe only appends one line per firing and decides nothing. It stays in the repo: to use it,
+register it by hand.
 
 Not a hook in the `hooks.*` sense (a different `settings.json` mechanism — the top-level
 `statusLine` key, not the `PreToolUse`/`PostToolUse`/event hooks above), but the same "a script
@@ -1093,8 +1200,10 @@ Under the hood, per repository: `graphify extract <repo> --global --as <name>`. 
 **Search by meaning** - `node ~/.claude/bin/graph-semantic.mjs "<question>"`, ~1 s. Answers "have
 I written something like this before?" when the name cannot be guessed: "a lock that stops two
 processes" finds the mutex, where full-text search returned an app's PIN lock screen. Vectors are
-built by `/graphify-build-docs` (~2 min, 24 MB); the environment is created once in
-`~/.graphify/embed-venv` and graphify's own is left alone.
+built by `/graphify-build-docs` (~2 min, 24 MB): `bin/graph-docs.mjs --build` harvests the
+comment above every symbol in the global graph into a single markdown corpus, and the embeddings
+are built over that. The environment is created once in `~/.graphify/embed-venv` and graphify's
+own is left alone.
 
 **The mass sync** skips nested archive copies with `--skip-nested-archives` (off by default): only
 the pair "nested in another project" AND "archival name" counts - nesting alone catches monorepo
@@ -1191,27 +1300,32 @@ step:
 Optionally disable just this step (global-graph registration keeps working):
 `CLAUDE_GRAPHIFY_CLAUDE_INSTALL=0`.
 
-### Auto-updating CLI tools (context-mode, graphify)
+### Auto-updating components (context-mode, graphify, the bundle itself, the design stack)
 
-`session-init.mjs`, every session (24h throttle per tool, its own state file
-`~/.claude/state/tool-upgrade.json`, machine-wide — not tied to a project), checks and, in the
-background (detached, doesn't block the session), updates known CLIs if they're installed:
+Every session `session-init.mjs` spawns the detached worker
+`hooks/lib/component-update-check-run.mjs` (doesn't block the session, 24h throttle per
+component, verdicts in `~/.claude/state/component-updates.json`). What is checked and how comes
+from the **registry** `hooks/lib/component-registry.mjs`, which replaced the old `KNOWN_TOOLS`
+list inside `session-init.mjs` — a new component is one registry entry:
 
-- **context-mode** — `context-mode upgrade` (its own subcommand: pulls the latest from GitHub,
-  rebuilds, reinstalls hooks). Used to require remembering `/ctx-upgrade` by hand whenever
-  `ctx doctor` showed "outdated".
-- **graphify** — `uv tool upgrade graphifyy` (graphify has no built-in update command; this is
-  the path from its own README). Only runs if `uv` is on PATH.
+| component | scope | how it updates |
+|---|---|---|
+| `context-mode` | machine | `context-mode upgrade` — its own subcommand (pulls the latest from GitHub, rebuilds, reinstalls hooks) |
+| `graphify` | machine | `uv tool upgrade graphifyy` — it has no update command of its own; this is the path from its own README, and only with `uv` on PATH |
+| `claude-config` | machine | the bundle itself: the manifest's SHA against master on GitHub. Updating means you running `setup.mjs`; nothing installs itself |
+| `impeccable` | project | skill version; after an update the Pro Max graft is re-applied (`impeccable-promax-graft.mjs`) |
+| `ui-ux-pro-max` | project | skill version |
 
-Toggles: `CLAUDE_TOOL_AUTOUPGRADE=0` (all of it), `CLAUDE_TOOL_AUTOUPGRADE_<NAME>=0`
-(per-tool, dashes → underscores, e.g. `CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE=0`). Accepted risk:
-an update might still be writing in the background while the same session's first tool calls
-already use the tool — the same trade-off already accepted for the background `graphify
-extract` above.
+Components classed `safe` update themselves in the background; class `reinit` (the bundle) only
+reports, because a reinstall is a human decision. What is waiting shows at the left of the
+status line, by name (`⬆ context-mode graphify`) rather than as a count.
 
-The tool list (`KNOWN_TOOLS` in `session-init.mjs`) is extensible: add a new
-`{ name, cmd, upgradeArgs }` entry (or `upgradeCmd`, if the update runs through a different
-binary, like graphify does via `uv`) for any future CLI plugin with a similar model.
+Toggles: `CLAUDE_COMPONENT_AUTOUPDATE=0` (all of it), `CLAUDE_COMPONENT_AUTOUPDATE_<NAME>=0`
+(per-component, dashes → underscores, e.g. `CLAUDE_COMPONENT_AUTOUPDATE_CONTEXT_MODE=0`). The
+older `CLAUDE_TOOL_AUTOUPGRADE[_<NAME>]=0` still works for `context-mode` and `graphify` — those
+registry entries remember their legacy variable. Accepted risk: an update might still be writing
+in the background while the same session's first tool calls already use the tool — the same
+trade-off already accepted for the background `graphify extract` above.
 
 ---
 

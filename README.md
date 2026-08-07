@@ -20,7 +20,7 @@ node setup.mjs
 - [Порядок действий](#порядок-действий)
   - [Первичная настройка (новый ПК)](#первичная-настройка-новый-пк)
   - [Перенастройка](#перенастройка)
-- [Варианты бандла (full/lite)](#варианты-бандла-fulllite)
+- [Варианты бандла (full/base/lite)](#варианты-бандла-fullbaselite)
   - [Выбор варианта](#выбор-варианта)
   - [Переключение варианта](#переключение-варианта)
 - [Перенос `~/.claude` на другой диск](#перенос-claude-на-другой-диск)
@@ -47,7 +47,7 @@ node setup.mjs
   - [Где хранится результат и как он доступен в любом проекте](#где-хранится-результат-и-как-он-доступен-в-любом-проекте)
   - [Авто-регистрация нового проекта + авто-обновление при коммите](#авто-регистрация-нового-проекта-авто-обновление-при-коммите)
   - [`graphify claude install` — официальный hook-механизм "всегда сверяться с графом"](#graphify-claude-install-официальный-hook-механизм-всегда-сверяться-с-графом)
-  - [Автообновление CLI-инструментов (context-mode, graphify)](#автообновление-cli-инструментов-context-mode-graphify)
+  - [Автообновление компонентов (context-mode, graphify, сам бандл, design stack)](#автообновление-компонентов-context-mode-graphify-сам-бандл-design-stack)
 - [Прочее / ограничения](#прочее-ограничения)
 - [Диагностика: `PreToolUse hook error` / `cannot find module` на каждом Edit](#диагностика-pretooluse-hook-error-cannot-find-module-на-каждом-edit)
 - [Кириллическая консоль: ошибка из-за символа (галочка/тире) и где лежит RISK_REGISTER](#кириллическая-консоль-ошибка-из-за-символа-галочкатире-и-где-лежит-risk_register)
@@ -71,8 +71,8 @@ irm https://raw.githubusercontent.com/axazolai/claude-config/master/bootstrap.ps
 Windows — `$env:CLAUDE_SETUP_ARGS='--replace-all'; irm … | iex`.
 
 **Windows: bootstrap + gsd-агент-патчи за один заход.** `setup.mjs` сознательно НЕ применяет
-review-gated контент-патчи gsd-агентов (см. «gsd-core») — после установки/обновления их обычно
-применяют отдельно (`/init-session` или шаг 10 `/init-stack`). Готовый PowerShell-блок, который
+review-gated контент-патчи gsd-агентов (см. «gsd-core») — после установки/обновления их
+применяют отдельно, командой `/init-session`. Готовый PowerShell-блок, который
 делает и то и другое сразу (учитывает релокацию через `CLAUDE_CONFIG_DIR`; на чистой машине без
 gsd-core третий шаг — безвредный no-op):
 
@@ -115,16 +115,32 @@ notepad bootstrap.ps1; .\bootstrap.ps1
    `~/.claude/bin/init-stack.mjs`, которым пользуется шаг 3.
 2. **Перезапусти Claude Code** (хуки и `settings.json` читаются только при старте).
 3. В каждом ПРОЕКТЕ, где нужны стек-специфичные плагины, — открой там сессию Claude Code и
-   запусти `/init-stack`. Он:
-   - сам прогонит `node ~/.claude/bin/init-stack.mjs` (детект стека + отчёт, ничего не пишет);
-   - файл/деп-маркеры → id стека и `STACK_PATHS` — общий источник в `~/.claude/bin/lib/stack-markers.mjs`
-     (заменяет прежний скилл `stack-markers`);
-   - попросит тебя лично запустить `node ~/.claude/bin/init-stack.mjs -i` в СВОЁМ терминале —
-     интерактивный чек-лист (arrow-key UI) через Claude провести нельзя; на подтверждении он сам
-     ставит недостающие плагины (`claude plugin install`) и пишет `./.claude/settings.json`;
-   - если нет реального терминала — non-interactive fallback (`--enable`/`--apply-all`);
-   - для GSD-проектов (`.planning/config.json` существует) дополнительно предложит
-     `workflow.test_command`/`build_command` и установку `fallow`, если стек это поддерживает.
+   запусти `/init-stack`. Семь шагов команды:
+   - **1. детект** — сам прогонит `node ~/.claude/bin/init-stack.mjs` (детект стека + отчёт,
+     ничего не пишет); файл/деп-маркеры → id стека и `STACK_PATHS` — общий источник в
+     `~/.claude/bin/lib/stack-markers.mjs` (заменяет прежний скилл `stack-markers`). Тот же
+     прогон ре-мигрирует `model_overrides` в `.planning/config.json` GSD-проекта на текущие
+     дефолты моделей (хирургически, no-op без `.planning/`);
+   - **2. снапшот stack-rules** — `hooks/lib/stack-rules-check.mjs`, и на `stale`/`missing`/
+     `legacy` пересборка `.claude/stack-rules.md` суб-агентом (см. «Правила стека» ниже);
+   - **3. интерактивная установка** — попросит тебя лично запустить
+     `node ~/.claude/bin/init-stack.mjs -i` в СВОЁМ терминале: интерактивный чек-лист
+     (arrow-key UI) через Claude провести нельзя; на подтверждении он сам ставит недостающие
+     плагины (`claude plugin install`), пишет `./.claude/settings.json`, а следом предлагает
+     `npx skills add` для объявленных стеком скиллов;
+   - **4. fallback** — если нет реального терминала, non-interactive путь (`--enable`/
+     `--apply-all`), только активация, без установки;
+   - **5. design stack** — только на фронтенд-стеке: `bin/install-design-stack.mjs --root .`
+     (Impeccable + привитое подмножество Pro Max, см. «Дополнительные подсистемы» ниже);
+   - **6. финиш** — напоминание перезапустить Claude Code;
+   - **7. отметка о прогоне** — `hooks/lib/mark-initstack-done.mjs` (даёт leanmode-диалу
+     проекта дефолт `full`) + необязательная проверка свежести `graphify`
+     (`bin/graphify-freshness.mjs`, только печатает команду апгрейда, ничего не ставит).
+
+   GSD-специфичных предложений, которые были у команды до переписывания, здесь больше нет:
+   `fallow` теперь доезжает во все профили через плагин (дельта `001-fallow-graft` в форке
+   ultrapowers), а `claude_orchestration` снят сознательно — см. RISK-INITSTACK-001, закрыт
+   2026-07-27.
 4. **Перезапусти Claude Code ещё раз** — `enabledPlugins` тоже резолвится только при старте.
 
 Итого на новый ПК: `setup.mjs` — один раз, `/init-stack` — на каждый проект (сразу после
@@ -142,7 +158,7 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 | Вышла новая версия этого репозитория (обновились хуки/правила/скиллы) | `node setup.mjs` (флаги конфликтов — см. выше; `--dry-run` — посмотреть, что изменится, ничего не трогая) | по мере обновления пакета |
 | `PreToolUse hook error` / битые пути в `~/.claude/settings.json` | `node setup.mjs --doctor`, затем `node setup.mjs` | по симптому (см. диагностику ниже) |
 | В проекте сменился/добавился стек (новый фреймворк, монорепа и т.п.) | `/init-stack` заново — пречекнуты уже включённые плагины + авто-набор нового стека | при смене стека |
-| Включить/выключить один конкретный плагин без полного прогона `/init-stack` | `node ~/.claude/bin/init-stack.mjs -i` напрямую (тот же чек-лист, но без отчёта и без GSD-шагов 6 и 8 `/init-stack`) | по необходимости |
+| Включить/выключить один конкретный плагин без полного прогона `/init-stack` | `node ~/.claude/bin/init-stack.mjs -i` напрямую (тот же чек-лист, но без отчёта, без сборки `stack-rules`, без design-stack и без отметки о прогоне) | по необходимости |
 | Посмотреть текущий статус плагинов, ничего не меняя | `node ~/.claude/bin/init-stack.mjs` (без аргументов, ничего не пишет) | по необходимости |
 
 После ЛЮБОГО из этих шагов, где менялся `settings.json` (пользовательский или проектный) —
@@ -151,14 +167,23 @@ notepad bootstrap.ps1; .\bootstrap.ps1
 
 ---
 
-## Варианты бандла (full/lite)
+## Варианты бандла (full/base/lite)
 
-Бандл ставится в одном из двух вариантов. Выбор не привязан к первой установке — переключиться
-можно в любой момент повторным запуском `setup.mjs`.
+Бандл ставится в одном из трёх профилей. Выбор не привязан к первой установке — переключиться
+можно в любой момент повторным запуском `setup.mjs`. Профили описаны в `variants.json`
+(`base` наследуется `lite` через `extends`; `exclude` выигрывает у `include`).
 
 - **full** (дефолт) — всё, что описано в этом README: все хуки, все команды, все скиллы.
-- **lite** — облегчённый набор без GSD-machinery:
-  - плагины — те же `ultrapowers`, `context-mode`, `context7`, что и в full;
+  Плагины: `ultrapowers`, `context-mode`.
+- **base** — full минус GSD-machinery: нет `agents/gsd-*.md`, `apply-gsd-agent-patches.mjs`,
+  `gsd-defaults-sync.mjs`, `sync-gsd-context-mode-tool.mjs`, команды `/init-session`, всех
+  `hooks/gsd-*` и `hooks/lib/gsd-*`, `rules-src/gsd.md`, `references/`, теневого скилла
+  `using-git-worktrees`, а также `db-live-access-gate`, `ci-watch-nudge` и
+  `worktree-executor-discipline-advisor`. Плагины — те же, что в full.
+- **lite** — base минус всё, что требует тяжёлой оснастки:
+  - плагин ровно один — `context-mode`. `ultrapowers` в lite **ставится на диск, но не
+    включается** (`variants.json → keepInstalled`), поэтому вернуть его — одна команда, а не
+    переустановка из маркетплейса;
   - ровно 10 хуков: `secrets-gate`, `deny-curated-claude-md`, `protected-guard`,
     `decision-records-nudge`, `graphify-global-sync`, `graphify-grep-nudge`, `inject-axes`,
     `precompact-observe`, `token-usage-log`, `session-init` (последний работает, но пропускает все
@@ -167,16 +192,23 @@ notepad bootstrap.ps1; .\bootstrap.ps1
     (`model-selection-policy`, `token-usage`, `update-changelog`);
   - свой `/init-stack` — только детект стека + сборка `.claude/stack-rules.md`, без
     python/plugin-machinery (см. врезку в «Первичная настройка» выше);
-  - свой `CLAUDE.md` (короче, без GSD-секций) и своя версия `rules-src/README.md` (без
-    GSD-специфики) — оба берутся из оверлея `payload-lite/`, который накладывается поверх
-    `payload/` по спискам `include`/`exclude` в `variants.json` (exclude выигрывает у include).
-  - **НЕТ**: `gsd`-агентов и хуков, `db-live-access-gate`, `ci-watch-nudge`,
-    `schedulewakeup`-нуджа, pnpm-phantom-guard, bg-supervision (`supervise-bg.mjs`),
-    `task-lifecycle-probe`, команды `/init-mcp`, теневого скилла `using-git-worktrees`.
+  - своя версия `rules-src/README.md` (без GSD-специфики) и свой `model-selection-policy` —
+    оба берутся из оверлея `payload-lite/`, который накладывается поверх `payload/`.
+    `CLAUDE.md` оверлеем НЕ подменяется: он собирается пофрагментно из `payload/claude-md/*.md`
+    по профилю (`bin/lib/assemble-claude-md.mjs`, фронтматтер `profiles:` в каждом фрагменте);
+  - **НЕТ** дополнительно к исключённому в base: `schedulewakeup`-нуджа, pnpm-phantom-guard,
+    bg-supervision (`supervise-bg.mjs`), turbopack-проверки, команд `/init-mcp` и
+    `/pnpm-phantom-fix`.
+
+Ни в один профиль не входят (`variants.json → alwaysExclude`): `hooks/task-lifecycle-probe*`
+(probe-логгер схемы `TaskCreated`/`TaskCompleted` — остаётся в репозитории как заготовка, но не
+ставится и не регистрируется), `claude-md/**` (фрагменты — сырьё сборки `CLAUDE.md`, а не файлы
+для `~/.claude`) и `**.test.mjs`.
 
 ### `ultrapowers` вместо `superpowers`
 
-Во всех трёх профилях базовым скилл-плагином стоит **`ultrapowers@ultrapowers`** — наш форк
+Базовым скилл-плагином в `full` и `base` стоит **`ultrapowers@ultrapowers`** (в `lite` он
+ставится на диск, но не включается) — наш форк
 [`obra/superpowers`](https://github.com/obra/superpowers) (Jesse Vincent, MIT), сужённый до
 Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/ultrapowers): ветка
 `original` хранит нетронутые снимки апстрима, `patch` — карту плагина, преобразование
@@ -206,7 +238,7 @@ Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/
 
 ### Выбор варианта
 
-- Интерактивно: `node setup.mjs` спрашивает `bundle variant [full/lite] (Enter = …)` — дефолт
+- Интерактивно: `node setup.mjs` спрашивает `bundle profile [full/base/lite] (Enter = …)` — дефолт
   (Enter) берётся из того, что уже стоит по `~/.claude/state/bundle-manifest.json` (поле
   `variant`), а на чистой машине — `full`.
 - Флагом: `node setup.mjs --variant=lite` (или `--variant=full`) — пропускает вопрос.
@@ -281,11 +313,12 @@ Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/
 юнит-тестами `*.test.mjs`, гоняются `node --test`):
 
 - **pnpm phantom-dependency guard** — команда `/pnpm-phantom-fix` + `bin/pnpm-phantom-scan.mjs`
-  + PostToolUse-хук: находит undeclared-but-imported пакеты (напр. `@hookform/resolvers`→`zod`)
-  и additively объявляет их optional-peer в `packageExtensions`, чтобы `enableGlobalVirtualStore`
-  их не ломал. Ставится per-project через `/init-stack` (только pnpm); root-`postinstall`
-  кросс-шелльный — node сам резолвит `$HOME`, поэтому работает и в cmd.exe (где `~` не
-  раскрывается), и в POSIX, и тихо no-op на машине без claude-config.
+  + PostToolUse-хук `hooks/pnpm-phantom-fix-hook.mjs`: находит undeclared-but-imported пакеты
+  (напр. `@hookform/resolvers`→`zod`) и additively объявляет их optional-peer в
+  `packageExtensions`, чтобы `enableGlobalVirtualStore` их не ломал. Per-project обвязку ставит
+  `bin/pnpm-phantom-fix-install.mjs` (только pnpm, идемпотентно, без пути удаления);
+  root-`postinstall` кросс-шелльный — node сам резолвит `$HOME`, поэтому работает и в cmd.exe
+  (где `~` не раскрывается), и в POSIX, и тихо no-op на машине без claude-config.
 - **Turbopack × global-virtual-store** — `bin/turbopack-gvs-check.mjs` (`/init-stack`, только
   Next+pnpm): детектит структурный конфликт out-of-tree стора с Turbopack (чанки `404` после
   hard-reload) и печатает рецепт. Рецепт version-aware и монорепо-осознанный: для pnpm ≥11
@@ -296,9 +329,24 @@ Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/
 - **Супервизия фоновых задач** — `bin/supervise-bg.mjs` оборачивает фоновую команду в
   timeout + staleness-watchdog (зависание → exit-событие, а не тихий столл) + PreToolUse-нудж
   `bg-supervision-nudge` + PostToolUse `ci-watch-nudge` (после `git push` — `gh run watch`) +
-  probe `task-lifecycle-probe` (проверка `TaskCreated`/`TaskCompleted`) + PreToolUse-нудж
-  `schedulewakeup-loop-only-nudge` (ScheduleWakeup — только для /loop-пейсинга; завершение
-  отслеживаемой фоновой задачи ре-инвокает модель само, wakeup-поллинг — впустую).
+  PreToolUse-нудж `schedulewakeup-loop-only-nudge` (ScheduleWakeup — только для /loop-пейсинга;
+  завершение отслеживаемой фоновой задачи ре-инвокает модель само, wakeup-поллинг — впустую).
+- **Design stack фронтенд-проекта** — `bin/install-design-stack.mjs` (шаг 5 `/init-stack`,
+  только когда детект дал фронтенд-стек). Ставит per-project **Impeccable**
+  (`npx impeccable install --providers=claude --scope=project --no-hooks`) и прививает к нему
+  поисковое подмножество **UI/UX Pro Max** (`uipro init --ai claude --offline`, из него
+  остаются `ui-ux-pro-max`, `ui-styling`, `design-system` — остальные скилл-папки удаляются).
+  Что именно ставится, объявляет блок `designStack` в `setting-templates/frontend/_base.json`:
+  это не плагиновая машинерия, в `settings.json` он не мёржится. Идемпотентно и fail-soft —
+  повторный прогон доставляет недостающее и перепроверяет хук с прививкой. Обе части — в
+  реестре компонентов, поэтому обновляются сами (см. «Автообновление компонентов» ниже).
+- **Уборка `~/.claude`** — команда `/claude-cleanup` + `bin/claude-cleanup.mjs`. Движок
+  allowlist-овый: предлагает пути только под перечисленными корнями категорий (`ephemeral` —
+  кэши/логи/снимки шелла старше 7 дней; `age` — `file-history`/`jobs`/`tasks`/бэкапы старше
+  14 дней; `session` — старые транскрипты проектов; stale temp и устаревшие версии
+  plugin-кэша), поэтому `memory/`, живой конфиг, venv'ы и текущая сессия вне области по
+  построению. Сначала dry-run-отчёт, затем явное подтверждение; ничего не удаляется —
+  всё переезжает в `~/.claude/.cleanup-trash/<партия>/` и восстановимо 7 дней.
 
 Права в `settings.partial.json` нормализуются при мёрже: `Write(x)`/`MultiEdit(x)` → `Edit(x)`
 (+ dedup), т.к. Claude Code теперь матчит все file-tools через `Edit(path)`, а `MultiEdit` —
@@ -328,62 +376,103 @@ Claude Code. Живёт в [`axazolai/ultrapowers`](https://github.com/axazolai/
 
 ## Что куда ставится
 
+Ниже — состав **full**-профиля (что из него убирают `base` и `lite` — см. «Варианты бандла»
+выше). `*.test.mjs` рядом с каждым скриптом остаются в репозитории и не ставятся.
+
 ```
 ~/.claude/
-  CLAUDE.md                              # твои курируемые правила (содержит строку-маркер)
+  CLAUDE.md                              # твои курируемые правила (содержит строку-маркер);
+                                          #   собирается из payload/claude-md/*.md под профиль
   settings.json                          # твой файл + до-мёрженные ключи (hooks, permissions.deny)
   add-risk.mjs                           # хелпер риск-реестра (его дёргает авто-инициализация)
   apply-gsd-agent-patches.mjs            # применяет agent+workflow контент-патчи (зовёт /init-session)
+  gsd-defaults-sync.mjs                  # CLI: ~/.gsd/defaults.json + .planning/config.json проекта
   sync-gsd-context-mode-tool.mjs         # CLI-обёртка tool-grant синка (зовут setup.mjs / init-stack.mjs)
+  graphify-sync-all.mjs                  # массовая регистрация репозиториев в общем графе
   hooks/
     deny-curated-claude-md.mjs           # блок правок курируемого CLAUDE.md (любая локация)
+    protected-guard.mjs                  # отказ править/удалять/двигать пути из `.protected`
     secrets-gate.mjs                     # блок `git commit` при найденных секретах в staged
+    decision-records-nudge.mjs           # PreToolUse: линт риск-регистра/ADR/глоссария на коммите
     db-live-access-gate.mjs              # read-only гейт на живые БД (PreToolUse: Bash|mcp__*)
     worktree-executor-discipline-advisor.mjs # advisory: дисциплина worktree + backstop больших Read
     bg-supervision-nudge.mjs             # PreToolUse: нудж обернуть run_in_background в supervise-bg
+    schedulewakeup-loop-only-nudge.mjs   # PreToolUse: ScheduleWakeup — только для /loop-пейсинга
+    graphify-grep-nudge.mjs              # PreToolUse (Grep|Glob): сначала спроси граф
     graphify-global-sync.mjs             # после `git commit` Claude — фон. обновление global-graph.json
     gsd-config-patch.mjs                 # PostToolUse: разовые патчи .planning/config.json (модель+воркфлоу)
     ci-watch-nudge.mjs                   # PostToolUse: после `git push` — нудж `gh run watch`
-    task-lifecycle-probe.mjs             # TaskCreated/TaskCompleted: probe-логгер схемы событий
+    pnpm-phantom-fix-hook.mjs            # PostToolUse: скан фантомных зависимостей после install
+    inject-axes.mjs                      # SessionStart + SubagentStart: инжектор осей правил (см. ниже)
+    session-init.mjs                     # SessionStart: бутстрап проекта (+ регистрация в graphify,
+                                          #   + установка нативного post-commit хука в проекте)
+    token-usage-log.mjs                  # SubagentStop + Stop — лог расхода токенов/$ в JSONL
+    precompact-observe.mjs               # PreCompact — записывает, где реально сработала автокомпакция
+    statusline.mjs                       # statusLine.command — рендерер строки статуса
     lib/
+      inject-axes.mjs                    # реестр осей (leanmode, verbosity) для хука выше
+      leanmode-rules.mjs                 # карта agent_type->уровень, резолвер BASE+dial, шифт-таблица
+      leanmode-{lite,full,ultra}-rule.md # тексты правил оси leanmode
+      verbosity-rules.mjs                # резолвер оси verbosity (.claude/verbosity.json)
+      verbosity-{lite,full,ultra}-rule.md # тексты правил оси verbosity
       graphify-global-sync-run.mjs       # общий воркер (зовут и хук выше, и нативный post-commit)
       context-mode-gsd-agents.mjs        # тихий посессионный tool-grant синк в gsd-*.md
       gsd-agent-patches.mjs              # review-gated контент-патчи в 30+ gsd-*.md (check/apply)
       gsd-workflow-patches.mjs           # review-gated контент-патч в execute-phase.md
+      gsd-statusline-registration.mjs    # safe-гард регистрации statusLine
+      component-registry.mjs             # реестр обновляемых компонентов + правила решения
+      component-update-check-run.mjs     # detached-воркер проверки обновлений компонентов
       config-update-check-run.mjs        # detached-воркер: проверка новой версии бандла на GitHub
-    session-init.mjs                     # SessionStart: разовый бутстрап (+ регистрация в graphify,
-                                          #   + установка нативного post-commit хука в проекте)
-    lib/
+      impeccable-promax-graft.mjs        # прививка поискового подмножества Pro Max к Impeccable
       stack-rules-check.mjs              # сверка markers снапшота stack-rules с деревом (+ CLI)
-    token-usage-log.mjs                  # SubagentStop + Stop — лог расхода токенов/$ в JSONL
-    lib/
+      statusline-lib.mjs, phase-segment.mjs, context-severity.mjs, autocompact.mjs # сегменты строки статуса
+      state-lock.mjs, atomic-json.mjs    # конкурентно-безопасная запись state-файлов
       token-usage-shared.mjs             # общие хелперы (findRoot, JSONL read/append, cursor)
       token-usage-prune.mjs              # ретеншен глобального лога (3мес / предпоследние сутки / min 10)
       token-usage-pricing-refresh.mjs    # фон. скрейпинг таблицы цен раз в сутки
-    leanmode-subagent.mjs                # SubagentStart: YAGNI-правила per-agent_type (см. ниже)
-    lib/
-      leanmode-rules.mjs                 # карта agent_type->уровень, резолвер BASE+dial, шифт-таблица
-      leanmode-lite-rule.md              # текст правила: lite
-      leanmode-full-rule.md              # текст правила: full
-      leanmode-ultra-rule.md             # текст правила: ultra (расширяет full)
       mark-initstack-done.mjs            # зовётся из /init-stack; ставит initStackRun в project-init.json
-    precompact-observe.mjs               # PreCompact — записывает, где реально сработала автокомпакция
+  bin/
+    init-stack.mjs                       # детект стека + плагиновый чек-лист (движок /init-stack)
+    install-design-stack.mjs             # Impeccable + привитое подмножество Pro Max (шаг 5 /init-stack)
+    detect-stack-commands.mjs            # блок «Detected commands» для снапшота stack-rules
+    graphify-setup.mjs, graphify-freshness.mjs # установка graphify и нудж об устаревшей версии
+    graph-find.mjs, graph-semantic.mjs, graph-docs.mjs # поиск по имени / по смыслу / корпус доков
+    claude-cleanup.mjs                   # движок /claude-cleanup (allowlist + обратимая корзина)
+    supervise-bg.mjs                     # обёртка фоновой команды: timeout + staleness-watchdog
+    pnpm-phantom-scan.mjs, pnpm-phantom-fix-install.mjs, turbopack-gvs-check.mjs # pnpm/Turbopack
+    risks.mjs, adr.mjs, glossary.mjs     # CLI решенческих записей (за ними — decision-records-nudge)
+    up-update.mjs                        # проверка/пересборка форка ultrapowers (движок /up-update)
+    lib/                                 # библиотеки перечисленного выше (stack-markers, design-stack,
+                                          #   assemble-claude-md, claude-cleanup-lib, …)
   agents/
     leanmode-executor.md                 # саб-агент для явного per-task lean-опта (см. ниже)
+    gsd-executor-decomposing.md          # GSD-исполнитель с декомпозицией задачи
+    gsd-task-verifier.md                 # проверяет поведение ОДНОЙ задачи в чистом контексте
   commands/
-    leanmode.md                          # /leanmode — интерактив/--флаг, ставит project-level dial
+    init-stack.md                        # /init-stack — семь шагов настройки проекта (см. выше)
     init-session.md                      # /init-session — применить отложенные патчи gsd-*.md агентов
+    init-mcp.md                          # /init-mcp — подключение MCP-серверов проекта
+    leanmode.md                          # /leanmode — интерактив/--флаг, ставит project-level dial
+    aidev.md                             # /aidev — диал verbosity (терсность комментариев/пустот)
+    claude-cleanup.md                    # /claude-cleanup — уборка ~/.claude с обратимой корзиной
+    graphify-build-docs.md               # /graphify-build-docs — корпус доков + векторы для поиска
+    pnpm-phantom-fix.md                  # /pnpm-phantom-fix — фантомные зависимости pnpm
+    up-update.md                         # /up-update — обновление форка ultrapowers
   skills/
-    using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Superpowers
+    using-git-worktrees/SKILL.md         # no-op заглушка worktree-скилла Ultrapowers
+    verification-before-completion/SKILL.md # no-op тень: Opus 5 проверяет себя сам
     token-usage/SKILL.md                 # /token-usage — сводка по логу расхода токенов
     update-changelog/SKILL.md            # /update-changelog — git-история → changelog.json (RU-записи)
-    model-selection-policy/SKILL.md      # sonnet-vs-opus routing + effort rule, вынесен из CLAUDE.md
+    model-selection-policy/SKILL.md      # routing моделей + effort-лестница, вынесен из CLAUDE.md
   rules-src/                             # источник правил стека — НЕ автозагружается Claude Code;
                                           #   компилируется в <проект>/.claude/stack-rules.md (см. ниже)
+  setting-templates/                     # наборы плагинов по направлениям, применяет /init-stack
+  references/gsd-claude-orchestration-pilot.md # справочный материал (не ставится в base/lite)
   state/project-init.json                # создаётся в рантайме; список уже инициализированных проектов
                                           #   (+ initStackRun на project root — ставит /init-stack)
   state/token-usage.jsonl                # создаётся в рантайме; глобальный лог расхода токенов
   state/model-pricing.json               # создаётся в рантайме; таблица цен (обновляется раз в сутки)
+  state/component-updates.json           # создаётся в рантайме; вердикты проверки обновлений
 ```
 
 ---
@@ -509,7 +598,7 @@ updated, M unchanged`, `rules-src: ...` и т.д.) — чтобы не прих�
   чтения/записи не останавливает установку.
 - `.planning/config.json` конкретного проекта `setup.mjs` не трогает — он не привязан к
   проекту. Для этого — отдельный CLI **`~/.claude/gsd-defaults-sync.mjs`** (устанавливается
-  туда же, вызывается из `/init-stack`, шаг 11; можно и вручную:
+  туда же, запускается вручную:
   `node ~/.claude/gsd-defaults-sync.mjs [homeDir] [projectDir]`). За один проход он: повторяет
   тот же мёрж в `~/.gsd/defaults.json`; применяет **reference-wins мёрж** (`mergeReferenceWins`)
   в `.planning/config.json` текущего проекта — значения из бандла перезаписывают одноимённые
@@ -685,8 +774,13 @@ CLAUDE_TOKEN_USAGE_PRUNE=0       # не чистить глобальный ло
   - **Swift** — `swift.base` + `ios`
   - **Dart** — `dart.base` + `flutter`
 - **Сквозные (cross-cutting, подмешиваются по признакам проекта):** `testing`, `security`,
-  `api-contracts`, `ci`, `docker`, `sql`, `shell`, `mobile`, `monorepo`, а для GSD-проектов
-  (`.planning/`) — ещё `gsd` (роутинг методологии + правила карантина `CLAUDE.md`).
+  `api-contracts`, `ci`, `docker`, `sql`, `shell`, `mobile`, `monorepo`, `context7` (когда
+  подключён одноимённый MCP-сервер), а для GSD-проектов (`.planning/`) — ещё `gsd` (роутинг
+  методологии + правила карантина `CLAUDE.md`).
+- **Блок «Detected commands»** в конце снапшота — команды теста и сборки, выведенные из тех же
+  маркеров: `bin/detect-stack-commands.mjs` печатает готовый markdown, компилятор его
+  вставляет. Стек без уверенного дефолта честно печатает, что команду надо задать вручную, —
+  выдуманная команда хуже отсутствующей.
 - **Шаблоны** (`rules-src/templates/`): `next.AGENTS.md`, `graphify.PROJECT.md` — см. выше.
 
 Каждый файл самодокументирован; здесь — только карта охвата, чтобы не дублировать 30+ файлов в
@@ -788,11 +882,11 @@ README (источник истины — сами `rules-src/*.md` и их `REA
   запуском саб-агента через `Agent` резолвить эффективный уровень
   (`resolveEffectiveLevel(subagentType, root)`) и анонсировать его одной строкой прямо перед
   вызовом тулза: встроить `(leanmode=<level>)` в уже пишущийся нарратив (GSD wave-строка,
-  Superpowers `Subagent (type): "task"`), а не отдельной строкой; отдельный шаблон
+  Ultrapowers `Subagent (type): "task"`), а не отдельной строкой; отдельный шаблон
   `Запускаю суб-агента <type> (<model>) в режиме (leanmode=<level>)` — только если никакого
   другого нарратива для этого запуска нет. Почему прозой, а не хуком: баннер запуска
   (`agent_type(description) Model`) рисуется харнессом до отработки хуков, а `systemMessage`
-  из `SubagentStart` (см. `leanmode-subagent.mjs` выше) эмпирически подтверждённо нигде не
+  из `SubagentStart` (его шлёт `inject-axes.mjs`, см. ниже) эмпирически подтверждённо нигде не
   рендерится — единственный канал донести уровень до появления баннера — моя собственная
   проза. Тот же тумблер `CLAUDE_LEANMODE=0`.
   Ещё один хинт в `additionalContext` (тоже каждую сессию, не мутация): проверка наличия
@@ -827,23 +921,38 @@ README (источник истины — сами `rules-src/*.md` и их `REA
   `CLAUDE_TOKEN_USAGE_LOG=0` (выключить целиком), `CLAUDE_TOKEN_USAGE_COST=0` (без оценки
   стоимости и без фонового обновления цен), `CLAUDE_TOKEN_USAGE_PRUNE=0` (не чистить глобальный
   лог).
-- **leanmode-subagent.mjs** (`SubagentStart`, событие используется впервые в этом репо — до сих
-  пор были только SessionStart/PreToolUse/PostToolUse/Stop) + **hooks/lib/leanmode-rules.mjs**.
-  Первичная замена стороннего плагина `ponytail`: перед стартом саб-агента, по его `agent_type`,
-  инжектит YAGNI-текст ("пиши минимум кода") в его контекст — но не всем поровну: карта
-  `DEFAULT_LEANMODE_MAP` даёт `off/lite/full` каждому известному `agent_type` по отдельности (11
-  из ~40 не-`off`; всё остальное — намеренно `off`, ничего не пишущие код агенты вроде
-  `gsd-planner`/`gsd-security-auditor` эту инъекцию не получают вообще). Поверх — per-project
-  оверрайды (`.claude/leanmode.json`) и общепроектный dial (`off/lite/full/ultra`,
-  `/leanmode`-командой), который **сдвигает**, а не заменяет карту — `off` при сдвиге не
-  трогается ни в одну сторону (design rationale и полная карта:
-  `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`, вне дистрибуции). dial по умолчанию —
-  `full`, если для проекта хоть раз запускался `/init-stack` (флаг `initStackRun` в
-  `~/.claude/state/project-init.json`, ставит **hooks/lib/mark-initstack-done.mjs**, вызывается
-  шагом 9 `/init-stack`, не зарегистрированный хук сам по себе); иначе — `off`. Тумблер:
-  `CLAUDE_LEANMODE=0`. Хук также эмитит `systemMessage: "leanmode: <level>"` вместе с
+- **inject-axes.mjs** (`SessionStart` + `SubagentStart`) + **hooks/lib/inject-axes.mjs** —
+  универсальный инжектор правил. В `settings.json` матчера нет: хук получает всё событие и сам
+  резолвит каждую **ось** из реестра `AXES` независимо, а в `additionalContext` уходят только
+  те блоки, чей уровень не `off`. Оси не ссылаются друг на друга — выключение одной не задевает
+  другую, а новая добавляется одной записью в реестр. Осей сейчас две:
+  - **leanmode** (`hooks/lib/leanmode-rules.mjs`, только `SubagentStart`) — первичная замена
+    стороннего плагина `ponytail`: перед стартом саб-агента, по его `agent_type`, инжектит
+    YAGNI-текст ("пиши минимум кода") — но не всем поровну: карта `DEFAULT_LEANMODE_MAP` даёт
+    `off/lite/full` каждому известному `agent_type` по отдельности (11 из ~40 не-`off`; всё
+    остальное — намеренно `off`, ничего не пишущие код агенты вроде
+    `gsd-planner`/`gsd-security-auditor` эту инъекцию не получают вообще). Поверх — per-project
+    оверрайды (`.claude/leanmode.json`) и общепроектный dial (`off/lite/full/ultra`,
+    `/leanmode`-командой), который **сдвигает**, а не заменяет карту — `off` при сдвиге не
+    трогается ни в одну сторону (design rationale и полная карта:
+    `.ultrapowers/archive/specs/2026-07-10-leanmode-design.md`, вне дистрибуции). dial по
+    умолчанию — `full`, если для проекта хоть раз запускался `/init-stack` (флаг `initStackRun`
+    в `~/.claude/state/project-init.json`, ставит **hooks/lib/mark-initstack-done.mjs**,
+    вызывается шагом 7 `/init-stack`, не зарегистрированный хук сам по себе); иначе — `off`.
+    Тумблер: `CLAUDE_LEANMODE=0`.
+  - **verbosity** (`hooks/lib/verbosity-rules.mjs`, оба события) — терсность **комментариев и
+    пустых строк** в генерируемом коде, и только их: имена, обязательный синтаксис, отступы,
+    обработка ошибок на реальных границах и валидация не трогаются, это не минификация. Один
+    проектный диал в `.claude/verbosity.json` (`off/lite/full/ultra`, команда **`/aidev`**)
+    применяется одинаково к основному циклу и ко всем саб-агентам, с необязательными
+    per-agent оверрайдами — карты базовых уровней по `agent_type` здесь намеренно нет: в
+    отличие от структуры кода, многословность комментариев одинакова во всех пишущих код
+    контекстах. Тумблер: `CLAUDE_VERBOSITY=0`.
+
+  Хук также эмитит `systemMessage` с перечнем активных осей вместе с
   `additionalContext` — оставлено в коде на случай, если харнесс начнёт это рендерить.
-  Эмпирически (2026-07-11, три реальных запуска саб-агента, debug-log инструментация)
+  Эмпирически (2026-07-11, три реальных запуска саб-агента, debug-log инструментация; тогда
+  это был отдельный хук `leanmode-subagent.mjs`, чью работу теперь делает ось leanmode)
   подтверждено: в потоке оркестратора `systemMessage` от `SubagentStart` не отображается —
   ни в баннере (который харнесс рисует до отработки хуков и переписать нельзя в принципе),
   ни отдельной строкой там. Тот же уровень виден оркестратору на практике через отдельный
@@ -869,13 +978,11 @@ README (источник истины — сами `rules-src/*.md` и их `REA
   переподнимает меня: «прошёл ли CI?» становится гарантированным push-событием, а не тем, что
   надо помнить и поллить. Разбор git-команды честно учитывает value-флаги `-C`/`-c` и цепочки
   через `&&`/`||`/`;`/`|`. Fail-open.
-- **task-lifecycle-probe.mjs** (`TaskCreated` + `TaskCompleted`). Оба события есть в публичных
-  доках, но включены ли они в текущем билде харнесса — не подтверждено, поэтому хук НЕ действует
-  на их (неизвестную) схему, а только **пишет по строке** на каждое срабатывание в
-  `~/.claude/logs/task-lifecycle-probe.log` (имя события, ключи payload, усечённый сырой снимок).
-  После рестарта смотришь лог: если строки появляются на создание/завершение фоновой задачи —
-  события реально доходят и их схема захвачена, поверх можно вешать настоящую обработку
-  `TaskCreated`-нуджа / `TaskCompleted`. Fail-open.
+Заготовка, которая **не ставится ни в одном профиле** (`variants.json → alwaysExclude`):
+`hooks/task-lifecycle-probe*` — probe-логгер схемы `TaskCreated`/`TaskCompleted`. Оба события
+есть в публичных доках, но включены ли они в текущем билде харнесса — не подтверждено, поэтому
+probe только пишет по строке на каждое срабатывание, ничего не решая. Он остаётся в
+репозитории: чтобы им воспользоваться, надо зарегистрировать его руками.
 
 Не хук в смысле `hooks.*` (другой механизм `settings.json` — верхнеуровневый ключ `statusLine`,
 не `PreToolUse`/`PostToolUse`/событийные хуки выше), но тот же принцип "скрипт из этого бандла,
@@ -967,7 +1074,7 @@ bump версии патча устаревший текст заменяетс�
   что применится. `session-init.mjs` каждую сессию проверяет их **read-only** (`checkGsd…Patches`) и,
   если что-то ждёт, печатает подсказку. Применяет — только явный вызов человека: команда
   **`/init-session`** (`apply-gsd-agent-patches.mjs`, применяет ОБА набора — agent + workflow —
-  разом) или **шаг 10 `/init-stack`**. После апдейта gsd-core патчи ожидаемо «отваливаются» (их
+  разом). После апдейта gsd-core патчи ожидаемо «отваливаются» (их
   файлы перезаписаны родным апдейтером) — `session-init` это замечает и снова предлагает
   `/init-session`. Патчи содержательно привязаны к формату конкретной версии gsd-core: маркеры
   проверены против установленной **1.8.0** (при рефромате блока в будущем релизе патч деградирует
@@ -1088,8 +1195,10 @@ node ~/.claude/bin/graphify-setup.mjs --build-global /path/repoA /path/repoB /pa
 **Поиск по смыслу** - `node ~/.claude/bin/graph-semantic.mjs "<вопрос>"`, ~1 с. Отвечает на
 «я уже писал что-то подобное?», когда имя угадать нельзя: запрос «a lock that stops two
 processes» находит мьютекс, а полнотекстовый поиск на том же вопросе выдавал экран блокировки
-PIN. Векторы строит `/graphify-build-docs` (~2 мин, 24 МБ); окружение создаётся один раз в
-`~/.graphify/embed-venv`, среда graphify не трогается.
+PIN. Векторы строит `/graphify-build-docs` (~2 мин, 24 МБ): `bin/graph-docs.mjs --build`
+собирает из комментариев над символами глобального графа единый markdown-корпус, дальше по нему
+строятся эмбеддинги. Окружение создаётся один раз в `~/.graphify/embed-venv`, среда graphify не
+трогается.
 
 **Массовый синк** пропускает вложенные архивные копии по флагу `--skip-nested-archives`
 (выключен по умолчанию): срабатывает только пересечение «вложен в другой проект» И «архивное
@@ -1178,26 +1287,32 @@ PreToolUse-хук, который сам подталкивает Claude к `gra
 Опционально отключить только этот шаг (регистрация в глобальном графе продолжит работать):
 `CLAUDE_GRAPHIFY_CLAUDE_INSTALL=0`.
 
-### Автообновление CLI-инструментов (context-mode, graphify)
+### Автообновление компонентов (context-mode, graphify, сам бандл, design stack)
 
-`session-init.mjs` каждую сессию (throttle 24ч на инструмент, свой state-файл
-`~/.claude/state/tool-upgrade.json`, machine-wide — не привязан к проекту) проверяет и в фоне
-(detached, не блокирует сессию) обновляет известные CLI, если они установлены:
+`session-init.mjs` каждую сессию спавнит detached-воркер `hooks/lib/component-update-check-run.mjs`
+(сессию не блокирует, throttle 24ч на компонент, вердикты — в
+`~/.claude/state/component-updates.json`). Что проверяется и как — задаёт **реестр**
+`hooks/lib/component-registry.mjs`; прежний список `KNOWN_TOOLS` внутри `session-init.mjs` им
+заменён, так что новый компонент добавляется одной записью в реестр:
 
-- **context-mode** — `context-mode upgrade` (собственная подкоманда: тянет свежую версию с
-  GitHub, пересобирает, переустанавливает хуки). Раньше приходилось руками помнить про
-  `/ctx-upgrade` при виде "outdated" в `ctx doctor`.
-- **graphify** — `uv tool upgrade graphifyy` (у графификации нет собственной команды апдейта;
-  это путь из её же README). Запускается только если `uv` есть в PATH.
+| компонент | охват | как обновляется |
+|---|---|---|
+| `context-mode` | машина | `context-mode upgrade` — собственная подкоманда (тянет свежую версию с GitHub, пересобирает, переустанавливает хуки) |
+| `graphify` | машина | `uv tool upgrade graphifyy` — своей команды апдейта у него нет; путь из его же README, только при наличии `uv` в PATH |
+| `claude-config` | машина | сам бандл: сверка SHA манифеста с master на GitHub, обновление — твой запуск `setup.mjs`, автоматически ничего не ставится |
+| `impeccable` | проект | версия скилла; после апдейта заново накладывается прививка Pro Max (`impeccable-promax-graft.mjs`) |
+| `ui-ux-pro-max` | проект | версия скилла |
 
-Тумблеры: `CLAUDE_TOOL_AUTOUPGRADE=0` (всё), `CLAUDE_TOOL_AUTOUPGRADE_<ИМЯ>=0` (точечно, дефисы
-→ подчёркивания, например `CLAUDE_TOOL_AUTOUPGRADE_CONTEXT_MODE=0`). Принятый риск: апдейт может
+Компоненты класса `safe` обновляются в фоне сами; класс `reinit` (сам бандл) только сообщает,
+потому что переустановка — это решение человека. Что ждёт обновления, видно слева в строке
+статуса — по имени (`⬆ context-mode graphify`), а не счётчиком.
+
+Тумблеры: `CLAUDE_COMPONENT_AUTOUPDATE=0` (всё), `CLAUDE_COMPONENT_AUTOUPDATE_<ИМЯ>=0`
+(точечно, дефисы → подчёркивания, например `CLAUDE_COMPONENT_AUTOUPDATE_CONTEXT_MODE=0`).
+Прежние `CLAUDE_TOOL_AUTOUPGRADE[_<ИМЯ>]=0` продолжают работать для `context-mode` и
+`graphify` — записи реестра помнят своё старое имя переменной. Принятый риск: апдейт может
 ещё дописываться в фоне, пока первые тул-коллы той же сессии уже используют инструмент — то же
 допущение, что уже принято для фонового `graphify extract` выше.
-
-Список инструментов (`KNOWN_TOOLS` в `session-init.mjs`) - расширяемый: добавить новую запись
-`{ name, cmd, upgradeArgs }` (или `upgradeCmd`, если апдейт идёт через другой бинарь, как у
-graphify через `uv`) для любого следующего CLI-плагина с похожей моделью.
 
 ---
 
